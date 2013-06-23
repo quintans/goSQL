@@ -111,7 +111,10 @@ func (this *Insert) Submit(instance interface{}) (int64, error) {
 				bp := mappings[column.GetAlias()]
 				if bp != nil {
 					if calcElem {
-						elem = reflect.ValueOf(instance).Elem()
+						elem = reflect.ValueOf(instance)
+						if elem.Kind() == reflect.Ptr {
+							elem = elem.Elem()
+						}
 						calcElem = false
 					}
 					v := bp.Get(elem)

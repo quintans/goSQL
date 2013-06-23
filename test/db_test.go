@@ -4,6 +4,8 @@ import (
 	"github.com/quintans/goSQL/db"
 	"github.com/quintans/goSQL/dbx"
 	trx "github.com/quintans/goSQL/translators"
+	"github.com/quintans/toolkit/ext"
+	"github.com/quintans/toolkit/log"
 
 	_ "github.com/go-sql-driver/mysql"
 
@@ -14,6 +16,8 @@ import (
 var TM db.ITransactionManager
 
 func init() {
+	log.Register("/", log.INFO, log.NewConsoleAppender(false))
+
 	/*
 	 * =======================
 	 * BEGIN DATABASE CONFIG
@@ -101,6 +105,75 @@ func TestSelectUTF8(t *testing.T) {
 		t.Errorf("%s", err)
 	} else if !ok || *publisher.Id != 2 || *publisher.Version != 1 || *publisher.Name != PUBLISHER_UTF8_NAME {
 		t.Errorf("The record for publisher id 2, was not properly retrived. Retrived %s", publisher)
+	}
+}
+
+func TestInsertReturningKey(t *testing.T) {
+	resetDB()
+
+	var err error
+	if err = TM.Transaction(func(store db.IDb) error {
+		key, err := store.Insert(PUBLISHER).
+			Columns(PUBLISHER_C_ID, PUBLISHER_C_VERSION, PUBLISHER_C_NAME).
+			Values(nil, 1, "New Editions").
+			Execute()
+		if err != nil {
+			return err
+		}
+
+		if key == 0 {
+			t.Error("The Auto Insert Key for a null ID column was not retrived")
+		}
+
+		// now without declaring the ID column
+		key, err = store.Insert(PUBLISHER).
+			Columns(PUBLISHER_C_VERSION, PUBLISHER_C_NAME).
+			Values(1, "Second Editions").
+			Execute()
+		if err != nil {
+			return err
+		}
+
+		if key == 0 {
+			t.Error("The Auto Insert Key for a absent ID column was not retrived")
+		}
+
+		return nil
+	}); err != nil {
+		t.Errorf("Failed Insert Returning Key: %s", err)
+	}
+}
+
+func TestInsertStructReturningKey(t *testing.T) {
+	resetDB()
+
+	var err error
+	if err = TM.Transaction(func(store db.IDb) error {
+		var pub Publisher
+		pub.Name = ext.StrPtr("Untited Editors")
+		key, err := store.Insert(PUBLISHER).Submit(pub)
+		if err != nil {
+			return err
+		}
+
+		if key == 0 {
+			t.Error("The Auto Insert Key for the ID column was not retrived")
+		}
+
+		var pub = new(Publisher)
+		pub.Name = ext.StrPtr("Untited Editors")
+		key, err := store.Insert(PUBLISHER).Submit(pub)
+		if err != nil {
+			return err
+		}
+
+		if key == 0 {
+			t.Error("The Auto Insert Key for the ID column was not retrived")
+		}
+
+		return nil
+	}); err != nil {
+		t.Errorf("Failed Struct Insert Return Key: %s", err)
 	}
 }
 

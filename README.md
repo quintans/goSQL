@@ -1,12 +1,15 @@
 # goSQL
 ***
-(English is not my native language so please bear with me)
+a ORM like library in Go's (golang) that makes it easy to use SQL.
 
 ## Introduction
 
-goSQL is a ORM like library in Go's (golang) that makes it easy to use SQL.
+(English is not my native language so please bear with me)
 
-We can use structs as a representation of a table record for CRUD operations.
+goSQL aims to facilitate the convertion between database tables and structs, 
+but has intention on hiding the developer from the SQL.
+
+With that said we can use structs as a representation of a table record for CRUD operations.
 
 An example of the syntax is as follows:
 
@@ -23,6 +26,10 @@ We are not restricted to the use of structs as demonstrated by the next snippet
 		Column(PUBLISHER_C_NAME).
 		Where(PUBLISHER_C_ID.Matches(2)).
 		SelectTo(&name)
+
+Another example with an update
+
+	store.Update(PUBLISHER).Submit(publisher)
 
 
 ## Features
@@ -223,6 +230,20 @@ The full definition of the tables and the struct entities used in this document 
 		insert.Values(1, 1, "Geek Publications").Execute()
 		insert.Values(2, 1, "Edições Lusas").Execute()
 
-#### Insert Returning Generated Key
-
 #### Insert With a Struct
+
+		var pub Publisher
+		pub.Name = ext.StrPtr("Untited Editors")
+		store.Insert(PUBLISHER).Submit(pub)
+
+#### Insert Returning Generated Key
+Any of the above snippets, if the Id field/column is undefined (0 or nil) it returns the generated key by the database.
+
+		key, _ := store.Insert(PUBLISHER).
+			Columns(PUBLISHER_C_ID, PUBLISHER_C_VERSION, PUBLISHER_C_NAME).
+			Values(nil, 1, "New Editions").
+			Execute()
+
+### Update Examples
+
+
