@@ -1,7 +1,7 @@
 package test
 
 import (
-	"github.com/quintans/goSQL/db"
+	. "github.com/quintans/goSQL/db"
 	"github.com/quintans/goSQL/dbx"
 	trx "github.com/quintans/goSQL/translators"
 	"github.com/quintans/toolkit/ext"
@@ -11,12 +11,13 @@ import (
 
 	"database/sql"
 	"testing"
+	"time"
 )
 
-var TM db.ITransactionManager
+var TM ITransactionManager
 
 func init() {
-	log.Register("/", log.INFO, log.NewConsoleAppender(false))
+	log.Register("/", log.DEBUG, log.NewConsoleAppender(false))
 
 	/*
 	 * =======================
@@ -36,13 +37,13 @@ func init() {
 		panic(err)
 	}
 
-	TM = db.NewTransactionManager(
+	TM = NewTransactionManager(
 		// database
 		mydb,
 		// databse context factory
-		func(c dbx.IConnection) db.IDb {
+		func(c dbx.IConnection) IDb {
 			//return db.NewDb(c, trx.NewFirebirdSQLTranslator())
-			return db.NewDb(c, trx.NewMySQL5Translator())
+			return NewDb(c, trx.NewMySQL5Translator())
 		},
 		// statement cache
 		1000,
@@ -59,9 +60,15 @@ const (
 )
 
 func resetDB() {
-	if err := TM.Transaction(func(DB db.IDb) error {
+	if err := TM.Transaction(func(DB IDb) error {
 		var err error
-		// clear publisers
+
+		// clear books
+		if _, err = DB.Delete(BOOK).Execute(); err != nil {
+			return err
+		}
+
+		// clear publishers
 		if _, err = DB.Delete(PUBLISHER).Execute(); err != nil {
 			return err
 		}
@@ -77,6 +84,27 @@ func resetDB() {
 
 		// test UTF8
 		insert.Values(2, 1, PUBLISHER_UTF8_NAME)
+		_, err = insert.Execute()
+		if err != nil {
+			return err
+		}
+
+		// insert book
+		insert = DB.Insert(BOOK).
+			Columns(BOOK_C_ID, BOOK_C_VERSION, BOOK_C_NAME, BOOK_C_PRICE, BOOK_C_PUBLISHED, BOOK_C_PUBLISHER_ID).
+			Values(1, 1, "Once Upon a Time...", 34.5, time.Date(2009, time.November, 10, 0, 0, 0, 0, time.UTC), 1)
+		_, err = insert.Execute()
+		if err != nil {
+			return err
+		}
+
+		insert.Values(2, 1, "Cookbook", 7.2, time.Date(2013, time.July, 24, 0, 0, 0, 0, time.UTC), 2)
+		_, err = insert.Execute()
+		if err != nil {
+			return err
+		}
+
+		insert.Values(3, 1, "Scrapbook", 6.5, time.Date(2012, time.April, 01, 0, 0, 0, 0, time.UTC), 2)
 		_, err = insert.Execute()
 		if err != nil {
 			return err
@@ -112,7 +140,7 @@ func TestInsertReturningKey(t *testing.T) {
 	resetDB()
 
 	var err error
-	if err = TM.Transaction(func(store db.IDb) error {
+	if err = TM.Transaction(func(store IDb) error {
 		key, err := store.Insert(PUBLISHER).
 			Columns(PUBLISHER_C_ID, PUBLISHER_C_VERSION, PUBLISHER_C_NAME).
 			Values(nil, 1, "New Editions").
@@ -148,7 +176,7 @@ func TestInsertStructReturningKey(t *testing.T) {
 	resetDB()
 
 	var err error
-	if err = TM.Transaction(func(store db.IDb) error {
+	if err = TM.Transaction(func(store IDb) error {
 		var pub Publisher
 		pub.Name = ext.StrPtr("Untited Editors")
 		key, err := store.Insert(PUBLISHER).Submit(pub)
@@ -177,14 +205,14 @@ func TestInsertStructReturningKey(t *testing.T) {
 	}
 }
 
-func TestUpdate(t *testing.T) {
+func TestSimpleUpdate(t *testing.T) {
 	resetDB()
 
 	var err error
-	if err = TM.Transaction(func(store db.IDb) error {
+	if err = TM.Transaction(func(store IDb) error {
 		affectedRows, err := store.Update(PUBLISHER).
-			Set(PUBLISHER_C_NAME, "Dummy"). // column to update
-			Set(PUBLISHER_C_VERSION, 2).    // increment version
+			Set(PUBLISHER_C_NAME, "Untited Editors"). // column to update
+			Set(PUBLISHER_C_VERSION, 2).              // increment version
 			Where(
 			PUBLISHER_C_ID.Matches(1),
 			PUBLISHER_C_VERSION.Matches(1),
@@ -204,11 +232,103 @@ func TestUpdate(t *testing.T) {
 	}
 }
 
+func TestStructUpdate(t *testing.T) {
+	resetDB()
+
+	var err error
+	if err = TM.Transaction(func(store IDb) error {
+		var publisher Publisher
+		publisher.Name = ext.StrPtr("Untited Editors")
+		publisher.Id = ext.Int64Ptr(1)
+		publisher.Version = ext.Int64Ptr(1)
+		affectedRows, err := store.Update(PUBLISHER).Submit(publisher)
+		if err != nil {
+			return err
+		}
+
+		if affectedRows != 1 {
+			t.Error("The record was not updated")
+		}
+
+		return nil
+	}); err != nil {
+		t.Errorf("Failed Update Test: %s", err)
+	}
+}
+
+func TestUpdateSubquery(t *testing.T) {
+	resetDB()
+
+	if err := TM.Transaction(func(store IDb) error {
+		sub := store.Query(BOOK).Alias("b").
+			Column(AsIs(nil)).
+			Where(
+			BOOK_C_PUBLISHER_ID.Matches(Col(BOOK_C_ID).For("a")),
+			BOOK_C_PRICE.Greater(10),
+		)
+
+		affectedRows, err := store.Update(PUBLISHER).Alias("a").
+			Set(PUBLISHER_C_NAME, Upper(PUBLISHER_C_NAME)).
+			Where(Exists(sub)).
+			Execute()
+		if err != nil {
+			return err
+		}
+
+		if affectedRows != 1 {
+			t.Error("The record was not updated")
+		}
+
+		return nil
+
+	}); err != nil {
+		t.Errorf("Failed Update with Subquery Test: %s", err)
+	}
+}
+
+func TestSimpleDelete(t *testing.T) {
+	resetDB()
+
+	if err := TM.Transaction(func(store IDb) error {
+		affectedRows, err := store.Delete(BOOK).Where(BOOK_C_ID.Matches(1)).Execute()
+		if err != nil {
+			return err
+		}
+		if affectedRows != 1 {
+			t.Error("The record was not updated")
+		}
+
+		return nil
+	}); err != nil {
+		t.Errorf("Failed ... Test: %s", err)
+	}
+}
+
+func TestStructDelete(t *testing.T) {
+	resetDB()
+
+	if err := TM.Transaction(func(store IDb) error {
+		var book Book
+		book.Id = ext.Int64Ptr(1)
+		book.Version = ext.Int64Ptr(1)
+		affectedRows, err := store.Delete(BOOK).Submit(book)
+		if err != nil {
+			return err
+		}
+		if affectedRows != 1 {
+			t.Error("The record was not updated")
+		}
+
+		return nil
+	}); err != nil {
+		t.Errorf("Failed ... Test: %s", err)
+	}
+}
+
 //func Test(t *testing.T) {
 //	resetDB()
 
-//	var err error
-//	if err = TM.Transaction(func(store db.IDb) error {
+//	if err := TM.Transaction(func(store IDb) error {
 
 //		return nil
 //	}); err != nil {

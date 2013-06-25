@@ -4,6 +4,15 @@ package db
 //	tk "github.com/quintans/toolkit"
 //)
 
+type DmlType int
+
+const (
+	INSERT DmlType = iota
+	UPDATE
+	DELETE
+	QUERY
+)
+
 type Translator interface {
 	GetPlaceholder(index int, name string) string
 	// INSERT
@@ -20,7 +29,7 @@ type Translator interface {
 	//	GetMaxTableChars() int
 	PaginationColumnOffset(query *Query) int
 	PaginateSQL(query *Query, sql string) string
-	Translate(token Tokener) string
+	Translate(dmlType DmlType, token Tokener) string
 	TableName(table *Table) string
 	ColumnName(column *Column) string
 	ColumnAlias(token Tokener, position int) string

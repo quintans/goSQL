@@ -17,8 +17,23 @@ func NewMySQL5Translator() db.Translator {
 	this.QueryProcessorFactory = func() QueryProcessor { return NewQueryBuilder(this) }
 	this.InsertProcessorFactory = func() InsertProcessor { return NewInsertBuilder(this) }
 	this.UpdateProcessorFactory = func() UpdateProcessor { return NewPgUpdateBuilder(this) }
-	this.DeleteProcessorFactory = func() DeleteProcessor { return NewDeleteBuilder(this) }
+	this.DeleteProcessorFactory = func() DeleteProcessor { return NewMySQL5DeleteBuilder(this) }
 	return this
+}
+
+func NewMySQL5DeleteBuilder(translator db.Translator) *MySQL5DeleteBuilder {
+	this := new(MySQL5DeleteBuilder)
+	this.Super(translator)
+	return this
+}
+
+type MySQL5DeleteBuilder struct {
+	DeleteBuilder
+}
+
+func (this *MySQL5DeleteBuilder) From(table *db.Table, alias string) {
+	// Multiple-table syntax:
+	this.tablePart.AddAsOne(alias, " USING ", this.translator.TableName(table), " AS ", alias)
 }
 
 var _ db.Translator = &MySQL5Translator{}

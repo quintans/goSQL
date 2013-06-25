@@ -6,8 +6,11 @@ import (
 	"strconv"
 )
 
-// This struct gives the SAME alias when traversing the JOINS
-// Note: two lists of joins (a path), they have diferent FK alias from the moment they differ
+/*
+This struct gives the SAME alias when traversing the JOINS
+
+Note: two lists of joins (a path), they have diferent FK alias from the moment they differ
+*/
 type AliasBag struct {
 	prefix  string
 	counter int

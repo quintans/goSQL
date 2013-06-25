@@ -50,19 +50,32 @@ func (this *Delete) Submit(value interface{}) (int64, error) {
 			alias := column.GetAlias()
 			bp := mappings[alias]
 			if bp != nil {
-				val := bp.Get(reflect.ValueOf(value).Elem())
-				v := val.Interface()
+				val := bp.Get(reflect.ValueOf(value))
+				if val.Kind() == reflect.Ptr {
+					val = val.Elem()
+				}
 
 				if column.IsKey() {
-					if v == nil {
-						panic(fmt.Sprintf("Value for key property '%s' cannot be nil.", alias))
+					if val.Kind() == reflect.Ptr {
+						if val.IsNil() {
+							panic(fmt.Sprintf("Value for key property '%s' cannot be nil.", alias))
+						}
+						val = val.Elem()
 					}
+					id = val.Interface()
 
 					if criterias != nil {
 						criterias = append(criterias, column.Matches(Param(alias)))
 					}
-					this.SetParameter(alias, v)
+					this.SetParameter(alias, id)
 				} else if column.IsVersion() {
+					if val.Kind() == reflect.Ptr {
+						if val.IsNil() {
+							panic(fmt.Sprintf("Value for version property '%s' cannot be nil.", alias))
+						}
+						val = val.Elem()
+					}
+
 					ver = val.Int()
 					if ver != 0 {
 						if criterias != nil {
@@ -117,45 +130,6 @@ func (this *Delete) GetCachedSql() *RawSql {
 	}
 
 	return this.rawSQL
-}
-
-// JOINS ===
-func (this *Delete) Inner(associations ...*Association) *Delete {
-	this.DmlBase.inner(associations...)
-	return this
-}
-
-func (this *Delete) Join() *Delete {
-	// resets path
-	this.DmlBase.join()
-	return this
-}
-
-//  indicates that the path should be used to join only
-//
-// param endAlias
-// return
-func (this *Delete) JoinAs(endAlias string) *Delete {
-	this.DmlBase.joinAs(endAlias)
-	return this
-}
-
-//  Executes an inner join with several associations
-//
-// param associations
-// return
-func (this *Delete) InnerJoin(associations ...*Association) *Delete {
-	this.DmlBase.innerJoin(associations...)
-	return this
-}
-
-//  criteria to apply to the previous association
-//
-// param criteria: restriction
-// return
-func (this *Delete) On(criteria *Criteria) *Delete {
-	this.DmlBase.on(criteria)
-	return this
 }
 
 //// WHERE ===

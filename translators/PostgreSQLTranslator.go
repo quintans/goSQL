@@ -80,7 +80,7 @@ func (this *PgUpdateBuilder) Column(values coll.Map, tableAlias string) {
 			token := entry.Value.(db.Tokener)
 			this.columnPart.AddAsOne(
 				this.translator.ColumnName(column),
-				" = ", this.translator.Translate(token))
+				" = ", this.translator.Translate(db.UPDATE, token))
 		}
 	}
 }

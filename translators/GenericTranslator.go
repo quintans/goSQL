@@ -98,7 +98,7 @@ func (this *QueryBuilder) UnionPart() string {
 
 func (this *QueryBuilder) Column(tokens []db.Tokener) {
 	for k, token := range tokens {
-		this.columnPart.Add(this.translator.Translate(token))
+		this.columnPart.Add(this.translator.Translate(db.QUERY, token))
 		a := this.translator.ColumnAlias(token, k+1)
 		if a != "" {
 			this.columnPart.Append(" AS ", a)
@@ -139,37 +139,37 @@ func (this *QueryBuilder) JoinAssociation(fk *db.Association, inner bool, invert
 			this.joinPart.Add(" AND ")
 		}
 		if invert {
-			this.joinPart.Add(this.translator.Translate(rel.To),
+			this.joinPart.Add(this.translator.Translate(db.QUERY, rel.To),
 				" = ",
-				this.translator.Translate(rel.From))
+				this.translator.Translate(db.QUERY, rel.From))
 		} else {
-			this.joinPart.Add(this.translator.Translate(rel.From),
+			this.joinPart.Add(this.translator.Translate(db.QUERY, rel.From),
 				" = ",
-				this.translator.Translate(rel.To))
+				this.translator.Translate(db.QUERY, rel.To))
 		}
 	}
 }
 
 func (this *QueryBuilder) JoinCriteria(criteria *db.Criteria) {
-	this.joinPart.Add(" AND ", this.translator.Translate(criteria))
+	this.joinPart.Add(" AND ", this.translator.Translate(db.QUERY, criteria))
 }
 
 func (this *QueryBuilder) Where(criteria *db.Criteria) {
 	if criteria != nil {
-		this.wherePart.Add(this.translator.Translate(criteria))
+		this.wherePart.Add(this.translator.Translate(db.QUERY, criteria))
 	}
 }
 
 func (this *QueryBuilder) Group(columns []db.Tokener) {
 	for _, token := range columns {
-		this.groupPart.Add(this.translator.Translate(token))
+		this.groupPart.Add(this.translator.Translate(db.QUERY, token))
 	}
 }
 
 func (this *QueryBuilder) Order(orders []*db.Order) {
 	for _, ord := range orders {
 		if ord.GetHolder() != nil {
-			this.orderPart.Add(this.translator.Translate(ord.GetHolder()))
+			this.orderPart.Add(this.translator.Translate(db.QUERY, ord.GetHolder()))
 		} else {
 			this.orderPart.Add(ord.GetAlias())
 		}
@@ -249,7 +249,7 @@ func (this *UpdateBuilder) Column(values coll.Map, tableAlias string) {
 			token := entry.Value.(db.Tokener)
 			this.columnPart.AddAsOne(tableAlias, ".",
 				this.translator.ColumnName(column),
-				" = ", this.translator.Translate(token))
+				" = ", this.translator.Translate(db.UPDATE, token))
 		}
 	}
 }
@@ -260,7 +260,7 @@ func (this *UpdateBuilder) From(table *db.Table, alias string) {
 
 func (this *UpdateBuilder) Where(criteria *db.Criteria) {
 	if criteria != nil {
-		this.wherePart.Add(this.translator.Translate(criteria))
+		this.wherePart.Add(this.translator.Translate(db.UPDATE, criteria))
 	}
 }
 
@@ -305,12 +305,12 @@ func (this *DeleteBuilder) WherePart() string {
 }
 
 func (this *DeleteBuilder) From(table *db.Table, alias string) {
-	this.tablePart.AddAsOne(this.translator.TableName(table))
+	this.tablePart.AddAsOne(this.translator.TableName(table), " ", alias)
 }
 
 func (this *DeleteBuilder) Where(criteria *db.Criteria) {
 	if criteria != nil {
-		this.wherePart.Add(this.translator.Translate(criteria))
+		this.wherePart.Add(this.translator.Translate(db.DELETE, criteria))
 	}
 }
 
@@ -373,10 +373,10 @@ func (this *InsertBuilder) Column(values coll.Map, parameters map[string]interfa
 				db.TOKEN_PARAM == token.GetOperator() {
 				param := token.GetValue().(string)
 				if parameters[param] != nil {
-					val = this.translator.Translate(token)
+					val = this.translator.Translate(db.INSERT, token)
 				}
 			} else {
-				val = this.translator.Translate(token)
+				val = this.translator.Translate(db.INSERT, token)
 			}
 
 			col := this.translator.ColumnName(column)
@@ -402,7 +402,7 @@ func (this *InsertBuilder) From(table *db.Table, alias string) {
  */
 
 type GenericTranslator struct {
-	tokens                 map[string]func(token db.Tokener, translator db.Translator) string
+	tokens                 map[string]func(dmlType db.DmlType, token db.Tokener, translator db.Translator) string
 	overrider              db.Translator
 	QueryProcessorFactory  func() QueryProcessor
 	InsertProcessorFactory func() InsertProcessor
@@ -410,23 +410,23 @@ type GenericTranslator struct {
 	DeleteProcessorFactory func() DeleteProcessor
 }
 
-func RolloverParameter(tx db.Translator, parameters []db.Tokener, separator string) string {
+func RolloverParameter(dmlType db.DmlType, tx db.Translator, parameters []db.Tokener, separator string) string {
 	sb := tk.NewStrBuffer()
 	for f, p := range parameters {
 		if f > 0 && separator != "" {
 			sb.Add(separator)
 		}
-		sb.Add(tx.Translate(p))
+		sb.Add(tx.Translate(dmlType, p))
 	}
 	return sb.String()
 }
 
 func (this *GenericTranslator) Init(overrider db.Translator) {
 	this.overrider = overrider
-	this.tokens = make(map[string]func(token db.Tokener, tx db.Translator) string)
+	this.tokens = make(map[string]func(dmlType db.DmlType, token db.Tokener, tx db.Translator) string)
 
 	// Column
-	this.RegisterTranslation(db.TOKEN_COLUMN, func(token db.Tokener, tx db.Translator) string {
+	this.RegisterTranslation(db.TOKEN_COLUMN, func(dmlType db.DmlType, token db.Tokener, tx db.Translator) string {
 		if col, ok := token.GetValue().(*db.Column); ok {
 			sb := tk.NewStrBuffer()
 			if token.GetTableAlias() != "" {
@@ -442,13 +442,13 @@ func (this *GenericTranslator) Init(overrider db.Translator) {
 	})
 
 	// Match
-	this.RegisterTranslation(db.TOKEN_EQ, func(token db.Tokener, tx db.Translator) string {
+	this.RegisterTranslation(db.TOKEN_EQ, func(dmlType db.DmlType, token db.Tokener, tx db.Translator) string {
 		o := token.GetMembers()
-		return tx.Translate(o[0]) + " = " + tx.Translate(o[1])
+		return tx.Translate(dmlType, o[0]) + " = " + tx.Translate(dmlType, o[1])
 	})
 
 	// Val
-	handle := func(token db.Tokener, tx db.Translator) string {
+	handle := func(dmlType db.DmlType, token db.Tokener, tx db.Translator) string {
 		o := token.GetValue()
 		if o != nil {
 			if s, ok := o.(string); ok {
@@ -462,27 +462,27 @@ func (this *GenericTranslator) Init(overrider db.Translator) {
 	this.RegisterTranslation(db.TOKEN_RAW, handle)
 	this.RegisterTranslation(db.TOKEN_ASIS, handle)
 
-	this.RegisterTranslation(db.TOKEN_IEQ, func(token db.Tokener, tx db.Translator) string {
+	this.RegisterTranslation(db.TOKEN_IEQ, func(dmlType db.DmlType, token db.Tokener, tx db.Translator) string {
 		m := token.GetMembers()
-		return fmt.Sprintf("UPPER(%s) = UPPER(%s)", tx.Translate(m[0]), tx.Translate(m[1]))
+		return fmt.Sprintf("UPPER(%s) = UPPER(%s)", tx.Translate(dmlType, m[0]), tx.Translate(dmlType, m[1]))
 	})
 
 	// Diferent
-	this.RegisterTranslation(db.TOKEN_NEQ, func(token db.Tokener, tx db.Translator) string {
+	this.RegisterTranslation(db.TOKEN_NEQ, func(dmlType db.DmlType, token db.Tokener, tx db.Translator) string {
 		m := token.GetMembers()
-		return fmt.Sprintf("%s <> %s", tx.Translate(m[0]), tx.Translate(m[1]))
+		return fmt.Sprintf("%s <> %s", tx.Translate(dmlType, m[0]), tx.Translate(dmlType, m[1]))
 	})
 
-	this.RegisterTranslation(db.TOKEN_RANGE, func(token db.Tokener, tx db.Translator) string {
+	this.RegisterTranslation(db.TOKEN_RANGE, func(dmlType db.DmlType, token db.Tokener, tx db.Translator) string {
 		m := token.GetMembers()
-		field := tx.Translate(m[0])
+		field := tx.Translate(dmlType, m[0])
 		var bottom string
 		var top string
 		if m[1] != nil {
-			bottom = tx.Translate(m[1])
+			bottom = tx.Translate(dmlType, m[1])
 		}
 		if m[2] != nil {
-			top = tx.Translate(m[2])
+			top = tx.Translate(dmlType, m[2])
 		}
 
 		if bottom != "" && top != "" {
@@ -497,13 +497,13 @@ func (this *GenericTranslator) Init(overrider db.Translator) {
 	})
 
 	// ValueRange
-	this.RegisterTranslation(db.TOKEN_VALUERANGE, func(token db.Tokener, tx db.Translator) string {
+	this.RegisterTranslation(db.TOKEN_VALUERANGE, func(dmlType db.DmlType, token db.Tokener, tx db.Translator) string {
 		m := token.GetMembers()
-		bottom := tx.Translate(m[0])
-		top := tx.Translate(m[1])
+		bottom := tx.Translate(dmlType, m[0])
+		top := tx.Translate(dmlType, m[1])
 		var value string
 		if m[2] != nil {
-			value = tx.Translate(m[2])
+			value = tx.Translate(dmlType, m[2])
 		}
 
 		if value != "" {
@@ -516,13 +516,13 @@ func (this *GenericTranslator) Init(overrider db.Translator) {
 	})
 
 	// boundedValueRange
-	this.RegisterTranslation(db.TOKEN_BOUNDEDRANGE, func(token db.Tokener, tx db.Translator) string {
+	this.RegisterTranslation(db.TOKEN_BOUNDEDRANGE, func(dmlType db.DmlType, token db.Tokener, tx db.Translator) string {
 		m := token.GetMembers()
-		bottom := tx.Translate(m[0])
-		top := tx.Translate(m[1])
+		bottom := tx.Translate(dmlType, m[0])
+		top := tx.Translate(dmlType, m[1])
 		var value string
 		if m[2] != nil {
-			value = tx.Translate(m[2])
+			value = tx.Translate(dmlType, m[2])
 		}
 
 		if value != "" {
@@ -532,7 +532,7 @@ func (this *GenericTranslator) Init(overrider db.Translator) {
 	})
 
 	// In
-	this.RegisterTranslation(db.TOKEN_IN, func(token db.Tokener, tx db.Translator) string {
+	this.RegisterTranslation(db.TOKEN_IN, func(dmlType db.DmlType, token db.Tokener, tx db.Translator) string {
 		m := token.GetMembers()
 		var pattern string
 		if token.GetOperator() == db.TOKEN_SUBQUERY {
@@ -545,90 +545,90 @@ func (this *GenericTranslator) Init(overrider db.Translator) {
 			return fmt.Sprintf(
 				pattern,
 				this.isNot(c),
-				tx.Translate(m[0]),
-				RolloverParameter(tx, m[1:], ", "),
+				tx.Translate(dmlType, m[0]),
+				RolloverParameter(dmlType, tx, m[1:], ", "),
 			)
 		}
 		return ""
 	})
 
 	// Or
-	this.RegisterTranslation(db.TOKEN_OR, func(token db.Tokener, tx db.Translator) string {
+	this.RegisterTranslation(db.TOKEN_OR, func(dmlType db.DmlType, token db.Tokener, tx db.Translator) string {
 		m := token.GetMembers()
-		return fmt.Sprintf("(%s)", RolloverParameter(tx, m, " OR "))
+		return fmt.Sprintf("(%s)", RolloverParameter(dmlType, tx, m, " OR "))
 	})
 
 	// And
-	this.RegisterTranslation(db.TOKEN_AND, func(token db.Tokener, tx db.Translator) string {
+	this.RegisterTranslation(db.TOKEN_AND, func(dmlType db.DmlType, token db.Tokener, tx db.Translator) string {
 		m := token.GetMembers()
-		return fmt.Sprintf("%s", RolloverParameter(tx, m, " AND "))
+		return fmt.Sprintf("%s", RolloverParameter(dmlType, tx, m, " AND "))
 	})
 
 	// Like
-	this.RegisterTranslation(db.TOKEN_LIKE, func(token db.Tokener, tx db.Translator) string {
+	this.RegisterTranslation(db.TOKEN_LIKE, func(dmlType db.DmlType, token db.Tokener, tx db.Translator) string {
 		c := token.(*db.Criteria)
 		m := token.GetMembers()
 		return fmt.Sprintf("%s%s LIKE %s",
-			tx.Translate(m[0]), this.isNot(c), tx.Translate(m[1]))
+			tx.Translate(dmlType, m[0]), this.isNot(c), tx.Translate(dmlType, m[1]))
 	})
 
 	//	ILike
-	this.RegisterTranslation(db.TOKEN_ILIKE, func(token db.Tokener, tx db.Translator) string {
+	this.RegisterTranslation(db.TOKEN_ILIKE, func(dmlType db.DmlType, token db.Tokener, tx db.Translator) string {
 		c := token.(*db.Criteria)
 		m := token.GetMembers()
 		return fmt.Sprintf("UPPER(%s)%s LIKE UPPER(%s)",
-			tx.Translate(m[0]), this.isNot(c), tx.Translate(m[1]))
+			tx.Translate(dmlType, m[0]), this.isNot(c), tx.Translate(dmlType, m[1]))
 	})
 
 	// isNull
-	this.RegisterTranslation(db.TOKEN_ISNULL, func(token db.Tokener, tx db.Translator) string {
+	this.RegisterTranslation(db.TOKEN_ISNULL, func(dmlType db.DmlType, token db.Tokener, tx db.Translator) string {
 		c := token.(*db.Criteria)
 		m := token.GetMembers()
-		return fmt.Sprintf("%s IS%s NULL", tx.Translate(m[0]), this.isNot(c))
+		return fmt.Sprintf("%s IS%s NULL", tx.Translate(dmlType, m[0]), this.isNot(c))
 	})
 
 	// Greater
-	this.RegisterTranslation(db.TOKEN_GT, func(token db.Tokener, tx db.Translator) string {
+	this.RegisterTranslation(db.TOKEN_GT, func(dmlType db.DmlType, token db.Tokener, tx db.Translator) string {
 		m := token.GetMembers()
-		return fmt.Sprintf("%s > %s", tx.Translate(m[0]), tx.Translate(m[1]))
+		return fmt.Sprintf("%s > %s", tx.Translate(dmlType, m[0]), tx.Translate(dmlType, m[1]))
 	})
 
 	// Lesser
-	this.RegisterTranslation(db.TOKEN_LT, func(token db.Tokener, tx db.Translator) string {
+	this.RegisterTranslation(db.TOKEN_LT, func(dmlType db.DmlType, token db.Tokener, tx db.Translator) string {
 		m := token.GetMembers()
-		return fmt.Sprintf("%s < %s", tx.Translate(m[0]), tx.Translate(m[1]))
+		return fmt.Sprintf("%s < %s", tx.Translate(dmlType, m[0]), tx.Translate(dmlType, m[1]))
 	})
 
 	// GreaterOrEqual
-	this.RegisterTranslation(db.TOKEN_GTEQ, func(token db.Tokener, tx db.Translator) string {
+	this.RegisterTranslation(db.TOKEN_GTEQ, func(dmlType db.DmlType, token db.Tokener, tx db.Translator) string {
 		m := token.GetMembers()
-		return fmt.Sprintf("%s >= %s", tx.Translate(m[0]), tx.Translate(m[1]))
+		return fmt.Sprintf("%s >= %s", tx.Translate(dmlType, m[0]), tx.Translate(dmlType, m[1]))
 	})
 
 	// LesserOrEqual
-	this.RegisterTranslation(db.TOKEN_LTEQ, func(token db.Tokener, tx db.Translator) string {
+	this.RegisterTranslation(db.TOKEN_LTEQ, func(dmlType db.DmlType, token db.Tokener, tx db.Translator) string {
 		m := token.GetMembers()
-		return fmt.Sprintf("%s <= %s", tx.Translate(m[0]), tx.Translate(m[1]))
+		return fmt.Sprintf("%s <= %s", tx.Translate(dmlType, m[0]), tx.Translate(dmlType, m[1]))
 	})
 
 	// FUNCTIONS
 	// Param
-	this.RegisterTranslation(db.TOKEN_PARAM, func(token db.Tokener, tx db.Translator) string {
+	this.RegisterTranslation(db.TOKEN_PARAM, func(dmlType db.DmlType, token db.Tokener, tx db.Translator) string {
 		return fmt.Sprintf(":%s", token.GetValue())
 	})
 
 	// exists
-	this.RegisterTranslation(db.TOKEN_EXISTS, func(token db.Tokener, tx db.Translator) string {
+	this.RegisterTranslation(db.TOKEN_EXISTS, func(dmlType db.DmlType, token db.Tokener, tx db.Translator) string {
 		m := token.GetMembers()
-		return fmt.Sprintf("EXISTS %s", tx.Translate(m[0]))
+		return fmt.Sprintf("EXISTS %s", tx.Translate(dmlType, m[0]))
 	})
 
-	this.RegisterTranslation(db.TOKEN_NOT, func(token db.Tokener, tx db.Translator) string {
+	this.RegisterTranslation(db.TOKEN_NOT, func(dmlType db.DmlType, token db.Tokener, tx db.Translator) string {
 		m := token.GetMembers()
-		return fmt.Sprintf("NOT %s", tx.Translate(m[0]))
+		return fmt.Sprintf("NOT %s", tx.Translate(dmlType, m[0]))
 	})
 
-	this.RegisterTranslation(db.TOKEN_ALIAS, func(token db.Tokener, tx db.Translator) string {
+	this.RegisterTranslation(db.TOKEN_ALIAS, func(dmlType db.DmlType, token db.Tokener, tx db.Translator) string {
 		m := token.GetValue()
 		if m != nil {
 			return fmt.Sprint(m)
@@ -636,82 +636,82 @@ func (this *GenericTranslator) Init(overrider db.Translator) {
 		return "NULL"
 	})
 
-	this.RegisterTranslation(db.TOKEN_SUM, func(token db.Tokener, tx db.Translator) string {
+	this.RegisterTranslation(db.TOKEN_SUM, func(dmlType db.DmlType, token db.Tokener, tx db.Translator) string {
 		m := token.GetMembers()
-		return fmt.Sprintf("SUM(%s)", RolloverParameter(tx, m, ", "))
+		return fmt.Sprintf("SUM(%s)", RolloverParameter(dmlType, tx, m, ", "))
 	})
 
-	this.RegisterTranslation(db.TOKEN_MAX, func(token db.Tokener, tx db.Translator) string {
+	this.RegisterTranslation(db.TOKEN_MAX, func(dmlType db.DmlType, token db.Tokener, tx db.Translator) string {
 		m := token.GetMembers()
-		return fmt.Sprintf("MAX(%s)", RolloverParameter(tx, m, ", "))
+		return fmt.Sprintf("MAX(%s)", RolloverParameter(dmlType, tx, m, ", "))
 	})
 
-	this.RegisterTranslation(db.TOKEN_MIN, func(token db.Tokener, tx db.Translator) string {
+	this.RegisterTranslation(db.TOKEN_MIN, func(dmlType db.DmlType, token db.Tokener, tx db.Translator) string {
 		m := token.GetMembers()
-		return fmt.Sprintf("MIN(%s)", RolloverParameter(tx, m, ", "))
+		return fmt.Sprintf("MIN(%s)", RolloverParameter(dmlType, tx, m, ", "))
 	})
 
-	this.RegisterTranslation(db.TOKEN_UPPER, func(token db.Tokener, tx db.Translator) string {
+	this.RegisterTranslation(db.TOKEN_UPPER, func(dmlType db.DmlType, token db.Tokener, tx db.Translator) string {
 		m := token.GetMembers()
-		return fmt.Sprintf("UPPER(%s)", RolloverParameter(tx, m, ", "))
+		return fmt.Sprintf("UPPER(%s)", RolloverParameter(dmlType, tx, m, ", "))
 	})
 
-	this.RegisterTranslation(db.TOKEN_LOWER, func(token db.Tokener, tx db.Translator) string {
+	this.RegisterTranslation(db.TOKEN_LOWER, func(dmlType db.DmlType, token db.Tokener, tx db.Translator) string {
 		m := token.GetMembers()
-		return fmt.Sprintf("LOWER(%s)", RolloverParameter(tx, m, ", "))
+		return fmt.Sprintf("LOWER(%s)", RolloverParameter(dmlType, tx, m, ", "))
 	})
 
-	this.RegisterTranslation(db.TOKEN_ADD, func(token db.Tokener, tx db.Translator) string {
+	this.RegisterTranslation(db.TOKEN_ADD, func(dmlType db.DmlType, token db.Tokener, tx db.Translator) string {
 		m := token.GetMembers()
-		return RolloverParameter(tx, m, " + ")
+		return RolloverParameter(dmlType, tx, m, " + ")
 	})
 
-	this.RegisterTranslation(db.TOKEN_MINUS, func(token db.Tokener, tx db.Translator) string {
+	this.RegisterTranslation(db.TOKEN_MINUS, func(dmlType db.DmlType, token db.Tokener, tx db.Translator) string {
 		m := token.GetMembers()
-		return RolloverParameter(tx, m, " - ")
+		return RolloverParameter(dmlType, tx, m, " - ")
 	})
 
-	this.RegisterTranslation(db.TOKEN_SECONDSDIFF, func(token db.Tokener, tx db.Translator) string {
+	this.RegisterTranslation(db.TOKEN_SECONDSDIFF, func(dmlType db.DmlType, token db.Tokener, tx db.Translator) string {
 		m := token.GetMembers()
 		// swaped
-		return RolloverParameter(tx, []db.Tokener{m[1], m[0]}, " - ")
+		return RolloverParameter(dmlType, tx, []db.Tokener{m[1], m[0]}, " - ")
 	})
 
-	this.RegisterTranslation(db.TOKEN_MULTIPLY, func(token db.Tokener, tx db.Translator) string {
+	this.RegisterTranslation(db.TOKEN_MULTIPLY, func(dmlType db.DmlType, token db.Tokener, tx db.Translator) string {
 		m := token.GetMembers()
-		return RolloverParameter(tx, m, " * ")
+		return RolloverParameter(dmlType, tx, m, " * ")
 	})
 
-	this.RegisterTranslation(db.TOKEN_COUNT, func(token db.Tokener, tx db.Translator) string {
+	this.RegisterTranslation(db.TOKEN_COUNT, func(dmlType db.DmlType, token db.Tokener, tx db.Translator) string {
 		return "COUNT(*)"
 	})
 
-	this.RegisterTranslation(db.TOKEN_COUNT_COLUMN, func(token db.Tokener, tx db.Translator) string {
+	this.RegisterTranslation(db.TOKEN_COUNT_COLUMN, func(dmlType db.DmlType, token db.Tokener, tx db.Translator) string {
 		m := token.GetMembers()
-		return fmt.Sprintf("COUNT(%s)", tx.Translate(m[0]))
+		return fmt.Sprintf("COUNT(%s)", tx.Translate(dmlType, m[0]))
 	})
 
-	this.RegisterTranslation(db.TOKEN_RTRIM, func(token db.Tokener, tx db.Translator) string {
+	this.RegisterTranslation(db.TOKEN_RTRIM, func(dmlType db.DmlType, token db.Tokener, tx db.Translator) string {
 		m := token.GetMembers()
-		return fmt.Sprintf("RTRIM(%s)", tx.Translate(m[0]))
+		return fmt.Sprintf("RTRIM(%s)", tx.Translate(dmlType, m[0]))
 	})
 
-	this.RegisterTranslation(db.TOKEN_SUBQUERY, func(token db.Tokener, tx db.Translator) string {
+	this.RegisterTranslation(db.TOKEN_SUBQUERY, func(dmlType db.DmlType, token db.Tokener, tx db.Translator) string {
 		v := token.GetValue()
 		query := v.(*db.Query)
 		return fmt.Sprintf("( %s )", this.GetSqlForQuery(query))
 	})
 }
 
-func (this *GenericTranslator) RegisterTranslation(name string, handler func(token db.Tokener, tx db.Translator) string) {
+func (this *GenericTranslator) RegisterTranslation(name string, handler func(dmlType db.DmlType, token db.Tokener, tx db.Translator) string) {
 	this.tokens[name] = handler
 }
 
-func (this *GenericTranslator) Translate(token db.Tokener) string {
+func (this *GenericTranslator) Translate(dmlType db.DmlType, token db.Tokener) string {
 	tag := token.GetOperator()
 	handle := this.tokens[tag]
 	if handle != nil {
-		return handle(token, this.overrider)
+		return handle(dmlType, token, this.overrider)
 	}
 	panic("token " + tag + " is unknown")
 }
@@ -968,7 +968,7 @@ func (this *GenericTranslator) ColumnAlias(token db.Tokener, position int) strin
 func (this *GenericTranslator) OrderBy(query *db.Query, order *db.Order) string {
 	var str string
 	if order.GetHolder() != nil {
-		str = this.Translate(order.GetHolder())
+		str = this.Translate(db.QUERY, order.GetHolder())
 	} else {
 		str = order.GetAlias()
 	}

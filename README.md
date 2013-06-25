@@ -1,4 +1,5 @@
-# goSQL
+goSQL
+=====
 ***
 a ORM like library in Go's (golang) that makes it easy to use SQL.
 
@@ -6,10 +7,16 @@ a ORM like library in Go's (golang) that makes it easy to use SQL.
 
 (English is not my native language so please bear with me)
 
-goSQL aims to facilitate the convertion between database tables and structs, 
-but has intention of hiding the SQL from the developer.
+goSQL aims to facilitate the convertion between database tables and structs and make easy
+the use of complex joins. 
+It has no intention of hiding the SQL from the developer and a closer idiom to SQL is also part of the library.
+Structs are used as a representation of a table record for CRUD operations.
 
-With that said we can use structs as a representation of a table record for CRUD operations.
+This library is not locked to any database vendor. This database abstraction is achieved by what I called translators. Translators for MySQL, PostgreSQL and FirebirdSQL are provided.
+These Translators can even be customized and extended even further by registering functions to implement functionality not covered by the initial Translators. Time diff functions come to mind. 
+
+This library is supported by a mapping system that enables you to avoid writing any SQL text. 
+References to your database schema are located in one place, avoiding a major pain when you have to refactor your database.
 
 An example of the syntax is as follows:
 
@@ -37,6 +44,8 @@ Another example with an update
  - Static typing
  - Result Mapping
  - Database Abstraction
+ - Sub Queries
+ - Extensible
 
 ## Dependencies
 
@@ -72,7 +81,7 @@ Of course the database name can be changed and configured to something else.
 And the code is
 
 	import (
-		"github.com/quintans/goSQL/db"
+		. "github.com/quintans/goSQL/db"
 		"github.com/quintans/goSQL/dbx"
 		trx "github.com/quintans/goSQL/translators"
 	
@@ -91,14 +100,14 @@ And the code is
 	
 	// table description/mapping
 	var (
-		PUBLISHER           = db.TABLE("PUBLISHER")
+		PUBLISHER           = TABLE("PUBLISHER")
 		PUBLISHER_C_ID      = PUBLISHER.KEY("ID")          // implicit map to field Id
 		PUBLISHER_C_VERSION = PUBLISHER.VERSION("VERSION") // implicit map to field Version
 		PUBLISHER_C_NAME    = PUBLISHER.COLUMN("NAME")     // implicit map to field Name
 	)
 	
 	// the transaction manager
-	var TM db.ITransactionManager
+	var TM ITransactionManager
 	
 	func init() {
 		// database configuration	
@@ -108,12 +117,12 @@ And the code is
 		}
 
 		// transaction manager	
-		TM = db.NewTransactionManager(
+		TM = NewTransactionManager(
 			// database
 			mydb,
 			// database context factory
-			func(c dbx.IConnection) db.IDb {
-				return db.NewDb(c, trx.NewMySQL5Translator())
+			func(c dbx.IConnection) IDb {
+				return NewDb(c, trx.NewMySQL5Translator())
 			},
 			// statement cache
 			1000,
@@ -160,7 +169,7 @@ As seen in the [Startup Guide](#startup-guide), mapping a table is pretty straig
 
 **Declaring a table**
 
-	var PUBLISHER = db.TABLE("PUBLISHER")
+	var PUBLISHER = TABLE("PUBLISHER")
 	
 **Declaring a column**
 
@@ -185,9 +194,9 @@ Besides the regular columns, there are the special columns `KEY`, `VERSION` and 
 - `DELETION` identifies the column used for logic record deletion.
 
 Next we will see how to declare associations. To map associations, we do not think on
-the multiplicity of the edges, but how to go from A to B. With that said, we only have two types of associations:
+the multiplicity of the edges, but how to go from A to B. This leaves us only two types of associations:
 Simple (one-to-one, one-to-many, many-to-one) and Composite (many-to-many) associations.
-
+How to use associations is explained in the [Query](#query-examples) chapter.
 
 **Declaring a Simple association**
 
@@ -209,14 +218,14 @@ need to declare the reverse association.
 This kind of associations makes use on an intermediary table, and therefore we need to declare it.
 
 	var (
-		AUTHOR_BOOK				= db.TABLE("AUTHOR_BOOK")
+		AUTHOR_BOOK				= TABLE("AUTHOR_BOOK")
 		AUTHOR_BOOK_C_AUTHOR_ID	= AUTHOR_BOOK.KEY("AUTHOR_ID") // implicit map to field 'AuthorId'
 		AUTHOR_BOOK_C_BOOK_ID	= AUTHOR_BOOK.KEY("BOOK_ID") // implicit map to field 'BookId'
 	)
 
 And finally the Composite association declaration
 
-	var AUTHOR_A_BOOKS = db.NewM2MAssociation(
+	var AUTHOR_A_BOOKS = NewM2MAssociation(
 		"Books",
 		ASSOCIATE(AUTHOR_BOOK_C_AUTHOR_ID).WITH(AUTHOR_C_ID), 
 		ASSOCIATE(AUTHOR_BOOK_C_BOOK_ID).WITH(BOOK_C_ID),
@@ -230,7 +239,7 @@ The full definition of the tables and the struct entities used in this document 
 
 #### Simple Insert
 
-		insert := DB.Insert(PUBLISHER).
+		insert := Insert(PUBLISHER).
 			Columns(PUBLISHER_C_ID, PUBLISHER_C_VERSION, PUBLISHER_C_NAME)
 		insert.Values(1, 1, "Geek Publications").Execute()
 		insert.Values(2, 1, "Edições Lusas").Execute()
@@ -269,8 +278,48 @@ When updating with a struct, the struct fields are matched with the respective c
 If a version column is present its value is also updated.
 The generated SQL will include all columns.
 
-	var pub Publisher
-	pub.Name = ext.StrPtr("Untited Editors")
-	store.Update(PUBLISHER).Submit(&publisher)
+	var publisher Publisher
+	publisher.Name = ext.StrPtr("Untited Editors")
+	publisher.Id = ext.Int64Ptr(1)      // identifies the record
+	publisher.Version = ext.Int64Ptr(1) // for optimistic locking
+	store.Update(PUBLISHER).Submit(publisher)
+	
+#### Update with SubQuery
 
-### Query
+		sub := store.Query(BOOK).Alias("b").
+			Column(AsIs(nil)).
+			Where(
+			BOOK_C_PUBLISHER_ID.Matches(Col(BOOK_C_ID).For("a")),
+			BOOK_C_PRICE.Greater(10),
+		)
+
+		affectedRows, err := store.Update(PUBLISHER).Alias("a").
+			Set(PUBLISHER_C_NAME, Upper(PUBLISHER_C_NAME)).
+			Where(Exists(sub)).
+			Execute()
+
+
+### Delete Examples
+
+#### Simple Delete
+
+	store.Delete(BOOK).Where(BOOK_C_ID.Matches(1)).Execute()
+
+#### Delete with struct
+
+	var book Book // any struct with the fields Id and Version could be used
+	book.Id = ext.Int64Ptr(1)
+	book.Version = ext.Int64Ptr(1)
+	store.Delete(BOOK).Submit(book)
+
+
+### Query Examples
+
+
+
+### Raw SQL
+
+# TODO
+- Virtual Columns: Columns that physically exist in another columns
+- Test more RDBMS
+- Fix code documentation

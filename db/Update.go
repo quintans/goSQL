@@ -75,7 +75,11 @@ func (this *Update) Submit(value interface{}) (int64, error) {
 			alias := column.GetAlias()
 			bp := mappings[alias]
 			if bp != nil {
-				val := bp.Get(reflect.ValueOf(value).Elem())
+				//val := bp.Get(reflect.ValueOf(value).Elem())
+				val := bp.Get(reflect.ValueOf(value))
+				if val.Kind() == reflect.Ptr {
+					val = val.Elem()
+				}
 
 				if column.IsKey() {
 					if val.Kind() == reflect.Ptr {
