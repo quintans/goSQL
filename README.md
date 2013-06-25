@@ -7,7 +7,7 @@ a ORM like library in Go's (golang) that makes it easy to use SQL.
 (English is not my native language so please bear with me)
 
 goSQL aims to facilitate the convertion between database tables and structs, 
-but has intention on hiding the developer from the SQL.
+but has intention of hiding the SQL from the developer.
 
 With that said we can use structs as a representation of a table record for CRUD operations.
 
@@ -72,9 +72,9 @@ Of course the database name can be changed and configured to something else.
 And the code is
 
 	import (
-		"pqp/goSQL/db"
-		"pqp/goSQL/dbx"
-		trx "pqp/goSQL/translators"
+		"github.com/quintans/goSQL/db"
+		"github.com/quintans/goSQL/dbx"
+		trx "github.com/quintans/goSQL/translators"
 	
 		_ "github.com/go-sql-driver/mysql"
 	
@@ -169,15 +169,20 @@ As seen in the [Startup Guide](#startup-guide), mapping a table is pretty straig
 By default, the result value for this column will be put in the field `Name` of the target struct.
 If we wish for a different alias we use the `.As("...")` at the end resulting in:
 
-	var PUBLISHER_C_NAME = PUBLISHER.COLUMN("NAME").As("Other")     // map to field 'Other'
+	var PUBLISHER_C_NAME = PUBLISHER.COLUMN("NAME").As("Other") // map to field 'Other'
 
 The declared alias `Other` is now the default for all the generated SQL. 
 As all defaults, it can be changed to another value when building a SQL statement.
 
-Besides the regular columns, there are the special columns `KEY` and `VERSION`.
+Besides the regular columns, there are the special columns `KEY`, `VERSION` and `DELETION`.
 	
-	var PUBLISHER_C_ID      = PUBLISHER.KEY("ID")          // implicit map to field Id
-	var PUBLISHER_C_VERSION = PUBLISHER.VERSION("VERSION") // implicit map to field Ver
+	var PUBLISHER_C_ID       = PUBLISHER.KEY("ID")           // implicit map to field Id
+	var PUBLISHER_C_VERSION  = PUBLISHER.VERSION("VERSION")  // implicit map to field Version
+	var PUBLISHER_C_DELETION = PUBLISHER.DELETION("DELETION") // map to field 'Deletion'
+
+- `KEY` identifies the column or columns as primary key of a table.
+- `VERSION` identifies the column used for optimistic locking.
+- `DELETION` identifies the column used for logic record deletion.
 
 Next we will see how to declare associations. To map associations, we do not think on
 the multiplicity of the edges, but how to go from A to B. With that said, we only have two types of associations:
@@ -232,6 +237,8 @@ The full definition of the tables and the struct entities used in this document 
 
 #### Insert With a Struct
 
+When inserting with a struct, the struct fields are matched with the respective columns. 
+
 		var pub Publisher
 		pub.Name = ext.StrPtr("Untited Editors")
 		store.Insert(PUBLISHER).Submit(pub)
@@ -246,4 +253,24 @@ Any of the above snippets, if the Id field/column is undefined (0 or nil) it ret
 
 ### Update Examples
 
+#### Update selected columns with Optimistic lock
 
+		store.Update(PUBLISHER).
+			Set(PUBLISHER_C_NAME, "Untited Editors"). // column to update
+			Set(PUBLISHER_C_VERSION, version + 1).    // increment version
+			Where(
+			PUBLISHER_C_ID.Matches(1),
+			PUBLISHER_C_VERSION.Matches(version),     // old version
+		).Execute()
+
+#### Update with struct
+
+When updating with a struct, the struct fields are matched with the respective columns. 
+If a version column is present its value is also updated.
+The generated SQL will include all columns.
+
+	var pub Publisher
+	pub.Name = ext.StrPtr("Untited Editors")
+	store.Update(PUBLISHER).Submit(&publisher)
+
+### Query

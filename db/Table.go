@@ -94,6 +94,10 @@ func (this *Table) VERSION(name string) *Column {
 	return this.COLUMN(name).Version()
 }
 
+func (this *Table) DELETION(name string) *Column {
+	return this.COLUMN(name).Deletion()
+}
+
 func (this *Table) addKey(col *Column) {
 	this.keys.Add(col)
 	if this.keys.Size() == 1 {

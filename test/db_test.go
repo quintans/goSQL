@@ -160,9 +160,9 @@ func TestInsertStructReturningKey(t *testing.T) {
 			t.Error("The Auto Insert Key for the ID column was not retrived")
 		}
 
-		var pub = new(Publisher)
-		pub.Name = ext.StrPtr("Untited Editors")
-		key, err := store.Insert(PUBLISHER).Submit(pub)
+		var pubPtr = new(Publisher)
+		pubPtr.Name = ext.StrPtr("Untited Editors")
+		key, err = store.Insert(PUBLISHER).Submit(pubPtr)
 		if err != nil {
 			return err
 		}
@@ -177,28 +177,41 @@ func TestInsertStructReturningKey(t *testing.T) {
 	}
 }
 
-//func TestSelectUTF8(t *testing.T) {
+func TestUpdate(t *testing.T) {
+	resetDB()
+
+	var err error
+	if err = TM.Transaction(func(store db.IDb) error {
+		affectedRows, err := store.Update(PUBLISHER).
+			Set(PUBLISHER_C_NAME, "Dummy"). // column to update
+			Set(PUBLISHER_C_VERSION, 2).    // increment version
+			Where(
+			PUBLISHER_C_ID.Matches(1),
+			PUBLISHER_C_VERSION.Matches(1),
+		).
+			Execute()
+		if err != nil {
+			return err
+		}
+
+		if affectedRows != 1 {
+			t.Error("The record was not updated")
+		}
+
+		return nil
+	}); err != nil {
+		t.Errorf("Failed Update Test: %s", err)
+	}
+}
+
+//func Test(t *testing.T) {
+//	resetDB()
+
 //	var err error
 //	if err = TM.Transaction(func(store db.IDb) error {
-//		if err := startup(store); err != nil {
-//			return err
-//		}
-
-//		var publisher = Publisher{}
-//		ok, err := store.Query(PUBLISHER).
-//			All().
-//			Where(PUBLISHER_C_ID.Matches(2)).
-//			SelectTo(&publisher)
-//		if err != nil {
-//			return err
-//		}
-
-//		if !ok || *publisher.Id != 2 || *publisher.Version != 1 || *publisher.Name != "Edições Lusas" {
-//			t.Errorf("The record for publisher id 2, was not properly retrived. Retrived %s", publisher)
-//		}
 
 //		return nil
 //	}); err != nil {
-//		t.Errorf("Failed Select UTF8 Test: %s", err)
+//		t.Errorf("Failed ... Test: %s", err)
 //	}
 //}
