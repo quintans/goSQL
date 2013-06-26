@@ -158,7 +158,7 @@ func (this *Update) Submit(value interface{}) (int64, error) {
 }
 
 func (this *Update) Execute() (int64, error) {
-	rsql := this.GetCachedSql()
+	rsql := this.getCachedSql()
 	this.debugSQL(rsql.OriSql)
 
 	now := time.Now()
@@ -171,7 +171,7 @@ func (this *Update) Execute() (int64, error) {
 	return affectedRows, nil
 }
 
-func (this *Update) GetCachedSql() *RawSql {
+func (this *Update) getCachedSql() *RawSql {
 	if this.rawSQL == nil {
 		// if the discriminator conditions have not yet been processed, apply them now
 		if this.discriminatorCriterias != nil && this.criteria == nil {

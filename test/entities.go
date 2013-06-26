@@ -26,6 +26,15 @@ type Publisher struct {
 	Books []*Book
 }
 
+func (this *Publisher) String() string {
+	sb := tk.NewStrBuffer()
+	sb.Add("{Id: ", this.Id, ", Version: ", this.Version)
+	sb.Add(", Name: ", this.Name)
+	sb.Add(", Books: ", this.Books)
+	sb.Add("}")
+	return sb.String()
+}
+
 func (this *Publisher) Equals(e interface{}) bool {
 	if this == e {
 		return true
@@ -33,13 +42,15 @@ func (this *Publisher) Equals(e interface{}) bool {
 
 	switch t := e.(type) {
 	case *Publisher:
-		return this.Id == t.Id
+		return this.Id != nil && t.Id != nil && *this.Id == *t.Id
 	}
 	return false
 }
 
 func (this *Publisher) HashCode() int {
-	return tk.HashLong(tk.HASH_SEED, DefInt64(this.Id, 0))
+	result := tk.HashType(tk.HASH_SEED, this)
+	result = tk.HashLong(result, DefInt64(this.Id, 0))
+	return result
 }
 
 var (
@@ -69,6 +80,18 @@ type Book struct {
 	Publisher   *Publisher // this is filled is a join fetch
 }
 
+func (this *Book) String() string {
+	sb := tk.NewStrBuffer()
+	sb.Add("{Id: ", this.Id, ", Version: ", this.Version)
+	sb.Add(", Name: ", this.Name)
+	sb.Add(", Price: ", this.Price)
+	sb.Add(", Published: ", this.Published)
+	sb.Add(", PublisherId: ", this.PublisherId)
+	sb.Add(", Publisher: ", this.Publisher)
+	sb.Add("}")
+	return sb.String()
+}
+
 func (this *Book) Equals(e interface{}) bool {
 	if this == e {
 		return true
@@ -76,13 +99,15 @@ func (this *Book) Equals(e interface{}) bool {
 
 	switch t := e.(type) {
 	case *Book:
-		return this.Id == t.Id
+		return this.Id != nil && t.Id != nil && *this.Id == *t.Id
 	}
 	return false
 }
 
 func (this *Book) HashCode() int {
-	return tk.HashLong(tk.HASH_SEED, DefInt64(this.Id, 0))
+	result := tk.HashType(tk.HASH_SEED, this)
+	result = tk.HashLong(result, DefInt64(this.Id, 0))
+	return result
 }
 
 var (

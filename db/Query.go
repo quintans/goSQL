@@ -475,12 +475,11 @@ func (this *Query) IncludeToken(token Tokener) *Query {
 	return this
 }
 
-// Executes an OUTER join with the tables defined by the associations.
-// ALL the columns from the intermediate tables are included in the final select
-// as well as ALL columns of the last table refered by the association list
-//
-// param associations: the foreign keys
-// return
+/*
+Executes an OUTER join with the tables defined by the associations.
+ALL the columns from the intermediate tables are included in the final select
+as well as ALL columns of the last table refered by the association list
+*/
 func (this *Query) OuterFetch(associations ...*Association) *Query {
 	this.Outer(associations...).Fetch()
 	return this
@@ -736,7 +735,7 @@ func (this *Query) ListClosure(transformer func(rows *sql.Rows) error) error {
 		this.All()
 	}
 
-	rsql := this.GetCachedSql()
+	rsql := this.getCachedSql()
 	this.debugSQL(rsql.OriSql)
 
 	now := time.Now()
@@ -754,7 +753,7 @@ func (this *Query) ListSimple(transformer func(rows *sql.Rows) (interface{}, err
 		this.All()
 	}
 
-	rsql := this.GetCachedSql()
+	rsql := this.getCachedSql()
 	this.debugSQL(rsql.OriSql)
 
 	now := time.Now()
@@ -766,18 +765,18 @@ func (this *Query) ListSimple(transformer func(rows *sql.Rows) (interface{}, err
 	return list, nil
 }
 
-// Executes a query and transform the results according to the transformer
-//
-// param query: The query
-// param rowMapper: The row transformer
-// return: A collection of transformed results
+/*
+Executes a query and transform the results according to the transformer
+
+Accepts a row transformer and returns a collection of transformed results
+*/
 func (this *Query) List(rowMapper dbx.IRowTransformer) (coll.Collection, error) {
 	// if no columns were added, add all columns of the driving table
 	if len(this.Columns) == 0 {
 		this.All()
 	}
 
-	rsql := this.GetCachedSql()
+	rsql := this.getCachedSql()
 	this.debugSQL(rsql.OriSql)
 
 	now := time.Now()
@@ -789,46 +788,53 @@ func (this *Query) List(rowMapper dbx.IRowTransformer) (coll.Collection, error) 
 	return list, nil
 }
 
-// Executes a query and transform the results to the struct type passed as parameter,<br>
-// matching the alias with struct property name. If no alias is supplied, it is used the default column alias.
-//
-// param query: The query to be executed
-// param klass: The struct
-// return A slice of structs (needs cast)
+/*
+Executes a query and transform the results to the struct type passed as parameter,
+matching the alias with struct property name. If no alias is supplied, it is used the default column alias.
+
+Accepts as parameter the struct type and returns a collection of structs (needs cast)
+*/
 func (this *Query) ListOf(instance interface{}) (coll.Collection, error) {
 	return this.List(NewEntityTransformer(this, instance))
 }
 
-// since there is no return collection, this can be used also for non-toolkit.Hasher entities.
+/*
+Executes a query, with the target entity instance being provided by the factory function.
+The function is also responsible for building the result.
+This method does not create a tree of related instances.
+
+Since there is no return collection, this can be used also for non-toolkit.Hasher entities.
+*/
 func (this *Query) ListFor(factory func() interface{}) error {
 	_, err := this.List(NewEntityFactoryTransformer(this, factory))
 	return err
 }
 
-// Executes a query and transform the results to the struct type,<br>
-// matching the alias with struct property name, building a struct tree.
-// If the transformed data matches a previous converted entity the previous one is reused.
-//
-// param query: The query to be executed
-// param klass: The struct type
-// return A collection of beans
+/*
+Executes a query and transform the results to the struct type.
+It matches the alias with struct property name, building a struct tree.
+If the transformed data matches a previous converted entity the previous one is reused.
+
+Receives a template instance and returns a collection of structs.
+*/
 func (this *Query) ListTreeOf(instance tk.Hasher) (coll.Collection, error) {
 	return this.List(NewEntityTreeTransformer(this, true, instance))
 }
 
-// Executes a query and transform the results to the bean type,<br>
+// Executes a query and transform the results to the bean type,
 // matching the alias with bean property name, building a struct tree.
 // A new instance is created for every new data type.
-//
-// param query: The query to be executed
-// param klass: The struct type
-// return A collection of beans
 func (this *Query) ListFlatTreeOf(instance interface{}) (coll.Collection, error) {
 	return this.List(NewEntityTreeTransformer(this, false, instance))
 }
 
-func (this *Query) ListFlatTreeFor(factory func() interface{}) (coll.Collection, error) {
-	return this.List(NewEntityTreeFactoryTransformer(this, factory))
+/*
+Same as ListFlatTreeOf, except that the responsability of building the result
+is delegated to the factory function.
+*/
+func (this *Query) ListFlatTreeFor(factory func() interface{}) error {
+	_, err := this.List(NewEntityTreeFactoryTransformer(this, factory))
+	return err
 }
 
 //	func (this *Query) <T> T selectSingle(Class<T> klass) {
@@ -843,7 +849,7 @@ func (this *Query) SelectInto(dest ...interface{}) (bool, error) {
 		this.All()
 	}
 
-	rsql := this.GetCachedSql()
+	rsql := this.getCachedSql()
 	this.debugSQL(rsql.OriSql)
 
 	now := time.Now()
@@ -855,6 +861,13 @@ func (this *Query) SelectInto(dest ...interface{}) (bool, error) {
 	return found, nil
 }
 
+/*
+Returns a struct tree. When reuse is true the supplied template instance must implement
+the toolkit.Hasher interface.
+
+
+This is pretty much the same as SelectTreeTo.
+*/
 func (this *Query) SelectTree(typ interface{}, reuse bool) (interface{}, error) {
 	if reuse {
 		_, ok := typ.(tk.Hasher)
@@ -877,8 +890,10 @@ func (this *Query) SelectTree(typ interface{}, reuse bool) (interface{}, error) 
 	return this.Select(NewEntityTreeTransformer(this, false, typ))
 }
 
-// the result of the query is put in the passed struct.
-// returns true if a result was found, false if no result
+/*
+The first result of the query is put in the passed struct.
+Returns true if a result was found, false if no result
+*/
 func (this *Query) SelectTo(typ interface{}) (bool, error) {
 	res, err := this.Select(NewEntityTransformer(this, typ))
 	if err != nil {
@@ -891,6 +906,24 @@ func (this *Query) SelectTo(typ interface{}) (bool, error) {
 	return false, nil
 }
 
+/*
+Executes the query and builds a struct tree putting the first element in the supplied struct.
+
+The first parameter must be a struct pointer.
+
+If the reuse parameter is true, when a
+new entity is needed, the cache is checked to see if there is one instance for this entity,
+and if found it will use it to build the tree. Because of this the supplied instance
+must implement the toolkit.Hasher interface.
+
+If the reuse parameter is false, each element of the tree is always a new instance
+even if representing the same entity. This is most useful for tabular results.
+Since there is no need for caching the entities it is not mandatory to implement
+the toolkit.Hasher interface.
+
+The first result of the query is put in the passed struct.
+Returns true if a result was found, false if no result
+*/
 func (this *Query) SelectTreeTo(instance interface{}, reuse bool) (bool, error) {
 	res, err := this.SelectTree(instance, reuse)
 	if err != nil {
@@ -924,7 +957,7 @@ func (this *Query) Select(rowMapper dbx.IRowTransformer) (interface{}, error) {
 }
 
 // SQL String. It is cached for multiple access
-func (this *Query) GetCachedSql() *RawSql {
+func (this *Query) getCachedSql() *RawSql {
 	if this.rawSQL == nil {
 		// if the discriminator conditions have not yet been processed, apply them now
 		if this.discriminatorCriterias != nil && this.criteria == nil {

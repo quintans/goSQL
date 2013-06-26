@@ -16,6 +16,8 @@ import (
 
 var TM ITransactionManager
 
+var logger = log.LoggerFor("github.com/quintans/goSQL/test")
+
 func init() {
 	log.Register("/", log.DEBUG, log.NewConsoleAppender(false))
 
@@ -119,7 +121,7 @@ func resetDB() {
 func TestSelectUTF8(t *testing.T) {
 	resetDB()
 
-	// get the databse context
+	// get the database context
 	store := TM.Store()
 	// the target entity
 	var publisher = Publisher{}
@@ -130,9 +132,9 @@ func TestSelectUTF8(t *testing.T) {
 		SelectTo(&publisher)
 
 	if err != nil {
-		t.Errorf("%s", err)
+		t.Fatalf("%s", err)
 	} else if !ok || *publisher.Id != 2 || *publisher.Version != 1 || *publisher.Name != PUBLISHER_UTF8_NAME {
-		t.Errorf("The record for publisher id 2, was not properly retrived. Retrived %s", publisher)
+		t.Fatalf("The record for publisher id 2, was not properly retrived. Retrived %s", publisher)
 	}
 }
 
@@ -150,7 +152,7 @@ func TestInsertReturningKey(t *testing.T) {
 		}
 
 		if key == 0 {
-			t.Error("The Auto Insert Key for a null ID column was not retrived")
+			t.Fatal("The Auto Insert Key for a null ID column was not retrived")
 		}
 
 		// now without declaring the ID column
@@ -163,12 +165,12 @@ func TestInsertReturningKey(t *testing.T) {
 		}
 
 		if key == 0 {
-			t.Error("The Auto Insert Key for a absent ID column was not retrived")
+			t.Fatal("The Auto Insert Key for a absent ID column was not retrived")
 		}
 
 		return nil
 	}); err != nil {
-		t.Errorf("Failed Insert Returning Key: %s", err)
+		t.Fatalf("Failed Insert Returning Key: %s", err)
 	}
 }
 
@@ -185,7 +187,7 @@ func TestInsertStructReturningKey(t *testing.T) {
 		}
 
 		if key == 0 {
-			t.Error("The Auto Insert Key for the ID column was not retrived")
+			t.Fatal("The Auto Insert Key for the ID column was not retrived")
 		}
 
 		var pubPtr = new(Publisher)
@@ -196,12 +198,12 @@ func TestInsertStructReturningKey(t *testing.T) {
 		}
 
 		if key == 0 {
-			t.Error("The Auto Insert Key for the ID column was not retrived")
+			t.Fatal("The Auto Insert Key for the ID column was not retrived")
 		}
 
 		return nil
 	}); err != nil {
-		t.Errorf("Failed Struct Insert Return Key: %s", err)
+		t.Fatalf("Failed Struct Insert Return Key: %s", err)
 	}
 }
 
@@ -223,12 +225,12 @@ func TestSimpleUpdate(t *testing.T) {
 		}
 
 		if affectedRows != 1 {
-			t.Error("The record was not updated")
+			t.Fatal("The record was not updated")
 		}
 
 		return nil
 	}); err != nil {
-		t.Errorf("Failed Update Test: %s", err)
+		t.Fatalf("Failed Update Test: %s", err)
 	}
 }
 
@@ -247,12 +249,12 @@ func TestStructUpdate(t *testing.T) {
 		}
 
 		if affectedRows != 1 {
-			t.Error("The record was not updated")
+			t.Fatal("The record was not updated")
 		}
 
 		return nil
 	}); err != nil {
-		t.Errorf("Failed Update Test: %s", err)
+		t.Fatalf("Failed Update Test: %s", err)
 	}
 }
 
@@ -276,13 +278,13 @@ func TestUpdateSubquery(t *testing.T) {
 		}
 
 		if affectedRows != 1 {
-			t.Error("The record was not updated")
+			t.Fatal("The record was not updated")
 		}
 
 		return nil
 
 	}); err != nil {
-		t.Errorf("Failed Update with Subquery Test: %s", err)
+		t.Fatalf("Failed Update with Subquery Test: %s", err)
 	}
 }
 
@@ -295,12 +297,12 @@ func TestSimpleDelete(t *testing.T) {
 			return err
 		}
 		if affectedRows != 1 {
-			t.Error("The record was not updated")
+			t.Fatal("The record was not updated")
 		}
 
 		return nil
 	}); err != nil {
-		t.Errorf("Failed ... Test: %s", err)
+		t.Fatalf("Failed ... Test: %s", err)
 	}
 }
 
@@ -316,22 +318,237 @@ func TestStructDelete(t *testing.T) {
 			return err
 		}
 		if affectedRows != 1 {
-			t.Error("The record was not updated")
+			t.Fatal("The record was not updated")
 		}
 
 		return nil
 	}); err != nil {
-		t.Errorf("Failed ... Test: %s", err)
+		t.Fatalf("Failed ... Test: %s", err)
 	}
 }
 
-//func Test(t *testing.T) {
-//	resetDB()
+func TestSelectInto(t *testing.T) {
+	resetDB()
 
-//	if err := TM.Transaction(func(store IDb) error {
+	store := TM.Store()
+	var name string
+	ok, err := store.Query(PUBLISHER).
+		Column(PUBLISHER_C_NAME).
+		Where(PUBLISHER_C_ID.Matches(2)).
+		SelectInto(&name)
+	if err != nil {
+		t.Fatalf("%s", err)
+	} else if !ok || name != PUBLISHER_UTF8_NAME {
+		t.Fatalf("Failed SelectInto. The name for publisher id 2, was not properly retrived. Retrived %s", name)
+	}
+}
 
-//		return nil
-//	}); err != nil {
-//		t.Errorf("Failed ... Test: %s", err)
-//	}
-//}
+func TestSelectTreeTo(t *testing.T) {
+	resetDB()
+
+	store := TM.Store()
+	var publisher Publisher
+	ok, err := store.Query(PUBLISHER).
+		All().
+		OuterFetch(PUBLISHER_A_BOOKS). // add all columns off book in the query
+		Where(PUBLISHER_C_ID.Matches(2)).
+		SelectTreeTo(&publisher, true)
+	if err != nil {
+		t.Fatalf("%s", err)
+	} else if !ok || publisher.Id == nil {
+		t.Fatal("The record for publisher id 2, was not retrived")
+	} else {
+		// check list size of books
+		if len(publisher.Books) != 2 {
+			t.Fatalf("The list of books for the publisher with id 2 was incorrectly retrived. Expected 2 got %v", len(publisher.Books))
+		}
+	}
+}
+
+func TestSelectTree(t *testing.T) {
+	resetDB()
+
+	store := TM.Store()
+	result, err := store.Query(PUBLISHER).
+		All().
+		OuterFetch(PUBLISHER_A_BOOKS). // add all columns off book in the query
+		Where(PUBLISHER_C_ID.Matches(2)).
+		SelectTree((*Publisher)(nil), true)
+	if err != nil {
+		t.Fatalf("%s", err)
+	} else if result == nil {
+		t.Fatal("The record for publisher id 2, was not retrived")
+	} else {
+		publisher := result.(*Publisher)
+		// check list size of books
+		if len(publisher.Books) != 2 {
+			t.Fatalf("The list of books for the publisher with id 2 was incorrectly retrived. Expected 2 got %v", len(publisher.Books))
+		}
+	}
+}
+
+func TestListFor(t *testing.T) {
+	resetDB()
+
+	store := TM.Store()
+	books := make([]*Book, 0) // mandatory use pointers
+	err := store.Query(BOOK).
+		All().
+		ListFor(func() interface{} {
+		book := new(Book)
+		books = append(books, book)
+		return book
+	})
+	if err != nil {
+		t.Fatalf("Failed ListFor Test: %s", err)
+	}
+
+	if len(books) != 3 {
+		t.Fatalf("Expected 3 returned books, but got %v", len(books))
+	} else {
+		for _, v := range books {
+			if v.Id == nil {
+				t.Fatalf("A book has invalid Id and therefore was not retrived")
+			}
+		}
+	}
+}
+
+func TestListOf(t *testing.T) {
+	resetDB()
+
+	store := TM.Store()
+	books, err := store.Query(BOOK).
+		All().
+		ListOf((*Book)(nil))
+	if err != nil {
+		t.Fatalf("Failed ListOf Test: %s", err)
+	}
+
+	if books.Size() != 3 {
+		t.Fatalf("Expected 3 returned books, but got %v", books.Size())
+	} else {
+		for e := books.Enumerator(); e.HasNext(); {
+			book := e.Next().(*Book)
+			if book.Id == nil {
+				t.Fatalf("A book has invalid Id and therefore was not retrived")
+			}
+		}
+	}
+}
+
+func TestListFlatTreeFor(t *testing.T) {
+	resetDB()
+
+	store := TM.Store()
+	publishers := make([]*Publisher, 0)
+	err := store.Query(PUBLISHER).
+		All().
+		OuterFetch(PUBLISHER_A_BOOKS). // add all columns off book in the query
+		Where(PUBLISHER_C_ID.Matches(2)).
+		ListFlatTreeFor(func() interface{} {
+		publisher := new(Publisher)
+		publishers = append(publishers, publisher)
+		return publisher
+	})
+	if err != nil {
+		t.Fatalf("%s", err)
+	} else if len(publishers) != 2 {
+		t.Fatalf("The record for publisher id 2, was not retrived. Expected collection size of 2, got %v", len(publishers))
+	} else {
+		for _, publisher := range publishers {
+			// check list size of books
+			if publisher.Id == nil {
+				t.Fatalf("A book has invalid Id and therefore was not retrived")
+			}
+			if len(publisher.Books) != 1 {
+				t.Fatalf("The list of books for the publisher with id 2 was incorrectly retrived. Expected 1 got %v", len(publisher.Books))
+			}
+		}
+	}
+}
+
+func TestListTreeOf(t *testing.T) {
+	resetDB()
+
+	store := TM.Store()
+	publishers, err := store.Query(PUBLISHER).
+		All().
+		OuterFetch(PUBLISHER_A_BOOKS). // add all columns off book in the query
+		Where(PUBLISHER_C_ID.Matches(2)).
+		ListTreeOf((*Publisher)(nil))
+	if err != nil {
+		t.Fatalf("%s", err)
+	} else if publishers.Size() != 1 {
+		t.Fatalf("The record for publisher id 2, was not retrived. Expected collection size of 1, got %v", publishers.Size())
+	} else {
+		for e := publishers.Enumerator(); e.HasNext(); {
+			publisher := e.Next().(*Publisher)
+			// check list size of books
+			if publisher.Id == nil {
+				t.Fatalf("A book has invalid Id and therefore was not retrived")
+			}
+			if len(publisher.Books) != 2 {
+				t.Fatalf("The list of books for the publisher with id 2 was incorrectly retrived. Expected 2 got %v", len(publisher.Books))
+			}
+		}
+	}
+}
+
+func TestListSimpleFor(t *testing.T) {
+	resetDB()
+
+	store := TM.Store()
+	names := make([]string, 0)
+	var name string
+	err := store.Query(PUBLISHER).
+		Column(PUBLISHER_C_NAME).
+		ListSimpleFor(func() {
+		names = append(names, name)
+	}, &name)
+	if err != nil {
+		t.Fatalf("Failed TestListSimpleFor: %s", err)
+	}
+
+	if len(names) != 2 {
+		t.Fatalf("Expected 2 Publisher names, but got %v", len(names))
+	}
+}
+
+type Sale struct {
+	Name  string
+	Value float64
+}
+
+func TestColumnSubquery(t *testing.T) {
+	resetDB()
+
+	store := TM.Store()
+	subquery := store.Query(BOOK).Alias("b").
+		Column(Sum(BOOK_C_PRICE)).
+		Where(
+		BOOK_C_PUBLISHER_ID.Matches(Col(PUBLISHER_C_ID).For("p")),
+	)
+
+	var sales = make([]*Sale, 0)
+	err := store.Query(PUBLISHER).Alias("p").
+		Column(PUBLISHER_C_NAME).
+		Column(subquery).As("Value").
+		ListFor(func() interface{} {
+		sale := new(Sale)
+		sales = append(sales, sale)
+		return sale
+	})
+
+	if err != nil {
+		t.Fatalf("Failed TestColumnSubquery: %s", err)
+	}
+
+	if len(sales) != 2 {
+		t.Fatalf("Expected 2 Publisher names, but got %v", len(sales))
+	}
+
+	for k, v := range sales {
+		logger.Debugf("sale[%v] = %+v", k, *v)
+	}
+}

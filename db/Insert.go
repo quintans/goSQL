@@ -44,6 +44,11 @@ func (this *Insert) Alias(alias string) *Insert {
 	return this
 }
 
+/*
+Definies if the auto key should be retrived.
+Returning an Id could mean one more query execution.
+It returns the Id by default.
+*/
 func (this *Insert) ReturnId(returnId bool) *Insert {
 	this.returnId = returnId
 	return this
@@ -152,7 +157,7 @@ func (this *Insert) Submit(instance interface{}) (int64, error) {
 	return this.Execute()
 }
 
-func (this *Insert) GetCachedSql() *RawSql {
+func (this *Insert) getCachedSql() *RawSql {
 	if this.rawSQL == nil {
 		sql := this.db.GetTranslator().GetSqlForInsert(this)
 		this.rawSQL = ToRawSql(sql, this.db.GetTranslator())
@@ -175,13 +180,13 @@ func (this *Insert) Execute() (int64, error) {
 			}
 			this.Set(column, lastId)
 		}
-		rsql := this.GetCachedSql()
+		rsql := this.getCachedSql()
 		this.debugSQL(rsql.OriSql)
 		now = time.Now()
 		_, err = this.dba.Insert(rsql.Sql, rsql.BuildValues(this.parameters)...)
 		this.debugTime(now)
 	case AUTOKEY_RETURNING:
-		rsql := this.GetCachedSql()
+		rsql := this.getCachedSql()
 		this.debugSQL(rsql.OriSql)
 		now = time.Now()
 		if this.HasKeyValue {
@@ -192,7 +197,7 @@ func (this *Insert) Execute() (int64, error) {
 		}
 		this.debugTime(now)
 	case AUTOKEY_AFTER:
-		rsql := this.GetCachedSql()
+		rsql := this.getCachedSql()
 		this.debugSQL(rsql.OriSql)
 		now = time.Now()
 		_, err = this.dba.Insert(rsql.Sql, rsql.BuildValues(this.parameters)...)
