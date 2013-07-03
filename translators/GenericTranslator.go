@@ -10,7 +10,7 @@ import (
 )
 
 type IJoiner interface {
-	JoinAssociation(fk *db.Association, inner bool, invert bool)
+	JoinAssociation(fk *db.Association, inner bool)
 	JoinCriteria(criteria *db.Criteria)
 	JoinPart() string
 }
@@ -117,36 +117,22 @@ func (this *QueryBuilder) FromSubQuery(subquery *db.Query, alias string) {
 	}
 }
 
-func (this *QueryBuilder) JoinAssociation(fk *db.Association, inner bool, invert bool) {
+func (this *QueryBuilder) JoinAssociation(fk *db.Association, inner bool) {
 	if inner {
 		this.joinPart.Add(" INNER JOIN ")
 	} else {
 		this.joinPart.Add(" LEFT OUTER JOIN ")
 	}
 
-	var target *db.Table
-	if invert {
-		target = fk.GetTableFrom()
-		this.joinPart.Add(this.translator.TableName(target), " ", fk.GetAliasFrom())
-	} else {
-		target = fk.GetTableTo()
-		this.joinPart.Add(this.translator.TableName(target), " ", fk.GetAliasTo())
-	}
-	this.joinPart.Add(" ON ")
+	this.joinPart.Add(this.translator.TableName(fk.GetTableTo()), " ", fk.GetAliasTo(), " ON ")
 
 	for i, rel := range fk.GetRelations() {
 		if i > 0 {
 			this.joinPart.Add(" AND ")
 		}
-		if invert {
-			this.joinPart.Add(this.translator.Translate(db.QUERY, rel.To),
-				" = ",
-				this.translator.Translate(db.QUERY, rel.From))
-		} else {
-			this.joinPart.Add(this.translator.Translate(db.QUERY, rel.From),
-				" = ",
-				this.translator.Translate(db.QUERY, rel.To))
-		}
+		this.joinPart.Add(this.translator.Translate(db.QUERY, rel.From),
+			" = ",
+			this.translator.Translate(db.QUERY, rel.To))
 	}
 }
 
@@ -901,7 +887,7 @@ func AppendJoins(joins []*db.Join, joiner IJoiner) {
 		return
 	}
 
-	// stores the paths already raverse.
+	// stores the paths already traverse.
 	var cachedAssociation [][]*db.PathElement
 
 	for _, join := range joins {
@@ -918,19 +904,18 @@ func AppendJoins(joins []*db.Join, joiner IJoiner) {
 		for _, pe := range associations {
 			association := pe.Derived
 			if association.IsMany2Many() {
-				// already comes with the navigation direction adjusted
 				fromFk := association.FromM2M
 				toFk := association.ToM2M
 
-				joiner.JoinAssociation(fromFk, pe.Inner, true)
-				joiner.JoinAssociation(toFk, pe.Inner, false)
+				joiner.JoinAssociation(fromFk, pe.Inner)
+				joiner.JoinAssociation(toFk, pe.Inner)
 			} else {
-				joiner.JoinAssociation(association, pe.Inner, false)
+				joiner.JoinAssociation(association, pe.Inner)
 			}
-		}
 
-		if join.Criteria != nil {
-			joiner.JoinCriteria(join.Criteria)
+			if pe.Criteria != nil {
+				joiner.JoinCriteria(pe.Criteria)
+			}
 		}
 	}
 }

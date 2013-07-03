@@ -3,27 +3,22 @@ package db
 import ()
 
 type PathElement struct {
-	Base    *Association
-	Derived *Association
-	Inner   bool
+	Base     *Association
+	Derived  *Association
+	Inner    bool
+	Criteria *Criteria
+	Columns  []Tokener
 }
 
 type Join struct {
-	Criteria     *Criteria
 	associations []*PathElement
-	derived      []*Association
 }
 
-func NewJoin(criteria *Criteria, associations []*PathElement) *Join {
+func NewJoin(associations []*PathElement) *Join {
 	this := new(Join)
-	this.Criteria = criteria
-	this.associations = associations
-
 	length := len(associations)
-	this.derived = make([]*Association, length, length)
-	for i, pe := range associations {
-		this.derived[i] = pe.Derived
-	}
+	this.associations = make([]*PathElement, length, length)
+	copy(this.associations, associations)
 	return this
 }
 
@@ -32,12 +27,17 @@ func (this Join) GetPathElements() []*PathElement {
 }
 
 func (this Join) GetAssociations() []*Association {
-	return this.derived
+	length := len(this.associations)
+	derived := make([]*Association, length, length)
+	for i, pe := range this.associations {
+		derived[i] = pe.Derived
+	}
+	return derived
 }
 
-// From the lists of Foreign Keys (paths) groups, gets the Foreign Keys 
+// From the lists of Foreign Keys (paths) groups, gets the Foreign Keys
 // matching the longest common path that is possible to traverse with the
-// supplied Foreign Keys 
+// supplied Foreign Keys
 // param cachedAssociation: lists of Foreign Keys (paths) groups
 // param associations: matching Foreign Keys (paths) groups
 // return Foreign Keys:  matching the longest common path that is possible to traverse

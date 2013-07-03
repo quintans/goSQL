@@ -108,34 +108,17 @@ func NewM2MAssociation(name string, fkFrom *Association, fkTo *Association) *Ass
 // Creates a many to many association by using the relations defined in each association
 func NewM2MAssociation(alias string, fkFrom *Association, fkTo *Association) *Association {
 	this := new(Association)
-	// build relations targeting origin from middle table
-	rels := fkFrom.GetRelations()
-	relations := make([]Relation, len(rels), len(rels))
-	for k, v := range rels {
-		// reversed
-		relations[k] = NewRelation(v.To.GetColumn(), v.From.GetColumn())
-	}
-	from := NewAssociation(relations...)
-
-	// build relations targeting destination from middle table
-	rels = fkTo.GetRelations()
-	relations = make([]Relation, len(rels), len(rels))
-	for k, v := range rels {
-		relations[k] = NewRelation(v.From.GetColumn(), v.To.GetColumn())
-	}
-	to := NewAssociation(relations...)
-
-	this.defineM2MAssociation(true, alias, from, to)
+	this.defineM2MAssociation(true, alias, fkFrom, fkTo)
 	return this
 }
 
 func (this *Association) defineM2MAssociation(associate bool, alias string, fkFrom *Association, fkTo *Association) {
 	this.Alias = alias
 
-	this.tableMany2Many = fkFrom.tableFrom
+	this.tableMany2Many = fkFrom.tableTo
 
 	this.FromM2M = fkFrom
-	this.tableFrom = this.FromM2M.tableTo
+	this.tableFrom = this.FromM2M.tableFrom
 	this.ToM2M = fkTo
 	this.tableTo = this.ToM2M.tableTo
 

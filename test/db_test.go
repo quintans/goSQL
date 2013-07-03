@@ -65,6 +65,16 @@ func resetDB() {
 	if err := TM.Transaction(func(DB IDb) error {
 		var err error
 
+		// clear author_books
+		if _, err = DB.Delete(AUTHOR_BOOK).Execute(); err != nil {
+			return err
+		}
+
+		// clear authors
+		if _, err = DB.Delete(AUTHOR).Execute(); err != nil {
+			return err
+		}
+
 		// clear books
 		if _, err = DB.Delete(BOOK).Execute(); err != nil {
 			return err
@@ -107,6 +117,65 @@ func resetDB() {
 		}
 
 		insert.Values(3, 1, "Scrapbook", 6.5, time.Date(2012, time.April, 01, 0, 0, 0, 0, time.UTC), 2)
+		_, err = insert.Execute()
+		if err != nil {
+			return err
+		}
+
+		// insert Author
+		insert = DB.Insert(AUTHOR).
+			Columns(AUTHOR_C_ID, AUTHOR_C_VERSION, AUTHOR_C_NAME).
+			Values(1, 1, "John Doe")
+		_, err = insert.Execute()
+		if err != nil {
+			return err
+		}
+
+		insert.Values(2, 1, "Jane Doe")
+		_, err = insert.Execute()
+		if err != nil {
+			return err
+		}
+
+		insert.Values(3, 1, "Graça Tostão")
+		_, err = insert.Execute()
+		if err != nil {
+			return err
+		}
+
+		// insert Author-Book
+		// John Doe - Scrapbook
+		insert = DB.Insert(AUTHOR_BOOK).
+			Columns(AUTHOR_BOOK_C_AUTHOR_ID, AUTHOR_BOOK_C_BOOK_ID).
+			Values(1, 3)
+		_, err = insert.Execute()
+		if err != nil {
+			return err
+		}
+
+		// Jane Doe - Scrapbook
+		insert.Values(2, 3)
+		_, err = insert.Execute()
+		if err != nil {
+			return err
+		}
+
+		// Graça Tostão - Once Upon a Time...
+		insert.Values(3, 1)
+		_, err = insert.Execute()
+		if err != nil {
+			return err
+		}
+
+		// Jane Doe - Cookbook
+		insert.Values(1, 2)
+		_, err = insert.Execute()
+		if err != nil {
+			return err
+		}
+
+		// Graça Tostão - Cookbook
+		insert.Values(3, 2)
 		_, err = insert.Execute()
 		if err != nil {
 			return err
@@ -292,6 +361,9 @@ func TestSimpleDelete(t *testing.T) {
 	resetDB()
 
 	if err := TM.Transaction(func(store IDb) error {
+		// clears any relation with book id = 1
+		store.Delete(AUTHOR_BOOK).Where(AUTHOR_BOOK_C_BOOK_ID.Matches(1)).Execute()
+
 		affectedRows, err := store.Delete(BOOK).Where(BOOK_C_ID.Matches(1)).Execute()
 		if err != nil {
 			return err
@@ -310,6 +382,9 @@ func TestStructDelete(t *testing.T) {
 	resetDB()
 
 	if err := TM.Transaction(func(store IDb) error {
+		// clears any relation with book id = 1
+		store.Delete(AUTHOR_BOOK).Where(AUTHOR_BOOK_C_BOOK_ID.Matches(1)).Execute()
+
 		var book Book
 		book.Id = ext.Int64Ptr(1)
 		book.Version = ext.Int64Ptr(1)
@@ -350,7 +425,8 @@ func TestSelectTreeTo(t *testing.T) {
 	var publisher Publisher
 	ok, err := store.Query(PUBLISHER).
 		All().
-		OuterFetch(PUBLISHER_A_BOOKS). // add all columns off book in the query
+		Outer(PUBLISHER_A_BOOKS).
+		Fetch(). // add all columns off book in the query
 		Where(PUBLISHER_C_ID.Matches(2)).
 		SelectTreeTo(&publisher, true)
 	if err != nil {
@@ -371,7 +447,8 @@ func TestSelectTree(t *testing.T) {
 	store := TM.Store()
 	result, err := store.Query(PUBLISHER).
 		All().
-		OuterFetch(PUBLISHER_A_BOOKS). // add all columns off book in the query
+		Outer(PUBLISHER_A_BOOKS).
+		Fetch(). // add all columns off book in the query
 		Where(PUBLISHER_C_ID.Matches(2)).
 		SelectTree((*Publisher)(nil), true)
 	if err != nil {
@@ -444,7 +521,8 @@ func TestListFlatTreeFor(t *testing.T) {
 	publishers := make([]*Publisher, 0)
 	err := store.Query(PUBLISHER).
 		All().
-		OuterFetch(PUBLISHER_A_BOOKS). // add all columns off book in the query
+		Outer(PUBLISHER_A_BOOKS).
+		Fetch(). // add all columns off book in the query
 		Where(PUBLISHER_C_ID.Matches(2)).
 		ListFlatTreeFor(func() interface{} {
 		publisher := new(Publisher)
@@ -474,7 +552,8 @@ func TestListTreeOf(t *testing.T) {
 	store := TM.Store()
 	publishers, err := store.Query(PUBLISHER).
 		All().
-		OuterFetch(PUBLISHER_A_BOOKS). // add all columns off book in the query
+		Outer(PUBLISHER_A_BOOKS).
+		Fetch(). // add all columns off book in the query
 		Where(PUBLISHER_C_ID.Matches(2)).
 		ListTreeOf((*Publisher)(nil))
 	if err != nil {
@@ -515,11 +594,6 @@ func TestListSimpleFor(t *testing.T) {
 	}
 }
 
-type Sale struct {
-	Name  string
-	Value float64
-}
-
 func TestColumnSubquery(t *testing.T) {
 	resetDB()
 
@@ -530,25 +604,240 @@ func TestColumnSubquery(t *testing.T) {
 		BOOK_C_PUBLISHER_ID.Matches(Col(PUBLISHER_C_ID).For("p")),
 	)
 
-	var sales = make([]*Sale, 0)
+	var dtos = make([]*Dto, 0)
 	err := store.Query(PUBLISHER).Alias("p").
 		Column(PUBLISHER_C_NAME).
 		Column(subquery).As("Value").
 		ListFor(func() interface{} {
-		sale := new(Sale)
-		sales = append(sales, sale)
-		return sale
+		dto := new(Dto)
+		dtos = append(dtos, dto)
+		return dto
 	})
 
 	if err != nil {
 		t.Fatalf("Failed TestColumnSubquery: %s", err)
 	}
 
-	if len(sales) != 2 {
-		t.Fatalf("Expected 2 Publisher names, but got %v", len(sales))
+	if len(dtos) != 2 {
+		t.Fatalf("Expected 2 Publisher names, but got %v", len(dtos))
 	}
 
-	for k, v := range sales {
-		logger.Debugf("sale[%v] = %+v", k, *v)
+	for k, v := range dtos {
+		logger.Debugf("dtos[%v] = %+v", k, *v)
+	}
+}
+
+func TestWhereSubquery(t *testing.T) {
+	resetDB()
+
+	store := TM.Store()
+	subquery := store.Query(BOOK).
+		Distinct().
+		Column(BOOK_C_PUBLISHER_ID).
+		Where(
+		BOOK_C_PRICE.LesserOrMatch(10),
+	)
+
+	var dtos = make([]*Dto, 0)
+	err := store.Query(PUBLISHER).
+		Column(PUBLISHER_C_NAME).
+		Inner(PUBLISHER_A_BOOKS).
+		Include(BOOK_C_NAME).As("OtherName").
+		Include(BOOK_C_PRICE).As("Value").
+		Join().
+		Where(PUBLISHER_C_ID.In(subquery)).
+		ListFor(func() interface{} {
+		dto := new(Dto)
+		dtos = append(dtos, dto)
+		return dto
+	})
+
+	if err != nil {
+		t.Fatalf("Failed TestWhereSubquery: %s", err)
+	}
+
+	if len(dtos) != 2 {
+		t.Fatalf("Expected 2 Publisher names, but got %v", len(dtos))
+	}
+
+	for k, v := range dtos {
+		logger.Debugf("dtos[%v] = %+v", k, *v)
+	}
+}
+
+func TestInnerOn(t *testing.T) {
+	resetDB()
+
+	// gets all publishers that had a book published before 2013
+	store := TM.Store()
+	var publishers = make([]*Publisher, 0)
+	err := store.Query(PUBLISHER).
+		All().
+		Distinct().
+		Inner(PUBLISHER_A_BOOKS).
+		On(BOOK_C_PUBLISHED.Lesser(time.Date(2013, time.January, 1, 0, 0, 0, 0, time.UTC))).
+		Join().
+		ListFor(func() interface{} {
+		publisher := new(Publisher)
+		publishers = append(publishers, publisher)
+		return publisher
+	})
+
+	if err != nil {
+		t.Fatalf("Failed TestInnerOn: %s", err)
+	}
+
+	if len(publishers) != 2 {
+		t.Fatalf("Expected 2 Publishers, but got %v", len(publishers))
+	}
+
+	for k, v := range publishers {
+		logger.Debugf("publishers[%v] = %s", k, *v)
+	}
+}
+
+/*
+Query query = db.createQuery(TPainting.T_PAINTING)
+		.innerJoin(TPainting.A_ARTIST).on(TArtist.C_ID.is(1L))
+		.innerJoin(TPainting.A_GALLERIES).on(TGallery.C_NAME.ilk("%AZUL"));
+*/
+
+func TestInnerOn2(t *testing.T) {
+	resetDB()
+
+	store := TM.Store()
+	var publishers = make([]*Publisher, 0)
+	err := store.Query(PUBLISHER).
+		All().
+		Distinct().
+		Inner(PUBLISHER_A_BOOKS).
+		On(BOOK_C_PUBLISHED.Lesser(time.Date(2013, time.January, 1, 0, 0, 0, 0, time.UTC))).
+		Inner(BOOK_A_AUTHORS).
+		On(AUTHOR_C_NAME.Like("%Doe")).
+		Join().
+		ListFor(func() interface{} {
+		publisher := new(Publisher)
+		publishers = append(publishers, publisher)
+		return publisher
+	})
+
+	if err != nil {
+		t.Fatalf("Failed TestInnerOn: %s", err)
+	}
+
+	if len(publishers) != 1 {
+		t.Fatalf("Expected 1 Publishers, but got %v", len(publishers))
+	}
+
+	for k, v := range publishers {
+		logger.Debugf("publishers[%v] = %s", k, *v)
+	}
+}
+
+func TestOuterFetch(t *testing.T) {
+	resetDB()
+
+	store := TM.Store()
+	result, err := store.Query(PUBLISHER).
+		All().
+		Outer(PUBLISHER_A_BOOKS, BOOK_A_AUTHORS).
+		Fetch().
+		ListTreeOf((*Publisher)(nil))
+
+	if err != nil {
+		t.Fatalf("Failed TestOuterFetch: %s", err)
+	}
+
+	publishers := result.AsSlice().([]*Publisher)
+
+	if len(publishers) != 2 {
+		t.Fatalf("Expected 2 Publishers, but got %v", len(publishers))
+	}
+
+	pub := publishers[0]
+	if len(pub.Books) != 1 {
+		t.Fatalf("Expected 1 Book for Publishers %s, but got %v", pub.Name, len(pub.Books))
+	}
+
+	book := pub.Books[0]
+	if len(book.Authors) != 1 {
+		t.Fatalf("Expected 1 Author for Book %s, but got %v", book.Name, len(book.Authors))
+	}
+
+	pub = publishers[1]
+	if len(pub.Books) != 2 {
+		t.Fatalf("Expected 2 Book for Publishers %s, but got %v", pub.Name, len(pub.Books))
+	}
+
+	book = pub.Books[0]
+	if len(book.Authors) != 2 {
+		t.Fatalf("Expected 2 Author for Book %s, but got %v", book.Name, len(book.Authors))
+	}
+
+	book = pub.Books[1]
+	if len(book.Authors) != 2 {
+		t.Fatalf("Expected 2 Author for Book %s, but got %v", book.Name, len(book.Authors))
+	}
+
+	for k, v := range publishers {
+		logger.Debugf("publishers[%v] = %s", k, v.String())
+	}
+}
+
+func TestGroupBy(t *testing.T) {
+	resetDB()
+
+	store := TM.Store()
+	var dtos = make([]*Dto, 0)
+	err := store.Query(PUBLISHER).
+		Column(PUBLISHER_C_NAME).
+		Outer(PUBLISHER_A_BOOKS).
+		IncludeToken(Sum(BOOK_C_PRICE)).As("Value").
+		Join().
+		GroupByPos(1).
+		ListFor(func() interface{} {
+		dto := new(Dto)
+		dtos = append(dtos, dto)
+		return dto
+	})
+
+	if err != nil {
+		t.Fatalf("Failed TestGroupBy: %s", err)
+	}
+
+	if len(dtos) != 2 {
+		t.Fatalf("Expected 2 Publisher names, but got %v", len(dtos))
+	}
+
+	for k, v := range dtos {
+		logger.Debugf("dtos[%v] = %+v", k, *v)
+	}
+}
+
+func TestOrderBy(t *testing.T) {
+	resetDB()
+
+	store := TM.Store()
+	var publishers = make([]*Publisher, 0)
+	err := store.Query(PUBLISHER).
+		All().
+		OrderBy(PUBLISHER_C_NAME).
+		Asc(true).
+		ListFor(func() interface{} {
+		publisher := new(Publisher)
+		publishers = append(publishers, publisher)
+		return publisher
+	})
+
+	if err != nil {
+		t.Fatalf("Failed TestGroupBy: %s", err)
+	}
+
+	if len(publishers) != 2 {
+		t.Fatalf("Expected 2 Publisher names, but got %v", len(publishers))
+	}
+
+	for k, v := range publishers {
+		logger.Debugf("publishers[%v] = %s", k, v.String())
 	}
 }

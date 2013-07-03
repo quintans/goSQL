@@ -54,8 +54,8 @@ func (this *RawSql) Clone() interface{} {
 }
 
 type PathCriteria struct {
-	Path      []*PathElement
 	Criterias []*Criteria
+	Columns   []Tokener
 }
 
 const JOIN_PREFIX = "j"
@@ -177,7 +177,10 @@ func (this *DmlBase) GetAliasForAssociation(association *Association) string {
 // param associations
 func (this *DmlBase) inner(associations ...*Association) {
 	for _, association := range associations {
-		this.path = append(this.path, &PathElement{association, nil, true})
+		pe := new(PathElement)
+		pe.Base = association
+		pe.Inner = true
+		this.path = append(this.path, pe)
 	}
 
 	this.rawSQL = nil
@@ -185,18 +188,23 @@ func (this *DmlBase) inner(associations ...*Association) {
 
 func (this *DmlBase) join() {
 	// resets path
-	this.joinAs("")
+	this.joinTo("")
 }
 
-// indicates that the path should be used to join only
-// param endAlias
-//  @return
-func (this *DmlBase) joinAs(endAlias string) {
-	if this.path != nil {
-		cache := this.buildPathCriterias(this.path)
-		// process the acumulated criterias
+/*
+Indicates that the current association chain should be used to join only.
+A table end alias can also be supplied.
+This
+*/
+func (this *DmlBase) joinTo(endAlias string) {
+	if len(this.path) > 0 {
+		this.addJoin(endAlias, this.path)
+
+		// the first position refers to constraints applied to the table, due to a association discriminator
+		pathCriterias := this.buildPathCriterias(this.path)
 		var firstCriterias []*Criteria
-		for index, pathCriteria := range cache {
+		// process the acumulated criterias
+		for index, pathCriteria := range pathCriterias {
 			if pathCriteria != nil {
 				conds := pathCriteria.Criterias
 				// adjustTableAlias()
@@ -206,25 +214,22 @@ func (this *DmlBase) joinAs(endAlias string) {
 						// already with the alias applied
 						firstCriterias = conds
 					} else {
-						this.addJoin("", pathCriteria.Path)
 						if firstCriterias != nil {
+							// add the criterias restriction refering to the table,
+							// due to association discriminator
 							tmp := make([]*Criteria, len(conds))
 							copy(tmp, conds)
 							conds = append(tmp, firstCriterias...)
 							firstCriterias = nil
 						}
-						this.applyOn(And(conds...))
+						this.applyOn(this.path[:index], And(conds...))
 					}
 				}
-			}
-		}
 
-		// if the last one was not processed
-		if cache[len(cache)-1] == nil {
-			this.addJoin(endAlias, this.path)
-		}
-		if firstCriterias != nil {
-			this.applyOn(And(firstCriterias...))
+				if pathCriteria.Columns != nil {
+					this.applyInclude(this.path[:index], pathCriteria.Columns...)
+				}
+			}
 		}
 	}
 	this.path = nil
@@ -237,19 +242,37 @@ func (this *DmlBase) buildPathCriterias(paths []*PathElement) []*PathCriteria {
 	index := 0
 	var tableCriterias []*Criteria
 	length := len(paths) + 1
-	cache := make([]*PathCriteria, length, length)
+	pathCriterias := make([]*PathCriteria, length, length)
 
-	// the path criteria on position 0 refers the criteria on the FROM table
+	// the path criteria on position 0 refers the criteria on the FROM table.
+	// The Association can have a constraint(discriminator) refering a column in the source table.
 	// both ends of Discriminator criterias (association origin and destination tables) are treated in this block
 	for _, pe := range paths {
 		index++
 
+		var pc *PathCriteria
+		if pe.Criteria != nil {
+			pc = new(PathCriteria)
+			pc.Criterias = append(pc.Criterias, pe.Criteria)
+			pathCriterias[index] = pc
+		}
+
 		tableCriterias = pe.Base.GetTableTo().GetCriterias()
 		if tableCriterias != nil {
-			pc := new(PathCriteria)
-			pc.Path = paths[:index]
+			if pc == nil {
+				pc = new(PathCriteria)
+				pathCriterias[index] = pc
+			}
 			pc.Criterias = append(pc.Criterias, tableCriterias...)
-			cache[index] = pc
+		}
+
+		// references column Includes
+		if pe.Columns != nil {
+			if pc == nil {
+				pc = new(PathCriteria)
+				pathCriterias[index] = pc
+			}
+			pc.Columns = pe.Columns
 		}
 	}
 
@@ -258,21 +281,17 @@ func (this *DmlBase) buildPathCriterias(paths []*PathElement) []*PathCriteria {
 		associationCriterias := pe.Base.GetCriterias()
 		if associationCriterias != nil {
 			if pe.Base.GetDiscriminatorTable().Equals(pe.Base.GetTableTo()) {
-				pc := cache[index+1]
+				pc := pathCriterias[index+1]
 				if pc == nil {
 					pc = new(PathCriteria)
-					pc.Path = paths[:index+1]
-					cache[index+1] = pc
+					pathCriterias[index+1] = pc
 				}
 				pc.Criterias = append(pc.Criterias, associationCriterias...)
 			} else {
-				pc := cache[index]
+				pc := pathCriterias[index]
 				if pc == nil {
 					pc = new(PathCriteria)
-					cache[index] = pc
-					if index > 0 {
-						pc.Path = paths[:index]
-					}
+					pathCriterias[index] = pc
 				}
 				// force table alias for the first criteria
 				if index == 0 {
@@ -290,15 +309,7 @@ func (this *DmlBase) buildPathCriterias(paths []*PathElement) []*PathCriteria {
 		index++
 	}
 
-	return cache
-}
-
-// Executa um inner join com as várias associações
-// param associations
-// return
-func (this *DmlBase) innerJoin(associations ...*Association) {
-	this.inner(associations...)
-	this.join()
+	return pathCriterias
 }
 
 func (this *DmlBase) addJoin(lastAlias string, associations []*PathElement) []*PathElement {
@@ -348,8 +359,7 @@ func (this *DmlBase) addJoin(lastAlias string, associations []*PathElement) []*P
 				this.prepareAssociation(
 					fkAlias,
 					this.joinBag.GetAlias(fromFk),
-					fromFk,
-					true)
+					fromFk)
 
 				if lastAlias == "" || f < len(fks)-1 {
 					fkAlias = this.joinBag.GetAlias(toFk)
@@ -359,8 +369,7 @@ func (this *DmlBase) addJoin(lastAlias string, associations []*PathElement) []*P
 				this.prepareAssociation(
 					this.joinBag.GetAlias(fromFk),
 					fkAlias,
-					toFk,
-					false)
+					toFk)
 				lastFk = toFk
 			} else {
 				var fkAlias2 string
@@ -372,8 +381,7 @@ func (this *DmlBase) addJoin(lastAlias string, associations []*PathElement) []*P
 				this.prepareAssociation(
 					fkAlias,
 					fkAlias2,
-					fks[f],
-					false)
+					fks[f])
 				lastFk = fks[f]
 			}
 
@@ -408,27 +416,18 @@ func (this *DmlBase) addJoin(lastAlias string, associations []*PathElement) []*P
 		this.lastFkAlias = this.joinBag.GetAlias(lastFk)
 	}
 
-	this.lastJoin = NewJoin(nil, local)
+	this.lastJoin = NewJoin(local)
 	this.joins = append(this.joins, this.lastJoin)
 
 	return local
 }
 
-func (this *DmlBase) prepareAssociation(aliasFrom string, aliasTo string, currentFk *Association, invert bool) {
-	var aFrom string
-	var aTo string
-	if invert {
-		aFrom = aliasTo
-		aTo = aliasFrom
-	} else {
-		aFrom = aliasFrom
-		aTo = aliasTo
-	}
-	currentFk.SetAliasFrom(aFrom)
-	currentFk.SetAliasTo(aTo)
+func (this *DmlBase) prepareAssociation(aliasFrom string, aliasTo string, currentFk *Association) {
+	currentFk.SetAliasFrom(aliasFrom)
+	currentFk.SetAliasTo(aliasTo)
 	for _, rel := range currentFk.GetRelations() {
-		rel.From.SetTableAlias(aFrom)
-		rel.To.SetTableAlias(aTo)
+		rel.From.SetTableAlias(aliasFrom)
+		rel.To.SetTableAlias(aliasTo)
 	}
 }
 
@@ -446,34 +445,42 @@ func (this *DmlBase) where(restrictions ...*Criteria) {
 	}
 }
 
-// condição a usar na associação imediatamente anterior
-// param criteria: restrição
-func (this *DmlBase) on(criterias ...*Criteria) {
-	if this.lastJoin != nil {
-		associations := this.lastJoin.GetAssociations()
-		discriminators := associations[len(associations)-1].GetTableTo().GetCriterias()
-		if discriminators != nil {
-			// apply on
-			var constraints []*Criteria
-			constraints = append(constraints, discriminators...)
-			criterias = append(constraints, criterias...)
-		}
+func (this *DmlBase) applyOn(chain []*PathElement, criteria *Criteria) {
+	if len(chain) > 0 {
+		pe := chain[len(chain)-1]
+		cpy, _ := criteria.Clone().(*Criteria)
 
-		this.applyOn(And(criterias...))
+		this.joinVirtualColumns(cpy, chain)
+		fk := pe.Derived
+		var fkAlias string
+		if fk.IsMany2Many() {
+			fkAlias = this.joinBag.GetAlias(fk.ToM2M)
+		} else {
+			fkAlias = this.joinBag.GetAlias(pe.Derived)
+		}
+		cpy.SetTableAlias(fkAlias)
+
+		this.replaceRaw(cpy)
+		pe.Criteria = cpy
+
+		this.rawSQL = nil
 	}
 }
 
-//  condição a usar na associação imediatamente anterior
-//	 param criteria: restrição
-func (this *DmlBase) applyOn(criteria *Criteria) {
-	if this.lastJoin != nil {
-		cpy, _ := criteria.Clone().(*Criteria)
-
-		this.joinVirtualColumns(cpy, this.lastJoin.GetPathElements())
-		cpy.SetTableAlias(this.lastFkAlias)
-
-		this.replaceRaw(cpy)
-		this.lastJoin.Criteria = cpy
+func (this *DmlBase) applyInclude(chain []*PathElement, tokens ...Tokener) {
+	if len(chain) > 0 {
+		pe := chain[len(chain)-1]
+		fk := pe.Derived
+		var fkAlias string
+		if fk.IsMany2Many() {
+			fkAlias = this.joinBag.GetAlias(fk.ToM2M)
+		} else {
+			fkAlias = this.joinBag.GetAlias(pe.Derived)
+		}
+		for _, token := range tokens {
+			this.joinVirtualColumns(token, chain)
+			token.SetTableAlias(fkAlias)
+		}
 
 		this.rawSQL = nil
 	}
@@ -496,7 +503,10 @@ func (this *DmlBase) joinVirtualColumns(token Tokener, previous []*PathElement) 
 			discriminator := ch.GetColumn().GetVirtual().Association
 			var associations []*PathElement
 			associations = append(associations, previous...)
-			associations = append(associations, &PathElement{discriminator, nil, false})
+			pe := new(PathElement)
+			pe.Base = discriminator
+			pe.Inner = false
+			associations = append(associations, pe)
 
 			this.addJoin("", associations)
 

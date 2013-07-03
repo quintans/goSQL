@@ -1,6 +1,6 @@
-goSQL
-=====
+# goSQL
 ***
+
 a ORM like library in Go's (golang) that makes it easy to use SQL.
 
 ## Introduction
@@ -49,7 +49,7 @@ store.Update(PUBLISHER).Submit(publisher)
  - Static typing
  - Result Mapping
  - Database Abstraction
- - Sub Queries
+ - Joins made easy
  - Extensible
 
 ## Dependencies
@@ -318,6 +318,8 @@ store.Update(PUBLISHER).Submit(publisher)
 	
 #### Update with SubQuery
 
+This example shows of subquery to do an update, and also the use of `Exists`.
+
 ```go
 sub := store.Query(BOOK).Alias("b").
 	Column(AsIs(nil)).
@@ -400,7 +402,8 @@ Returns true if a result was found, false if no result
 var publisher Publisher
 store.Query(PUBLISHER).
 	All().
-	OuterFetch(PUBLISHER_A_BOOKS). // add all columns off book in the query
+	Outer(PUBLISHER_A_BOOKS).
+	Fetch(). // add all columns off book in the query
 	Where(PUBLISHER_C_ID.Matches(2)).
 	SelectTreeTo(&publisher, true)
 ```
@@ -414,7 +417,8 @@ Regarding the parameter `reuse` the behavior is the same as SelectTreeTo.
 ```go
 result := store.Query(PUBLISHER).
 	All().
-	OuterFetch(PUBLISHER_A_BOOKS). // add all columns off book in the query
+	Outer(PUBLISHER_A_BOOKS).
+	Fetch(). // add all columns off book in the query
 	Where(PUBLISHER_C_ID.Matches(2)).
 	SelectTree((*Publisher)(nil), true)
 publisher := result.(*Publisher)	
@@ -463,7 +467,8 @@ books, err := store.Query(BOOK).
 ```
 
 ListOf returns a `collection.Collection` interface. 
-The reason to use a new data structure instead of the classic slices, was the need, in some cases, for returning a result where the an entity had to be unique, as we will see later on, and a hash would be more performant than traversing a slice.
+The reason to use a new data structure instead of the classic slices, was the need, in some cases, for returning a result where the an entity had to be unique, as we will see later on, and finding an instance in a hash collection is faster than finding it in a slice. 
+For `collection.Collection` implementations that require an hashable elements, the struct instance to be added to the collection must implement the `toolkit.Hasher` interface, as is the case of Book.
 
 To traverse the results we use the following code
 
@@ -485,7 +490,8 @@ The responsability of building the result is delegated to the factory function.
 publishers := make([]*Publisher, 0)
 store.Query(PUBLISHER).
 	All().
-	OuterFetch(PUBLISHER_A_BOOKS). // add all columns off book in the query
+	Outer(PUBLISHER_A_BOOKS).
+	Fetch(). // add all columns off book in the query
 	Where(PUBLISHER_C_ID.Matches(2)).
 	ListFlatTreeFor(func() interface{} {
 	publisher := new(Publisher)
@@ -505,7 +511,8 @@ Receives a template instance and returns a collection of structs.
 ```go
 publishers, _ := store.Query(PUBLISHER).
 	All().
-	OuterFetch(PUBLISHER_A_BOOKS). // add all columns off book in the query
+	Outer(PUBLISHER_A_BOOKS).
+	Fetch(). // add all columns off book in the query
 	Where(PUBLISHER_C_ID.Matches(2)).
 	ListTreeOf((*Publisher)(nil))
 	
@@ -521,9 +528,10 @@ For this example we will use the following struct which will hold the result for
 Notice that the struct does not represent any table.
 
 ```go
-type Sale struct {
-	Name  string
-	Value float64
+type Dto struct {
+	Name      string
+	OtherName string
+	Value     float64
 }
 ```
 
@@ -536,17 +544,133 @@ subquery := store.Query(BOOK).Alias("b").
 	BOOK_C_PUBLISHER_ID.Matches(Col(PUBLISHER_C_ID).For("p")),
 )
 
-var sales = make([]*Sale, 0)
-err := store.Query(PUBLISHER).Alias("p").
+var dtos = make([]*Dto, 0)
+store.Query(PUBLISHER).Alias("p").
 	Column(PUBLISHER_C_NAME).
 	Column(subquery).As("Value").
 	ListFor(func() interface{} {
-	sale := new(Sale)
-	sales = append(sales, sale)
-	return sale
+	dto := new(Dto)
+	dtos = append(dtos, dto)
+	return dto
 })
 ```
 
+Notice that when I use the subquery variable an alias with the value “Value” is defined. This alias matches with a struct field in `Dto`. In this query the TArtist.C_NAME column as no associated alias, so the default column alias is used.
+
+#### Where Subquery 
+
+In this example I get a list of records with the name of the Publisher, the name and price of every Book, where the price is lesser or equal than 10. The result is put in a slice of Sale instances.  
+For this a subquery used in the where clause.
+
+```go
+subquery := store.Query(BOOK).
+	Distinct().
+	Column(BOOK_C_PUBLISHER_ID).
+	Where(
+	BOOK_C_PRICE.LesserOrMatch(10),
+)
+
+var dtos = make([]*Dto, 0)
+store.Query(PUBLISHER).
+	Column(PUBLISHER_C_NAME).
+	Inner(PUBLISHER_A_BOOKS).
+	Include(BOOK_C_NAME).As("OtherName").
+	Include(BOOK_C_PRICE).As("Value").
+	Join().
+	Where(PUBLISHER_C_ID.In(subquery)).
+	ListFor(func() interface{} {
+	dto := new(Dto)
+	dtos = append(dtos, dto)
+	return dto
+})
+```
+
+#### Joins
+
+The concepts of joins was already introduced in the section [SelectTreeTo](#selectTreeTo) where we can see the use of an outer join. 
+Joins can be seen has a chain of associations that extend from the main table to a target table. Along the way we can apply constraints and/or include columns from the participating tables. This chains can overlap without problem because they are seen as isolated from one another.
+Joins can be `Outer` or `Inner` and can have constraints applyied to the target table of the last added asscoiation through the use of the function `On()`.
+To delimite the joins we can use the function `Join()` or `Fetch()`. Both process the join but the later includes in the query all columns from all the tables of the joins. `Fetch()`is used when a struct tree is desired.
+
+Ex: list all publishers that had a book published before 2013
+
+```go
+var publishers = make([]*Publisher, 0)
+store.Query(PUBLISHER).
+	All().
+	Distinct().
+	Inner(PUBLISHER_A_BOOKS).
+	On(BOOK_C_PUBLISHED.Lesser(time.Date(2013, time.January, 1, 0, 0, 0, 0, time.UTC))).
+	Join().
+	ListFor(func() interface{} {
+	publisher := new(Publisher)
+	publishers = append(publishers, publisher)
+	return publisher
+})
+```
+
+The section [Where Subquery](#where-subquery) also shows the use of `Include`.
+
+The next example executes an (left) outer join and includes **ALL** columns of the participating tables in the join. The result is a collection of `*Publisher` structs with its childs in tree.
+
+```go
+result, err := store.Query(PUBLISHER).
+	All().
+	Outer(PUBLISHER_A_BOOKS, BOOK_A_AUTHORS).
+	Fetch().
+	ListTreeOf((*Publisher)(nil))
+```
+
+### Group By
+
+For this example I will use the struct defined in [Column Subquery](#column-subquery).
+
+```go
+var dtos = make([]*Dto, 0)
+store.Query(PUBLISHER).
+	Column(PUBLISHER_C_NAME).
+	Outer(PUBLISHER_A_BOOKS).
+	IncludeToken(Sum(BOOK_C_PRICE)).As("Value").
+	Join().
+	GroupByPos(1).
+	ListFor(func() interface{} {
+	dto := new(Dto)
+	dtos = append(dtos, dto)
+	return dto
+})
+```
+
+### Order By
+
+List all publishers, ordering ascending by name.
+
+```go
+var publishers = make([]*Publisher, 0)
+err := store.Query(PUBLISHER).
+	All().
+	OrderBy(PUBLISHER_C_NAME).
+	Asc(true).
+	ListFor(func() interface{} {
+	publisher := new(Publisher)
+	publishers = append(publishers, publisher)
+	return publisher
+})
+```
+
+It is possible to add more orders, and even to order by columns belonging to other tables if joins were present.
+
+
+### Union
+
+### Pagination
+
+### Association Discriminator
+
+### Table Discriminator
+
+### Virtual Columns
+
+### Custom Functions
 
 ### Raw SQL
 
@@ -563,6 +687,7 @@ dba.QueryClosure("select col1 from tab1 where col2 = ?", func(rows *sql.Rows) er
 ```
 
 # TODO
+- Add more tests
 - Virtual Columns: Columns that physically exist in another columns
 - Test more RDBMS
 - Fix code documentation

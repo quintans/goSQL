@@ -251,7 +251,10 @@ func (this *Query) OrderAs(column *Column, alias string) *Query {
 func (this *Query) OrderOn(column *Column, associations ...*Association) *Query {
 	pathElements := make([]*PathElement, len(associations))
 	for k, association := range associations {
-		pathElements[k] = &PathElement{association, nil, false}
+		pe := new(PathElement)
+		pe.Base = association
+		pe.Inner = false
+		pathElements[k] = pe
 	}
 
 	return this.OrderFor(column, pathElements...)
@@ -263,7 +266,10 @@ func (this *Query) OrderFor(column *Column, pathElements ...*PathElement) *Query
 		// appending the path of the virtual column
 		ch := NewColumnHolder(column)
 		discriminator := ch.GetColumn().GetVirtual().Association
-		pes = append(pes, &PathElement{discriminator, nil, false})
+		pe := new(PathElement)
+		pe.Base = discriminator
+		pe.Inner = false
+		pes = append(pes, pe)
 	} else {
 		pes = pathElements
 	}
@@ -330,7 +336,10 @@ func (this *Query) Inner(associations ...*Association) *Query {
 // return
 func (this *Query) Outer(associations ...*Association) *Query {
 	for _, association := range associations {
-		this.path = append(this.path, &PathElement{association, nil, false})
+		pe := new(PathElement)
+		pe.Base = association
+		pe.Inner = false
+		this.path = append(this.path, pe)
 	}
 
 	this.rawSQL = nil
@@ -342,18 +351,18 @@ func (this *Query) Fetch() *Query {
 	return this.FetchAs("")
 }
 
-// indicates that the path should be used to retrive all the columns<br>
-// TODAS as colunas das tabelas intermédias são incluidas no select bem como
-// a TODAS as colunas da tabela no fim das associações.<br>
-//
-// param endAlias:
-// return
+/*
+Include in the select ALL columns of the tables paticipating in the current association chain.
+A table end alias can also be supplied.
+*/
 func (this *Query) FetchAs(endAlias string) *Query {
 	if this.path != nil {
-		cache := this.buildPathCriterias(this.path)
+		this.fetch(endAlias, this.path...)
+
+		pathCriterias := this.buildPathCriterias(this.path)
 		// process the acumulated conditions
 		var firstConditions []*Criteria
-		for index, pathCriteria := range cache {
+		for index, pathCriteria := range pathCriterias {
 			if pathCriteria != nil {
 				conds := pathCriteria.Criterias
 				if conds != nil {
@@ -362,7 +371,6 @@ func (this *Query) FetchAs(endAlias string) *Query {
 						// already with the alias applied
 						firstConditions = conds
 					} else {
-						this.fetch("", pathCriteria.Path...)
 						if firstConditions != nil {
 							// new coppy
 							tmp := make([]*Criteria, len(conds))
@@ -371,18 +379,10 @@ func (this *Query) FetchAs(endAlias string) *Query {
 							firstConditions = nil
 							conds = tmp
 						}
-						this.applyOn(And(conds...))
+						this.applyOn(this.path[:index], And(conds...))
 					}
 				}
 			}
-		}
-
-		// if the last one was not processed
-		if cache[len(cache)-1] == nil {
-			this.fetch(endAlias, this.path...)
-		}
-		if firstConditions != nil {
-			this.applyOn(And(firstConditions...))
 		}
 	}
 	this.path = nil
@@ -393,69 +393,41 @@ func (this *Query) FetchAs(endAlias string) *Query {
 }
 
 func (this *Query) Join() *Query {
-	return this.JoinAs("")
+	return this.JoinTo("")
 }
 
 //indicates that the path should be used to join only
 //
 //param endAlias:
 //return
-func (this *Query) JoinAs(endAlias string) *Query {
-	this.DmlBase.joinAs(endAlias)
+func (this *Query) JoinTo(endAlias string) *Query {
+	this.DmlBase.joinTo(endAlias)
 	return this
 }
 
-// builds an inner join with the passed associations
-//
-// param associations:
-// return
-func (this *Query) InnerJoin(associations ...*Association) *Query {
-	this.DmlBase.innerJoin(associations...)
-	return this
-}
+/*
+ adds columns refering the last defined association
+*/
+func (this *Query) Include(columns ...*Column) *Query {
+	if len(this.path) > 0 {
+		// create tokens from the columns
+		tokens := make([]Tokener, len(columns), len(columns))
+		for k, c := range columns {
+			this.lastToken = NewColumnHolder(c)
+			tokens[k] = this.lastToken
+		}
+		// append the tokens to prevously added tokens
+		toks := this.path[len(this.path)-1].Columns
+		if toks == nil {
+			toks = make([]Tokener, 0)
+		}
+		this.path[len(this.path)-1].Columns = append(toks, tokens...)
+		this.Columns = append(this.Columns, tokens...)
 
-// builds an outer join with the passed associations
-//
-// param endAlias: alias to use for the last table
-// param associations
-// return
-func (this *Query) OuterJoinAs(endAlias string, associations ...*Association) *Query {
-	this.Outer(associations...).JoinAs(endAlias)
-	return this
-}
-
-// builds an outer join with the passed associations
-//
-// param associations
-// return
-func (this *Query) OuterJoin(associations ...*Association) *Query {
-	this.Outer(associations...).Join()
-	return this
-}
-
-// adds a column refering the last defined association
-//
-// param column
-// return
-func (this *Query) Include(column *Column) *Query {
-	return this.IncludeAs(this.lastFkAlias, column)
-}
-
-// adds a column refering the last defined association
-//
-// param tableAlias:the alias to use for the table
-// param column
-// return
-func (this *Query) IncludeAs(tableAlias string, column *Column) *Query {
-	ch := NewColumnHolder(column)
-	this.joinVirtualColumns(this.lastToken, this.lastJoin.GetPathElements())
-	ch.SetTableAlias(tableAlias)
-	this.Columns = append(this.Columns, ch)
-
-	this.lastToken = ch
-
-	this.rawSQL = nil
-
+		this.rawSQL = nil
+	} else {
+		panic("There is no current join")
+	}
 	return this
 }
 
@@ -463,39 +435,24 @@ func (this *Query) IncludeAs(tableAlias string, column *Column) *Query {
 //
 // param function
 // return
-func (this *Query) IncludeToken(token Tokener) *Query {
-	this.lastToken = token.Clone().(Tokener)
-	this.joinVirtualColumns(this.lastToken, this.lastJoin.GetPathElements())
+func (this *Query) IncludeToken(tokens ...Tokener) *Query {
+	if len(this.path) > 0 {
+		tokens2 := make([]Tokener, len(tokens), len(tokens))
+		for k, v := range tokens {
+			this.lastToken = v.Clone().(Tokener)
+			tokens2[k] = this.lastToken
+		}
+		// append the tokens to prevously added tokens
+		toks := this.path[len(this.path)-1].Columns
+		if toks == nil {
+			toks = make([]Tokener, 0)
+		}
+		this.path[len(this.path)-1].Columns = append(toks, tokens2...)
+		this.Columns = append(this.Columns, tokens2...)
 
-	this.lastToken.SetTableAlias(this.lastFkAlias)
-	this.Columns = append(this.Columns, this.lastToken)
+		this.rawSQL = nil
+	}
 
-	this.rawSQL = nil
-
-	return this
-}
-
-/*
-Executes an OUTER join with the tables defined by the associations.
-ALL the columns from the intermediate tables are included in the final select
-as well as ALL columns of the last table refered by the association list
-*/
-func (this *Query) OuterFetch(associations ...*Association) *Query {
-	this.Outer(associations...).Fetch()
-	return this
-}
-
-//	/**
-// Executa um INNER join com as tabelas definidas pelas foreign keys.<br>
-// TODAS as colunas das tabelas intermédias são incluidas no select bem como
-// TODAS as colunas da tabela no fim das associações.<br>
-//
-// param associations
-//            as foreign keys que definem uma navegação
-// return
-///
-func (this *Query) InnerFetch(associations ...*Association) *Query {
-	this.Inner(associations...).Fetch()
 	return this
 }
 
@@ -573,12 +530,25 @@ func (this *Query) fetch(endAlias string, pathElements ...*PathElement) *Query {
 	return this
 }
 
-// Criteria to be applied to the previous associations
-//
-// param criteria: criteria
-// return: this
+/*
+Restriction to apply to the previous association
+*/
 func (this *Query) On(criteria ...*Criteria) *Query {
-	this.DmlBase.on(criteria...)
+	if len(this.path) > 0 {
+		var retriction *Criteria
+		if len(criteria) > 1 {
+			retriction = And(criteria...)
+		} else if len(criteria) == 1 {
+			retriction = criteria[0]
+		} else {
+			panic("nil or empty criterias was passed")
+		}
+		this.path[len(this.path)-1].Criteria = retriction
+
+		this.rawSQL = nil
+	} else {
+		panic("There is no current join")
+	}
 	return this
 }
 
