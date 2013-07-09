@@ -62,7 +62,6 @@ type Association struct {
 
 	discriminatorTable *Table
 	discriminators     []Discriminator
-	criterias          []*Criteria
 
 	hash int
 }
@@ -149,10 +148,9 @@ func (this *Association) As(alias string) *Association {
 	return this
 }
 
-func (this *Association) And(column *Column, value *Token) *Association {
+func (this *Association) With(column *Column, value interface{}) *Association {
 	if this.discriminators == nil {
 		this.discriminators = make([]Discriminator, 0)
-		this.criterias = make([]*Criteria, 0)
 	}
 
 	if this.discriminatorTable != nil && !this.discriminatorTable.Equals(column.GetTable()) {
@@ -163,9 +161,8 @@ func (this *Association) And(column *Column, value *Token) *Association {
 	}
 
 	this.discriminatorTable = column.GetTable()
-	discriminator := NewDiscriminator(column, value)
+	discriminator := NewDiscriminator(column, tokenizeOne(value))
 	this.discriminators = append(this.discriminators, discriminator)
-	this.criterias = append(this.criterias, discriminator.Criteria)
 	return this
 }
 
@@ -233,15 +230,6 @@ func (this *Association) GetDiscriminators() []Discriminator {
 
 func (this *Association) SetDiscriminators(discriminators ...Discriminator) {
 	this.discriminators = discriminators
-
-	this.criterias = make([]*Criteria, len(discriminators))
-	for k, v := range discriminators {
-		this.criterias[k] = v.Criteria
-	}
-}
-
-func (this *Association) GetCriterias() []*Criteria {
-	return this.criterias
 }
 
 func (this *Association) GetLink(chain string, from *Table, foreignKeys coll.Collection) *LinkNav {

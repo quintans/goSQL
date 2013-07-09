@@ -175,7 +175,7 @@ func (this *Update) getCachedSql() *RawSql {
 	if this.rawSQL == nil {
 		// if the discriminator conditions have not yet been processed, apply them now
 		if this.discriminatorCriterias != nil && this.criteria == nil {
-			this.DmlBase.where(make([]*Criteria, 0)...)
+			this.DmlBase.where(nil)
 		}
 
 		sql := this.db.GetTranslator().GetSqlForUpdate(this)
@@ -199,7 +199,7 @@ func (this *Update) getCachedSql() *RawSql {
 
 func (this *Update) Where(restriction ...*Criteria) *Update {
 	if len(restriction) > 0 {
-		this.DmlBase.where(restriction...)
+		this.DmlBase.where(restriction)
 	}
 	return this
 }

@@ -61,7 +61,7 @@ const (
 	PUBLISHER_UTF8_NAME = "Edições Lusas"
 )
 
-func resetDB() {
+func ResetDB() {
 	if err := TM.Transaction(func(DB IDb) error {
 		var err error
 
@@ -187,8 +187,130 @@ func resetDB() {
 	}
 }
 
+func ResetDB2() {
+	if err := TM.Transaction(func(DB IDb) error {
+		var err error
+
+		// clear projects
+		if _, err = DB.Delete(PROJECT).Execute(); err != nil {
+			return err
+		}
+
+		// clear emplyees
+		if _, err = DB.Delete(EMPLOYEE).Execute(); err != nil {
+			return err
+		}
+
+		// clear consultant
+		if _, err = DB.Delete(CONSULTANT).Execute(); err != nil {
+			return err
+		}
+
+		// insert CONSULTANT
+		insert := DB.Insert(CONSULTANT).
+			Columns(CONSULTANT_C_ID, CONSULTANT_C_VERSION, CONSULTANT_C_NAME).
+			Values(1, 1, "John")
+		_, err = insert.Execute()
+		if err != nil {
+			return err
+		}
+
+		// insert employee
+		insert = DB.Insert(EMPLOYEE).
+			Columns(EMPLOYEE_C_ID, EMPLOYEE_C_VERSION, EMPLOYEE_C_NAME).
+			Values(1, 1, "Mary")
+		_, err = insert.Execute()
+		if err != nil {
+			return err
+		}
+
+		insert.Values(2, 1, "Kate")
+		_, err = insert.Execute()
+		if err != nil {
+			return err
+		}
+
+		// insert Project
+		insert = DB.Insert(PROJECT).
+			Columns(PROJECT_C_ID, PROJECT_C_VERSION, PROJECT_C_NAME, PROJECT_C_MANAGER_ID, PROJECT_C_MANAGER_TYPE, PROJECT_C_STATUS).
+			Values(1, 1, "Bridge", 1, "C", "ANA")
+		_, err = insert.Execute()
+		if err != nil {
+			return err
+		}
+
+		_, err = insert.Values(2, 1, "Plane", 1, "E", "DEV").Execute()
+		if err != nil {
+			return err
+		}
+
+		_, err = insert.Values(3, 1, "Car", 2, "E", "DEV").Execute()
+		if err != nil {
+			return err
+		}
+
+		_, err = insert.Values(4, 1, "House", 2, "E", "TEST").Execute()
+		if err != nil {
+			return err
+		}
+
+		return nil
+	}); err != nil {
+		panic(err)
+	}
+}
+
+func ResetDB3() {
+	if err := TM.Transaction(func(DB IDb) error {
+		var err error
+
+		// clear projects
+		if _, err = DB.Delete(CATALOG).Execute(); err != nil {
+			return err
+		}
+
+		// insert publisher
+		insert := DB.Insert(CATALOG).
+			Columns(CATALOG_C_ID, CATALOG_C_VERSION, CATALOG_C_DOMAIN, CATALOG_C_CODE, CATALOG_C_DESCRIPTION)
+
+		_, err = insert.Values(1, 1, "GENDER", "M", "Male").Execute()
+		if err != nil {
+			return err
+		}
+
+		_, err = insert.Values(2, 1, "GENDER", "F", "Female").Execute()
+		if err != nil {
+			return err
+		}
+
+		_, err = insert.Values(3, 1, "STATUS", "ANA", "Analysis").Execute()
+		if err != nil {
+			return err
+		}
+
+		_, err = insert.Values(4, 1, "STATUS", "DEV", "Development").Execute()
+		if err != nil {
+			return err
+		}
+
+		_, err = insert.Values(5, 1, "STATUS", "TEST", "Testing").Execute()
+		if err != nil {
+			return err
+		}
+
+		_, err = insert.Values(6, 1, "STATUS", "PROD", "Production").Execute()
+		if err != nil {
+			return err
+		}
+
+		return nil
+	}); err != nil {
+		panic(err)
+	}
+}
+
 func TestSelectUTF8(t *testing.T) {
-	resetDB()
+	ResetDB()
 
 	// get the database context
 	store := TM.Store()
@@ -208,7 +330,7 @@ func TestSelectUTF8(t *testing.T) {
 }
 
 func TestInsertReturningKey(t *testing.T) {
-	resetDB()
+	ResetDB()
 
 	var err error
 	if err = TM.Transaction(func(store IDb) error {
@@ -244,7 +366,7 @@ func TestInsertReturningKey(t *testing.T) {
 }
 
 func TestInsertStructReturningKey(t *testing.T) {
-	resetDB()
+	ResetDB()
 
 	var err error
 	if err = TM.Transaction(func(store IDb) error {
@@ -277,7 +399,7 @@ func TestInsertStructReturningKey(t *testing.T) {
 }
 
 func TestSimpleUpdate(t *testing.T) {
-	resetDB()
+	ResetDB()
 
 	var err error
 	if err = TM.Transaction(func(store IDb) error {
@@ -304,7 +426,7 @@ func TestSimpleUpdate(t *testing.T) {
 }
 
 func TestStructUpdate(t *testing.T) {
-	resetDB()
+	ResetDB()
 
 	var err error
 	if err = TM.Transaction(func(store IDb) error {
@@ -328,7 +450,7 @@ func TestStructUpdate(t *testing.T) {
 }
 
 func TestUpdateSubquery(t *testing.T) {
-	resetDB()
+	ResetDB()
 
 	if err := TM.Transaction(func(store IDb) error {
 		sub := store.Query(BOOK).Alias("b").
@@ -358,7 +480,7 @@ func TestUpdateSubquery(t *testing.T) {
 }
 
 func TestSimpleDelete(t *testing.T) {
-	resetDB()
+	ResetDB()
 
 	if err := TM.Transaction(func(store IDb) error {
 		// clears any relation with book id = 1
@@ -379,7 +501,7 @@ func TestSimpleDelete(t *testing.T) {
 }
 
 func TestStructDelete(t *testing.T) {
-	resetDB()
+	ResetDB()
 
 	if err := TM.Transaction(func(store IDb) error {
 		// clears any relation with book id = 1
@@ -403,7 +525,7 @@ func TestStructDelete(t *testing.T) {
 }
 
 func TestSelectInto(t *testing.T) {
-	resetDB()
+	ResetDB()
 
 	store := TM.Store()
 	var name string
@@ -419,7 +541,7 @@ func TestSelectInto(t *testing.T) {
 }
 
 func TestSelectTreeTo(t *testing.T) {
-	resetDB()
+	ResetDB()
 
 	store := TM.Store()
 	var publisher Publisher
@@ -442,7 +564,7 @@ func TestSelectTreeTo(t *testing.T) {
 }
 
 func TestSelectTree(t *testing.T) {
-	resetDB()
+	ResetDB()
 
 	store := TM.Store()
 	result, err := store.Query(PUBLISHER).
@@ -465,7 +587,7 @@ func TestSelectTree(t *testing.T) {
 }
 
 func TestListFor(t *testing.T) {
-	resetDB()
+	ResetDB()
 
 	store := TM.Store()
 	books := make([]*Book, 0) // mandatory use pointers
@@ -492,7 +614,7 @@ func TestListFor(t *testing.T) {
 }
 
 func TestListOf(t *testing.T) {
-	resetDB()
+	ResetDB()
 
 	store := TM.Store()
 	books, err := store.Query(BOOK).
@@ -515,7 +637,7 @@ func TestListOf(t *testing.T) {
 }
 
 func TestListFlatTreeFor(t *testing.T) {
-	resetDB()
+	ResetDB()
 
 	store := TM.Store()
 	publishers := make([]*Publisher, 0)
@@ -547,7 +669,7 @@ func TestListFlatTreeFor(t *testing.T) {
 }
 
 func TestListTreeOf(t *testing.T) {
-	resetDB()
+	ResetDB()
 
 	store := TM.Store()
 	publishers, err := store.Query(PUBLISHER).
@@ -575,7 +697,7 @@ func TestListTreeOf(t *testing.T) {
 }
 
 func TestListSimpleFor(t *testing.T) {
-	resetDB()
+	ResetDB()
 
 	store := TM.Store()
 	names := make([]string, 0)
@@ -595,7 +717,7 @@ func TestListSimpleFor(t *testing.T) {
 }
 
 func TestColumnSubquery(t *testing.T) {
-	resetDB()
+	ResetDB()
 
 	store := TM.Store()
 	subquery := store.Query(BOOK).Alias("b").
@@ -628,7 +750,7 @@ func TestColumnSubquery(t *testing.T) {
 }
 
 func TestWhereSubquery(t *testing.T) {
-	resetDB()
+	ResetDB()
 
 	store := TM.Store()
 	subquery := store.Query(BOOK).
@@ -666,7 +788,7 @@ func TestWhereSubquery(t *testing.T) {
 }
 
 func TestInnerOn(t *testing.T) {
-	resetDB()
+	ResetDB()
 
 	// gets all publishers that had a book published before 2013
 	store := TM.Store()
@@ -693,6 +815,9 @@ func TestInnerOn(t *testing.T) {
 
 	for k, v := range publishers {
 		logger.Debugf("publishers[%v] = %s", k, *v)
+		if v.Id == nil {
+			t.Fatal("Expected a valid Id, but got nil")
+		}
 	}
 }
 
@@ -703,7 +828,7 @@ Query query = db.createQuery(TPainting.T_PAINTING)
 */
 
 func TestInnerOn2(t *testing.T) {
-	resetDB()
+	ResetDB()
 
 	store := TM.Store()
 	var publishers = make([]*Publisher, 0)
@@ -731,11 +856,14 @@ func TestInnerOn2(t *testing.T) {
 
 	for k, v := range publishers {
 		logger.Debugf("publishers[%v] = %s", k, *v)
+		if v.Id == nil {
+			t.Fatal("Expected a valid Id, but got nil")
+		}
 	}
 }
 
 func TestOuterFetch(t *testing.T) {
-	resetDB()
+	ResetDB()
 
 	store := TM.Store()
 	result, err := store.Query(PUBLISHER).
@@ -781,11 +909,14 @@ func TestOuterFetch(t *testing.T) {
 
 	for k, v := range publishers {
 		logger.Debugf("publishers[%v] = %s", k, v.String())
+		if v.Id == nil {
+			t.Fatal("Expected a valid Id, but got nil")
+		}
 	}
 }
 
 func TestGroupBy(t *testing.T) {
-	resetDB()
+	ResetDB()
 
 	store := TM.Store()
 	var dtos = make([]*Dto, 0)
@@ -815,7 +946,7 @@ func TestGroupBy(t *testing.T) {
 }
 
 func TestOrderBy(t *testing.T) {
-	resetDB()
+	ResetDB()
 
 	store := TM.Store()
 	var publishers = make([]*Publisher, 0)
@@ -839,5 +970,206 @@ func TestOrderBy(t *testing.T) {
 
 	for k, v := range publishers {
 		logger.Debugf("publishers[%v] = %s", k, v.String())
+		if v.Id == nil {
+			t.Fatal("Expected a valid Id, but got nil")
+		}
+	}
+}
+
+func TestPagination(t *testing.T) {
+	ResetDB()
+
+	store := TM.Store()
+	var publishers = make([]*Publisher, 0)
+	err := store.Query(PUBLISHER).
+		All().
+		Outer(PUBLISHER_A_BOOKS, BOOK_A_AUTHORS).
+		Fetch().
+		Order(PUBLISHER_C_NAME).Asc(true).
+		Skip(2).  // skip the first 2 records
+		Limit(3). // returns next 3 records
+		ListFlatTreeFor(func() interface{} {
+		publisher := new(Publisher)
+		publishers = append(publishers, publisher)
+		return publisher
+	})
+
+	if err != nil {
+		t.Fatalf("Failed TestPagination: %s", err)
+	}
+
+	if len(publishers) != 3 {
+		t.Fatalf("Expected 3 Publisher names, but got %v", len(publishers))
+	}
+
+	for k, v := range publishers {
+		logger.Debugf("publishers[%v] = %s", k, v.String())
+		if v.Id == nil {
+			t.Fatal("Expected a valid Id, but got nil")
+		}
+	}
+}
+
+func TestAssociationDiscriminator(t *testing.T) {
+	ResetDB2()
+
+	store := TM.Store()
+	result, err := store.Query(PROJECT).
+		All().
+		Inner(PROJECT_A_EMPLOYEE).
+		Fetch().
+		Order(PROJECT_C_NAME).Asc(true).
+		ListTreeOf((*Project)(nil))
+
+	if err != nil {
+		t.Fatalf("Failed TestAssociationDiscriminator: %s", err)
+	}
+
+	projects := result.AsSlice().([]*Project)
+
+	if len(projects) != 3 {
+		t.Fatalf("Expected 3 Projects, but got %v", len(projects))
+	}
+
+	for _, v := range projects {
+		if len(v.Employee) == 0 {
+			t.Fatalf("Expected Employee for project %s but got <nil>", v.Name)
+		}
+	}
+
+	for k, v := range projects {
+		logger.Debugf("Projects[%v] = %s", k, v.String())
+		if v.Id == nil {
+			t.Fatal("Expected a valid Id, but got nil")
+		}
+	}
+}
+
+func TestAssociationDiscriminatorReverse(t *testing.T) {
+	ResetDB2()
+
+	store := TM.Store()
+	result, err := store.Query(EMPLOYEE).
+		All().
+		Inner(EMPLOYEE_A_PROJECT).
+		Fetch().
+		Order(EMPLOYEE_C_NAME).Asc(true).
+		ListTreeOf((*Employee)(nil))
+
+	if err != nil {
+		t.Fatalf("Failed TestAssociationDiscriminatorReverse: %s", err)
+	} else {
+
+		employees := result.AsSlice().([]*Employee)
+
+		if len(employees) != 2 {
+			t.Fatalf("Expected 2 Employees, but got %v", len(employees))
+		}
+
+		for _, v := range employees {
+			if v.Project == nil {
+				t.Fatalf("Expected Project for project '%v' but got <nil>", *v.Name)
+			}
+		}
+
+		for k, v := range employees {
+			logger.Debugf("Employees[%v] = %s", k, v.String())
+			if v.Id == nil {
+				t.Fatal("Expected a valid Id, but got nil")
+			}
+		}
+	}
+
+}
+
+func TestTableDiscriminator(t *testing.T) {
+	ResetDB3()
+
+	store := TM.Store()
+	statuses := make([]*Status, 0)
+	err := store.Query(STATUS).
+		All().
+		ListFor(func() interface{} {
+		status := new(Status)
+		statuses = append(statuses, status)
+		return status
+	})
+
+	if err != nil {
+		t.Fatalf("Failed Query in TestTableDiscriminator: %s", err)
+	}
+
+	if len(statuses) != 4 {
+		t.Fatalf("Expected 4 Statuses, but got %v", len(statuses))
+	}
+
+	for k, v := range statuses {
+		logger.Debugf("Statuss[%v] = %s", k, v.String())
+		if v.Id == nil {
+			t.Fatal("Expected a valid Id, but got nil")
+		}
+	}
+
+	var tmp int64
+	status := statuses[0]
+	status.Code = ext.StrPtr("X")
+	status.Description = ext.StrPtr("Unknown")
+	tmp, err = store.Update(STATUS).Submit(status)
+	if err != nil {
+		t.Fatalf("Failed Update in TestTableDiscriminator: %s", err)
+	}
+	if tmp != 1 {
+		t.Fatalf("Expected 1 rows updates, but got %v", tmp)
+	}
+
+	tmp, err = store.Delete(STATUS).Execute()
+	if err != nil {
+		t.Fatalf("Failed Delete in TestTableDiscriminator: %s", err)
+	}
+	if tmp != 4 {
+		t.Fatalf("Expected 4 rows deleted, but got %v", tmp)
+	}
+
+	status = new(Status)
+	status.Code = ext.StrPtr("X")
+	status.Description = ext.StrPtr("Unknown")
+	tmp, err = store.Insert(STATUS).Submit(status)
+	if err != nil {
+		t.Fatalf("Failed Insert in TestTableDiscriminator: %s", err)
+	}
+	if tmp == 0 {
+		t.Fatal("Expected Id different of 0")
+	}
+
+}
+
+func TestJoinTableDiscriminator(t *testing.T) {
+	ResetDB3()
+
+	store := TM.Store()
+	result := make([]*Project, 0)
+	err := store.Query(PROJECT).
+		All().
+		Outer(PROJECT_A_STATUS).
+		Fetch().
+		ListFlatTreeFor(func() interface{} {
+		project := new(Project)
+		result = append(result, project)
+		return project
+	})
+
+	if err != nil {
+		t.Fatalf("Failed TestJoinTableDiscriminator: %s", err)
+	}
+
+	if len(result) != 4 {
+		t.Fatalf("Expected 4 Projects, but got %v", len(result))
+	}
+
+	for k, v := range result {
+		logger.Debugf("Projects[%v] = %s", k, v.String())
+		if v.Id == nil {
+			t.Fatal("Expected a valid Id, but got nil")
+		}
 	}
 }

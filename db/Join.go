@@ -12,14 +12,20 @@ type PathElement struct {
 
 type Join struct {
 	associations []*PathElement
+	fetch        bool
 }
 
-func NewJoin(associations []*PathElement) *Join {
+func NewJoin(associations []*PathElement, fetch bool) *Join {
 	this := new(Join)
 	length := len(associations)
 	this.associations = make([]*PathElement, length, length)
 	copy(this.associations, associations)
+	this.fetch = fetch
 	return this
+}
+
+func (this Join) IsFetch() bool {
+	return this.fetch
 }
 
 func (this Join) GetPathElements() []*PathElement {

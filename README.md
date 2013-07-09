@@ -50,11 +50,8 @@ store.Update(PUBLISHER).Submit(publisher)
  - Result Mapping
  - Database Abstraction
  - Joins made easy
+ - Result Pagination
  - Extensible
-
-## Dependencies
-
-Dependes on `database/api`
 
 ## Instalation
 
@@ -155,11 +152,11 @@ func main() {
 }
 ```
 
-The is what you will find in `test/db_test.go`.
+The is what you will find in [test/db_test.go](test/db_test.go).
 
 ## Usage
 In this chapter I will try to explain the several aspects of the library using a set of examples.
-These examples are supported by tables defined in [tables.sql](test/tables.sql), a MySQL database sql script.
+These examples are supported by tables defined in [test/tables.sql](test/tables.sql), a MySQL database sql script.
 
 Before diving in to the examples I first describe the table model and how to map the entities.
 
@@ -209,6 +206,8 @@ var PUBLISHER_C_DELETION = PUBLISHER.DELETION("DELETION") // map to field 'Delet
 - `VERSION` identifies the column used for optimistic locking.
 - `DELETION` identifies the column used for logic record deletion.
 
+It is not mandatory to map all columns of a table. For the same physical table several logical tables can be created with diferent set of columns. They can even refer to diferent domain values depending on a discriminator column as seen in the [Table Discriminator](#table-discriminator) section.
+
 Next we will see how to declare associations. To map associations, we do not think on
 the multiplicity of the edges, but how to go from A to B. This leaves us only two types of associations:
 Simple (one-to-one, one-to-many, many-to-one) and Composite (many-to-many) associations.
@@ -255,7 +254,7 @@ var AUTHOR_A_BOOKS = NewM2MAssociation(
  
 The order of the parameters is very important, because they indicate the direction of the association.
 
-The full definition of the tables and the struct entities used in this document are in [entities.go](test/entities.go), covering all aspects of table mapping.
+The full definition of the tables and the struct entities used in this document are in [test/entities.go](test/entities.go), covering all aspects of table mapping.
 
 ### Insert Examples
 
@@ -646,7 +645,7 @@ List all publishers, ordering ascending by name.
 
 ```go
 var publishers = make([]*Publisher, 0)
-err := store.Query(PUBLISHER).
+store.Query(PUBLISHER).
 	All().
 	OrderBy(PUBLISHER_C_NAME).
 	Asc(true).
@@ -664,11 +663,84 @@ It is possible to add more orders, and even to order by columns belonging to oth
 
 ### Pagination
 
+To paginate the results of a query we use the windowing functions `Skip` and `Limit`.
+
+```go
+var publishers = make([]*Publisher, 0)
+store.Query(PUBLISHER).
+	All().
+	Outer(PUBLISHER_A_BOOKS, BOOK_A_AUTHORS).
+	Fetch().
+	Order(PUBLISHER_C_NAME).Asc(true).
+	Skip(2).  // skip the first 2 records
+	Limit(3). // returns next 3 records
+	ListFlatTreeFor(func() interface{} {
+	publisher := new(Publisher)
+	publishers = append(publishers, publisher)
+	return publisher
+})
+```
+
 ### Association Discriminator
+
+An exclusive OR relationship indicates that entity A is related to either entity B or entity C but not both B and C. This is implemented by defining associations with a constraint.
+
+For the example I will use the following database schema:
+
+![ER Diagram](test/er2.png)
+
+
+As seen in [test/entities.go](test/entities.go) associations of this type are described as:
+
+```go
+PROJECT_A_CONSULTANT = PROJECT.
+			ASSOCIATE(PROJECT_C_MANAGER_ID).
+			TO(CONSULTANT_C_ID).
+			As("Consultant").
+			With(PROJECT_C_MANAGER_TYPE, "C")
+```
+
+where the function `With` declares the constraint applied to this association.
+
+With this in place, its use is the same as regular associations.
+
+```go
+store.Query(PROJECT).
+	All().
+	Inner(PROJECT_A_EMPLOYEE).
+	Fetch().
+	Order(PROJECT_C_NAME).Asc(true).
+	ListTreeOf((*Project)(nil))
+```
 
 ### Table Discriminator
 
+When mapping a table it is possible to declare that the domain of that table only refers to a subset of values of the physical table. This is done by defining a restriction (Discriminator) at the table definition.  
+With this we avoid of having to write a **where** condition every time we want to refer to a specific domain.  
+Inserts will automatically apply the discriminator.
+
+To demonstrate this I will use a physical table named CATALOG that can hold unrelated information, like gender, eye color, etc.  
+The creation script and table definitions for the next example are at [test/tables.sql](test/tables.sql) and [test/entities.go](test/entities.go) respectively.
+
+```go
+statuses := make([]*Status, 0)
+store.Query(STATUS).
+	All().
+	ListFor(func() interface{} {
+	status := new(Status)
+	statuses = append(statuses, status)
+	return status
+})
+```
+
+
 ### Virtual Columns
+
+Virtual columns are columns declared in a table but in reality they belong to another table. These tables are related by a one-to-one association, with constraints guaranteeing the one-to-one relationship.  
+**Virtual columns are only used by queries**.  
+The columns are intended to resolve the case where the column value depends on the environment. For example, internationalization, were the value of the column would depend on the language. Another application is the case where we would like to have different descriptions depending on the business client that accesses the data, for example, mobile or web.  
+Let’s use an internationalization example.
+
 
 ### Custom Functions
 
@@ -685,6 +757,9 @@ dba.QueryClosure("select col1 from tab1 where col2 = ?", func(rows *sql.Rows) er
 	return nil
 }, param1)
 ```
+
+# Credits
+
 
 # TODO
 - Add more tests

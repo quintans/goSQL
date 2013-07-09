@@ -1,14 +1,16 @@
 package db
 
-// The objective of this structure is to maintain state, while crawling the associations and building the entity tree, after an sql select
-// This way it is possible to hint the row transformers wich paths to follow.
-// While crawling the associations of a query result the list of possible paths changes.
+/*
+The objective of this structure is to maintain state, while crawling the associations and building the entity tree, after an sql select
+This way it is possible to hint the row transformers wich paths to follow.
+While crawling the associations of a query result the list of possible paths changes.
 
-// The process has 2 steps:
-// 1) building a tree (common foreign keys are converted into one) 
-//    to identify wich branches exist for a node
-// 2) building an array that only has the edge nodes of a tree (tree contour) 
-//    to ease the computation of the column offsets of each processed entity
+The process has 2 steps:
+1) building a tree (common foreign keys are converted into one)
+   to identify wich branches exist for a node
+2) building an array that only has the edge nodes of a tree (tree contour)
+   to ease the computation of the column offsets of each processed entity
+*/
 type Crawler struct {
 	depth     int
 	nodes     []*CrawlerNode
@@ -33,7 +35,9 @@ func (this *Crawler) Prepare(query *Query) {
 	table := query.GetTable()
 	var includes [][]*Association
 	for _, join := range query.GetJoins() {
-		includes = append(includes, join.GetAssociations())
+		if join.IsFetch() {
+			includes = append(includes, join.GetAssociations())
+		}
 	}
 
 	// reset

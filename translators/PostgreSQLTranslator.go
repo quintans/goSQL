@@ -91,9 +91,9 @@ func (this *PostgreSQLTranslator) PaginateSQL(query *db.Query, sql string) strin
 	if query.GetLimit() > 0 {
 		sb.Add(sql, " LIMIT :", db.LIMIT_PARAM)
 		query.SetParameter(db.LIMIT_PARAM, query.GetLimit())
-		if query.GetOffset() > 0 {
+		if query.GetSkip() > 0 {
 			sb.Add(" OFFSET :", db.OFFSET_PARAM)
-			query.SetParameter(db.OFFSET_PARAM, query.GetOffset())
+			query.SetParameter(db.OFFSET_PARAM, query.GetSkip())
 		}
 		return sb.String()
 	}

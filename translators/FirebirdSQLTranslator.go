@@ -64,12 +64,12 @@ func (this *FirebirdSQLTranslator) PaginateSQL(query *db.Query, sql string) stri
 	sb := tk.NewStrBuffer()
 	if query.GetLimit() > 0 {
 		sb.Add(sql, " ROWS ")
-		if query.GetOffset() > 0 {
+		if query.GetSkip() > 0 {
 			sb.Add(":", db.OFFSET_PARAM, " TO ")
-			query.SetParameter(db.OFFSET_PARAM, query.GetOffset()+1)
+			query.SetParameter(db.OFFSET_PARAM, query.GetSkip()+1)
 		}
 		sb.Add(":", db.LIMIT_PARAM)
-		query.SetParameter(db.LIMIT_PARAM, query.GetOffset()+query.GetLimit())
+		query.SetParameter(db.LIMIT_PARAM, query.GetSkip()+query.GetLimit())
 
 		return sb.String()
 	}

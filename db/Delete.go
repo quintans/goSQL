@@ -122,7 +122,7 @@ func (this *Delete) getCachedSql() *RawSql {
 	if this.rawSQL == nil {
 		// if the discriminator conditions have not yet been processed, apply them now
 		if this.discriminatorCriterias != nil && this.criteria == nil {
-			this.DmlBase.where(make([]*Criteria, 0)...)
+			this.DmlBase.where(nil)
 		}
 
 		sql := this.db.GetTranslator().GetSqlForDelete(this)
@@ -136,7 +136,7 @@ func (this *Delete) getCachedSql() *RawSql {
 
 func (this *Delete) Where(restriction ...*Criteria) *Delete {
 	if len(restriction) > 0 {
-		this.DmlBase.where(restriction...)
+		this.DmlBase.where(restriction)
 	}
 	return this
 }

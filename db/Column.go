@@ -30,16 +30,15 @@ func newVirtualColumn(column *Column, association *Association, discriminators .
 }
 
 type Column struct {
-	table         *Table // the table that this column belongs
-	name          string // column name
-	alias         string // column alias
-	key           bool
-	mandatory     bool
-	version       bool
-	deletion      bool
-	discriminator Tokener
-	virtual       *VirtualColumn
-	hash          int
+	table     *Table // the table that this column belongs
+	name      string // column name
+	alias     string // column alias
+	key       bool
+	mandatory bool
+	version   bool
+	deletion  bool
+	virtual   *VirtualColumn
+	hash      int
 }
 
 // Param alias: The alias of the column
@@ -91,18 +90,6 @@ func (this *Column) Deletion() *Column {
 	this.deletion = true
 	this.table.setDeletion(this)
 	return this
-}
-
-func (this *Column) Discriminator(value Tokener) *Column {
-	if this.discriminator == nil {
-		this.discriminator = value
-		this.table.addDiscriminator(this)
-	}
-	return this
-}
-
-func (this *Column) GetDiscriminator() Tokener {
-	return this.discriminator
 }
 
 //	Gets the table that this column belongs to

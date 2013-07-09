@@ -26,7 +26,7 @@ type Query struct {
 	unions []*Union
 	// saves position of columnHolder
 	groupBy   []int
-	offset    int64
+	skip      int64
 	limit     int64
 	lastToken Tokener
 	lastOrder *Order
@@ -111,21 +111,21 @@ func (this *Query) Copy(other *Query) {
 		copy(this.groupBy, other.groupBy)
 	}
 
-	this.offset = other.offset
+	this.skip = other.skip
 	this.limit = other.limit
 
 	this.rawSQL = other.rawSQL
 }
 
-func (this *Query) GetOffset() int64 {
-	return this.offset
+func (this *Query) GetSkip() int64 {
+	return this.skip
 }
 
-func (this *Query) Offset(offset int64) *Query {
-	if offset < 0 {
-		this.offset = 0
+func (this *Query) Skip(skip int64) *Query {
+	if skip < 0 {
+		this.skip = 0
 	} else {
-		this.offset = offset
+		this.skip = skip
 	}
 	return this
 }
@@ -202,7 +202,7 @@ func (this *Query) As(alias string) *Query {
 // WHERE ===
 func (this *Query) Where(restriction ...*Criteria) *Query {
 	if len(restriction) > 0 {
-		this.DmlBase.where(restriction...)
+		this.DmlBase.where(restriction)
 	}
 	return this
 }
@@ -224,10 +224,16 @@ func (this *Query) order(columnHolder *ColumnHolder) *Query {
 	return this
 }
 
+/*
+Order by a column belonging to the driving table.
+*/
 func (this *Query) Order(column *Column) *Query {
 	return this.OrderAs(column, this.tableAlias)
 }
 
+/*
+Order by a column for a specific table alias.
+*/
 func (this *Query) OrderAs(column *Column, alias string) *Query {
 	ch := NewColumnHolder(column)
 	if alias != "" {
@@ -243,11 +249,9 @@ func (this *Query) OrderAs(column *Column, alias string) *Query {
 	return this.order(ch)
 }
 
-// Order by a column belonging to the table targeted by the association list
-//
-// param column: the order by column
-// param associations: the association list that leads to the desired table
-// return: this query
+/*
+Order by a column belonging to the table targeted by the supplyied association list.
+*/
 func (this *Query) OrderOn(column *Column, associations ...*Association) *Query {
 	pathElements := make([]*PathElement, len(associations))
 	for k, association := range associations {
@@ -260,6 +264,9 @@ func (this *Query) OrderOn(column *Column, associations ...*Association) *Query 
 	return this.OrderFor(column, pathElements...)
 }
 
+/*
+Defines the column, belonging to the table targeted by the association, to order by.
+*/
 func (this *Query) OrderFor(column *Column, pathElements ...*PathElement) *Query {
 	var pes []*PathElement
 	if column.IsVirtual() {
@@ -283,10 +290,11 @@ func (this *Query) OrderFor(column *Column, pathElements ...*PathElement) *Query
 	panic("The path specified in the order is not valid")
 }
 
-// Defines the order column. The column belongs to the table targeted by the last defined association.
-// If there is no last association, the column belongs to the driving table
-//
-// param: The column
+/*
+Defines the column to order by.
+The column belongs to the table targeted by the last defined association.
+If there is no last association, the column belongs to the driving table
+*/
 func (this *Query) OrderBy(column *Column) *Query {
 	if this.lastJoin != nil {
 		return this.OrderFor(column, this.lastJoin.GetPathElements()...)
@@ -294,6 +302,9 @@ func (this *Query) OrderBy(column *Column) *Query {
 	return this.OrderAs(column, this.lastFkAlias)
 }
 
+/*
+Defines the column alias to order by.
+*/
 func (this *Query) OrderByAs(column string) *Query {
 	this.lastOrder = NewOrderAs(column).Asc(true)
 	this.orders = append(this.orders, this.lastOrder)
@@ -304,8 +315,6 @@ func (this *Query) OrderByAs(column string) *Query {
 }
 
 // Sets the order direction for the last order by command
-//
-// return this
 func (this *Query) Asc(dir bool) *Query {
 	if this.lastOrder != nil {
 		this.lastOrder.Asc(dir)
@@ -348,20 +357,20 @@ func (this *Query) Outer(associations ...*Association) *Query {
 }
 
 func (this *Query) Fetch() *Query {
-	return this.FetchAs("")
+	return this.FetchTo("")
 }
 
 /*
 Include in the select ALL columns of the tables paticipating in the current association chain.
 A table end alias can also be supplied.
 */
-func (this *Query) FetchAs(endAlias string) *Query {
-	if this.path != nil {
+func (this *Query) FetchTo(endAlias string) *Query {
+	if len(this.path) > 0 {
 		this.fetch(endAlias, this.path...)
 
 		pathCriterias := this.buildPathCriterias(this.path)
 		// process the acumulated conditions
-		var firstConditions []*Criteria
+		var firstCriterias []*Criteria
 		for index, pathCriteria := range pathCriterias {
 			if pathCriteria != nil {
 				conds := pathCriteria.Criterias
@@ -369,15 +378,15 @@ func (this *Query) FetchAs(endAlias string) *Query {
 					// index == 0 applies to the starting table
 					if index == 0 {
 						// already with the alias applied
-						firstConditions = conds
+						firstCriterias = conds
 					} else {
-						if firstConditions != nil {
-							// new coppy
+						if firstCriterias != nil {
+							// add the criterias restriction refering to the table,
+							// due to association discriminator
 							tmp := make([]*Criteria, len(conds))
 							copy(tmp, conds)
-							tmp = append(tmp, firstConditions...)
-							firstConditions = nil
-							conds = tmp
+							conds = append(tmp, firstCriterias...)
+							firstCriterias = nil
 						}
 						this.applyOn(this.path[:index], And(conds...))
 					}
@@ -483,7 +492,7 @@ func (this *Query) fetch(endAlias string, pathElements ...*PathElement) *Query {
 	}
 
 	// returns a list with the old ones (currentPath) + the new ones (with the alias already defined)
-	local := this.addJoin(endAlias, pathElements)
+	local := this.addJoin(endAlias, pathElements, true)
 	tmp := make([]*PathElement, len(local))
 	// remove old ones, keeping the new ones
 	i := 0
@@ -931,7 +940,7 @@ func (this *Query) getCachedSql() *RawSql {
 	if this.rawSQL == nil {
 		// if the discriminator conditions have not yet been processed, apply them now
 		if this.discriminatorCriterias != nil && this.criteria == nil {
-			this.DmlBase.where(make([]*Criteria, 0)...)
+			this.DmlBase.where(nil)
 		}
 
 		sql := this.db.GetTranslator().GetSqlForQuery(this)

@@ -58,8 +58,8 @@ func (this *MySQL5Translator) PaginateSQL(query *db.Query, sql string) string {
 	sb := tk.NewStrBuffer()
 	if query.GetLimit() > 0 {
 		sb.Add(sql, " LIMIT :", db.OFFSET_PARAM, ", :", db.LIMIT_PARAM)
-		if query.GetOffset() >= 0 {
-			query.SetParameter(db.OFFSET_PARAM, query.GetOffset())
+		if query.GetSkip() >= 0 {
+			query.SetParameter(db.OFFSET_PARAM, query.GetSkip())
 		}
 		query.SetParameter(db.LIMIT_PARAM, query.GetLimit())
 		return sb.String()

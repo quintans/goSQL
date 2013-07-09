@@ -34,7 +34,7 @@ func NewInsert(db IDb, table *Table) *Insert {
 	discriminators := table.GetDiscriminators()
 	// several discriminators, at maximum one for each column
 	for _, discriminator := range discriminators {
-		this.Set(discriminator.Column, discriminator.Column.GetDiscriminator().Clone())
+		this.Set(discriminator.Column, discriminator.Value)
 	}
 	return this
 }

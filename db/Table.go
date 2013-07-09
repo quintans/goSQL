@@ -20,7 +20,6 @@ type Table struct {
 	version        *Column         // column version
 	deletion       *Column         // logic deletion column
 	discriminators []Discriminator //
-	criterias      []*Criteria     //
 }
 
 func TABLE(name string) *Table {
@@ -69,16 +68,9 @@ func (this *Table) COLUMN(name string) *Column {
 	return col
 }
 
-//	/**
-//	 * Constructor that defines a virtual column (references a column in another table)
-//	 *
-//	 * @Param table
-//	 *            The table of this virtual column
-//	 * @Param association
-//	 *            the association to the table having the real column
-//	 * @Param realColumn
-//	 *            the real column
-//	 */
+/*
+Virtual Column (references a column in another table)
+*/
 func (this *Table) VCOLUMN(realColumn *Column, association *Association, discriminators ...Discriminator) *Column {
 	col := this.COLUMN(realColumn.name)
 	col.As(realColumn.alias)
@@ -116,14 +108,13 @@ func (this *Table) setDeletion(col *Column) {
 	this.deletion = col
 }
 
-func (this *Table) addDiscriminator(col *Column) {
+func (this *Table) With(column string, value interface{}) *Table {
 	if this.discriminators == nil {
 		this.discriminators = make([]Discriminator, 0)
-		this.criterias = make([]*Criteria, 0)
 	}
-	discriminator := NewDiscriminator(col, col.GetDiscriminator())
+	discriminator := NewDiscriminator(this.COLUMN(column), tokenizeOne(value))
 	this.discriminators = append(this.discriminators, discriminator)
-	this.criterias = append(this.criterias, discriminator.Criteria)
+	return this
 }
 
 func (this *Table) ASSOCIATE(from ...*Column) ColGroup {
@@ -231,7 +222,15 @@ func (this *Table) GetDiscriminators() []Discriminator {
 }
 
 func (this *Table) GetCriterias() []*Criteria {
-	return this.criterias
+	if len(this.discriminators) > 0 {
+		criterias := make([]*Criteria, len(this.discriminators))
+		for k, v := range this.discriminators {
+			criterias[k] = v.Criteria()
+		}
+		return criterias
+	} else {
+		return nil
+	}
 }
 
 func (this *Table) GetLink(chain string, foreignKeys coll.Collection) *LinkNav {

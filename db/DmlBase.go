@@ -95,11 +95,7 @@ func (this *DmlBase) Super(DB IDb, table *Table) {
 	this.alias(PREFIX + "0")
 
 	if table != nil {
-		criterias := table.GetCriterias()
-		if criterias != nil {
-			this.discriminatorCriterias = make([]*Criteria, len(criterias))
-			copy(this.discriminatorCriterias, criterias)
-		}
+		this.discriminatorCriterias = table.GetCriterias()
 	}
 	this.parameters = make(map[string]interface{})
 
@@ -198,7 +194,7 @@ This
 */
 func (this *DmlBase) joinTo(endAlias string) {
 	if len(this.path) > 0 {
-		this.addJoin(endAlias, this.path)
+		this.addJoin(endAlias, this.path, false)
 
 		// the first position refers to constraints applied to the table, due to a association discriminator
 		pathCriterias := this.buildPathCriterias(this.path)
@@ -237,6 +233,11 @@ func (this *DmlBase) joinTo(endAlias string) {
 	this.rawSQL = nil
 }
 
+/*
+The path criteria on position 0 refers the criteria on the FROM table.
+The Association can have a constraint(discriminator) refering a column in the source table.
+Both ends of Discriminator criterias (association origin and destination tables) are treated in this block
+*/
 func (this *DmlBase) buildPathCriterias(paths []*PathElement) []*PathCriteria {
 	// see if any targeted table has discriminator columns
 	index := 0
@@ -244,9 +245,7 @@ func (this *DmlBase) buildPathCriterias(paths []*PathElement) []*PathCriteria {
 	length := len(paths) + 1
 	pathCriterias := make([]*PathCriteria, length, length)
 
-	// the path criteria on position 0 refers the criteria on the FROM table.
-	// The Association can have a constraint(discriminator) refering a column in the source table.
-	// both ends of Discriminator criterias (association origin and destination tables) are treated in this block
+	// processes normal criterias
 	for _, pe := range paths {
 		index++
 
@@ -257,6 +256,7 @@ func (this *DmlBase) buildPathCriterias(paths []*PathElement) []*PathCriteria {
 			pathCriterias[index] = pc
 		}
 
+		// table discriminator on target
 		tableCriterias = pe.Base.GetTableTo().GetCriterias()
 		if tableCriterias != nil {
 			if pc == nil {
@@ -276,43 +276,39 @@ func (this *DmlBase) buildPathCriterias(paths []*PathElement) []*PathCriteria {
 		}
 	}
 
+	// process criterias from the association discriminators
+	var lastFkAlias = this.GetTableAlias()
 	index = 0
 	for _, pe := range paths {
-		associationCriterias := pe.Base.GetCriterias()
-		if associationCriterias != nil {
+		index++
+		discriminators := pe.Base.GetDiscriminators()
+		if discriminators != nil {
+			pc := pathCriterias[index]
+			if pc == nil {
+				pc = new(PathCriteria)
+				pathCriterias[index] = pc
+			}
+
 			if pe.Base.GetDiscriminatorTable().Equals(pe.Base.GetTableTo()) {
-				pc := pathCriterias[index+1]
-				if pc == nil {
-					pc = new(PathCriteria)
-					pathCriterias[index+1] = pc
+				for _, v := range discriminators {
+					pc.Criterias = append(pc.Criterias, v.Criteria())
 				}
-				pc.Criterias = append(pc.Criterias, associationCriterias...)
 			} else {
-				pc := pathCriterias[index]
-				if pc == nil {
-					pc = new(PathCriteria)
-					pathCriterias[index] = pc
-				}
 				// force table alias for the first criteria
-				if index == 0 {
-					firstCriterias := make([]*Criteria, 0)
-					for _, c := range associationCriterias {
-						c2 := c.Clone().(*Criteria)
-						c2.SetTableAlias(this.GetTableAlias())
-						firstCriterias = append(firstCriterias, c2)
-					}
-					associationCriterias = firstCriterias
+				for _, v := range discriminators {
+					crit := v.Criteria()
+					crit.SetTableAlias(lastFkAlias)
+					pc.Criterias = append(pc.Criterias, crit)
 				}
-				pc.Criterias = append(pc.Criterias, associationCriterias...)
 			}
 		}
-		index++
+		lastFkAlias = this.joinBag.GetAlias(pe.Derived)
 	}
 
 	return pathCriterias
 }
 
-func (this *DmlBase) addJoin(lastAlias string, associations []*PathElement) []*PathElement {
+func (this *DmlBase) addJoin(lastAlias string, associations []*PathElement, fetch bool) []*PathElement {
 	var local []*PathElement
 
 	common := DeepestCommonPath(this.cachedAssociation, associations)
@@ -416,7 +412,7 @@ func (this *DmlBase) addJoin(lastAlias string, associations []*PathElement) []*P
 		this.lastFkAlias = this.joinBag.GetAlias(lastFk)
 	}
 
-	this.lastJoin = NewJoin(local)
+	this.lastJoin = NewJoin(local, fetch)
 	this.joins = append(this.joins, this.lastJoin)
 
 	return local
@@ -431,17 +427,18 @@ func (this *DmlBase) prepareAssociation(aliasFrom string, aliasTo string, curren
 	}
 }
 
-func (this *DmlBase) where(restrictions ...*Criteria) {
-	if restrictions != nil {
-		var criterias []*Criteria
-		if this.discriminatorCriterias != nil {
-			criterias = append(criterias, this.discriminatorCriterias...)
-		}
-
+func (this *DmlBase) where(restrictions []*Criteria) {
+	var criterias []*Criteria
+	if len(restrictions) > 0 {
 		criterias = append(criterias, restrictions...)
-		if len(criterias) != 0 {
-			this.applyWhere(And(criterias...))
-		}
+	}
+
+	if len(this.discriminatorCriterias) > 0 {
+		criterias = append(criterias, this.discriminatorCriterias...)
+	}
+
+	if len(criterias) > 0 {
+		this.applyWhere(And(criterias...))
 	}
 }
 
@@ -508,7 +505,7 @@ func (this *DmlBase) joinVirtualColumns(token Tokener, previous []*PathElement) 
 			pe.Inner = false
 			associations = append(associations, pe)
 
-			this.addJoin("", associations)
+			this.addJoin("", associations, false)
 
 			ch.SetTableAlias(this.lastFkAlias)
 
