@@ -864,22 +864,11 @@ func (this *GenericTranslator) PaginateSQL(query *db.Query, sql string) string {
 	return sql
 }
 
-func ReduceAssociations(cachedAssociation [][]*db.PathElement, join *db.Join) []*db.PathElement {
+func ReduceAssociations(cachedAssociation [][]*db.PathElement, join *db.Join) ([]*db.PathElement, [][]*db.PathElement) {
 	associations := join.GetPathElements()
 	common := db.DeepestCommonPath(cachedAssociation, associations)
-	length := len(common)
 	cachedAssociation = append(cachedAssociation, join.GetPathElements())
-	for f, pe := range associations {
-		association := pe.Derived
-		if f < length {
-			if !common[f].Derived.Equals(association) {
-				return associations[f:]
-			}
-		} else {
-			return associations[f:]
-		}
-	}
-	return associations
+	return associations[len(common):], cachedAssociation
 }
 
 func AppendJoins(joins []*db.Join, joiner IJoiner) {
@@ -900,7 +889,8 @@ func AppendJoins(joins []*db.Join, joiner IJoiner) {
 		 * AND sales.EmployeeID = employee.EmployeeID
 		 */
 
-		associations := ReduceAssociations(cachedAssociation, join)
+		var associations []*db.PathElement
+		associations, cachedAssociation = ReduceAssociations(cachedAssociation, join)
 		for _, pe := range associations {
 			association := pe.Derived
 			if association.IsMany2Many() {

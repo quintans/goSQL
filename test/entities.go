@@ -141,6 +141,8 @@ type Book struct {
 	Publisher   *Publisher // this is filled is a join fetch
 	Authors     []*Author
 	BookBin     *BookBin
+
+	Title *string
 }
 
 func (this *Book) String() string {
@@ -151,6 +153,7 @@ func (this *Book) String() string {
 	sb.Add(", Published: ", this.Published)
 	sb.Add(", PublisherId: ", this.PublisherId)
 	sb.Add(", Publisher: ", this.Publisher)
+	sb.Add(", Title: ", this.Title)
 	sb.Add("}")
 	return sb.String()
 }
@@ -181,6 +184,7 @@ var (
 	BOOK_C_PRICE        = BOOK.COLUMN("PRICE")
 	BOOK_C_PUBLISHED    = BOOK.COLUMN("PUBLISHED")
 	BOOK_C_PUBLISHER_ID = BOOK.COLUMN("PUBLISHER_ID")
+	BOOK_C_INAME        = BOOK.VCOLUMN(BOOK_I18N_C_TITLE, BOOK_A_BOOK_I18N)
 
 	BOOK_A_PUBLISHER = BOOK.
 				ASSOCIATE(BOOK_C_PUBLISHER_ID).
@@ -197,6 +201,21 @@ var (
 			ASSOCIATE(BOOK_C_ID).
 			TO(BOOK_BIN_C_ID).
 			As("BookBin")
+
+	BOOK_A_BOOK_I18N = BOOK.
+				ASSOCIATE(BOOK_C_ID).
+				TO(BOOK_I18N_C_BOOK_ID).
+				As("I18n").
+				With(BOOK_I18N_C_LANG, Param("lang"))
+)
+
+var (
+	BOOK_I18N           = TABLE("BOOK_I18N")
+	BOOK_I18N_C_ID      = BOOK_I18N.KEY("ID")
+	BOOK_I18N_C_VERSION = BOOK_I18N.VERSION("VERSION")
+	BOOK_I18N_C_BOOK_ID = BOOK_I18N.COLUMN("BOOK_ID")
+	BOOK_I18N_C_LANG    = BOOK_I18N.COLUMN("LANG")
+	BOOK_I18N_C_TITLE   = BOOK_I18N.COLUMN("TITLE")
 )
 
 // AUTHOR_BOOK

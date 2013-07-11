@@ -168,12 +168,7 @@ func (this *Query) ColumnsReset() {
 }
 
 func (this *Query) Column(column interface{}) *Query {
-	token := tokenizeOne(column)
-	if _, ok := column.(*Query); ok {
-		this.lastToken = token.Clone().(Tokener)
-	} else {
-		this.lastToken = token
-	}
+	this.lastToken = tokenizeOne(column)
 	this.replaceRaw(this.lastToken)
 
 	// TODO: implement virtual columns
@@ -410,7 +405,9 @@ func (this *Query) Join() *Query {
 //param endAlias:
 //return
 func (this *Query) JoinTo(endAlias string) *Query {
-	this.DmlBase.joinTo(endAlias)
+	this.DmlBase.joinTo(endAlias, this.path)
+	this.path = nil
+	this.rawSQL = nil
 	return this
 }
 
@@ -469,49 +466,28 @@ func (this *Query) fetch(endAlias string, pathElements ...*PathElement) *Query {
 	//the current path
 	var currentPath []*PathElement
 
-	var fresh []*Association
-	// finds the ForeignKey's that are not present in any join
-	matches := true
-
 	common := DeepestCommonPath(this.cachedAssociation, pathElements)
 
+	var pos int
+	// finds the ForeignKey's that are not present in any join
 	for f, pe := range pathElements {
-		if matches && f < len(common) {
+		if f < len(common) {
 			if !common[f].Base.Equals(pe.Base) {
-				matches = false
+				pos = f
+				break
 			}
 		} else {
-			matches = false
+			pos = f
+			break
 		}
 
-		if !matches {
-			fresh = append(fresh, pe.Base)
-		} else {
-			currentPath = append(currentPath, common[f])
-		}
+		currentPath = append(currentPath, common[f])
 	}
 
 	// returns a list with the old ones (currentPath) + the new ones (with the alias already defined)
 	local := this.addJoin(endAlias, pathElements, true)
-	tmp := make([]*PathElement, len(local))
 	// remove old ones, keeping the new ones
-	i := 0
-	for _, loc := range local {
-		// find wich currentPath elements exist in local, and ignore (remove) them
-		found := false
-		for _, cp := range currentPath {
-			if loc == cp {
-				found = true
-				break
-			}
-		}
-		// ignore if found
-		if !found {
-			tmp[i] = loc
-			i++
-		}
-	}
-	local = tmp[:i]
+	local = local[pos:]
 
 	// adds all columns of all joins
 	for _, pe := range local {

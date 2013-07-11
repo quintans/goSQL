@@ -5,27 +5,18 @@ import (
 	"strings"
 )
 
-//	 Holds a information about a virtual column.
-//	 A virtual column is a column declared in a table, but exists in a adjacent table.
-//	 This is useful for columns that are internationalized. ex: MAIN [1]--[*] MAIN_I18N
+/*
+Holds a information about a virtual column.
+A virtual column is a column declared in a table, but exists in a adjacent table.
+This is useful for columns that are internationalized. ex: BOOK [1]--[*] BOOK_I18N
+*/
 type VirtualColumn struct {
-	Association    *Association    // navigation to the table holding the REAL column
-	Column         *Column         // the REAL column
-	Discriminators []Discriminator //
+	Association *Association // navigation to the table holding the REAL column
 }
 
-func newVirtualColumn(column *Column, association *Association, discriminators ...Discriminator) *VirtualColumn {
+func newVirtualColumn(column *Column, association *Association) *VirtualColumn {
 	vc := new(VirtualColumn)
-	// build condition
-	if discriminators != nil && len(discriminators) > 0 {
-		vc.Association = NewAssociationCopy(association)
-		vc.Association.SetDiscriminators(discriminators...)
-	} else {
-		vc.Association = association
-	}
-
-	vc.Column = column
-	vc.Discriminators = discriminators
+	vc.Association = association
 	return vc
 }
 

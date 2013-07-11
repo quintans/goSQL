@@ -71,10 +71,9 @@ func (this *Table) COLUMN(name string) *Column {
 /*
 Virtual Column (references a column in another table)
 */
-func (this *Table) VCOLUMN(realColumn *Column, association *Association, discriminators ...Discriminator) *Column {
+func (this *Table) VCOLUMN(realColumn *Column, association *Association) *Column {
 	col := this.COLUMN(realColumn.name)
-	col.As(realColumn.alias)
-	col.virtual = newVirtualColumn(realColumn, association, discriminators...)
+	col.virtual = newVirtualColumn(realColumn, association)
 	return col
 }
 

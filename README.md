@@ -267,6 +267,18 @@ insert.Values(1, 1, "Geek Publications").Execute()
 insert.Values(2, 1, "Edições Lusas").Execute()
 ```
 
+There is another way of supplying values, for all CRUD operations, and this is by parameter,
+as seen in the following snippet.
+
+```go
+insert.SetParameter("name", "Geek Publications")
+insert.Values(1, 1, Param("name")).Execute()
+```
+
+In this example the value for the `name` parameter is directly supplied in the snippet but it could be an "environment" variable supplied by a custom `store` for every CRUD operation.  
+One example, could be `language` (pt, eng, ...) for internationalized text, or `channel` (web, mobile, ...) for descriptions, etc.
+
+
 #### Insert With a Struct
 
 When inserting with a struct, the struct fields are matched with the respective columns. 
@@ -338,14 +350,14 @@ affectedRows, err := store.Update(PUBLISHER).Alias("a").
 #### Simple Delete
 
 ```go
-store.Delete(BOOK).Where(BOOK_C_ID.Matches(1)).Execute()
+store.Delete(BOOK).Where(BOOK_C_ID.Matches(2)).Execute()
 ```
 
 #### Delete with struct
 
 ```go
 var book Book // any struct with the fields Id and Version could be used
-book.Id = ext.Int64Ptr(1)
+book.Id = ext.Int64Ptr(2)
 book.Version = ext.Int64Ptr(1)
 store.Delete(BOOK).Submit(book)
 ```

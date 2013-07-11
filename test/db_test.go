@@ -18,6 +18,22 @@ var TM ITransactionManager
 
 var logger = log.LoggerFor("github.com/quintans/goSQL/test")
 
+// custom Db - for setting default parameters
+func NewMyDb(connection dbx.IConnection, translator Translator, lang string) *MyDb {
+	return &MyDb{&Db{connection, translator}, lang}
+}
+
+type MyDb struct {
+	*Db
+	Lang string
+}
+
+func (this *MyDb) Query(table *Table) *Query {
+	query := NewQuery(this, table)
+	query.SetParameter("lang", this.Lang)
+	return query
+}
+
 func init() {
 	log.Register("/", log.DEBUG, log.NewConsoleAppender(false))
 
@@ -45,7 +61,9 @@ func init() {
 		// databse context factory
 		func(c dbx.IConnection) IDb {
 			//return db.NewDb(c, trx.NewFirebirdSQLTranslator())
-			return NewDb(c, trx.NewMySQL5Translator())
+			//return NewDb(c, trx.NewMySQL5Translator())
+
+			return NewMyDb(c, trx.NewMySQL5Translator(), "pt")
 		},
 		// statement cache
 		1000,
@@ -59,6 +77,8 @@ func init() {
 
 const (
 	PUBLISHER_UTF8_NAME = "Edições Lusas"
+	LANG                = "pt"
+	BOOK_LANG_TITLE     = "Era uma vez..."
 )
 
 func ResetDB() {
@@ -72,6 +92,11 @@ func ResetDB() {
 
 		// clear authors
 		if _, err = DB.Delete(AUTHOR).Execute(); err != nil {
+			return err
+		}
+
+		// clear books_i18n
+		if _, err = DB.Delete(BOOK_I18N).Execute(); err != nil {
 			return err
 		}
 
@@ -117,6 +142,15 @@ func ResetDB() {
 		}
 
 		insert.Values(3, 1, "Scrapbook", 6.5, time.Date(2012, time.April, 01, 0, 0, 0, 0, time.UTC), 2)
+		_, err = insert.Execute()
+		if err != nil {
+			return err
+		}
+
+		// insert book_i18n
+		insert = DB.Insert(BOOK_I18N).
+			Columns(BOOK_I18N_C_ID, BOOK_I18N_C_VERSION, BOOK_I18N_C_BOOK_ID, BOOK_I18N_C_LANG, BOOK_I18N_C_TITLE).
+			Values(1, 1, 1, LANG, BOOK_LANG_TITLE)
 		_, err = insert.Execute()
 		if err != nil {
 			return err
@@ -483,20 +517,20 @@ func TestSimpleDelete(t *testing.T) {
 	ResetDB()
 
 	if err := TM.Transaction(func(store IDb) error {
-		// clears any relation with book id = 1
-		store.Delete(AUTHOR_BOOK).Where(AUTHOR_BOOK_C_BOOK_ID.Matches(1)).Execute()
+		// clears any relation with book id = 2
+		store.Delete(AUTHOR_BOOK).Where(AUTHOR_BOOK_C_BOOK_ID.Matches(2)).Execute()
 
-		affectedRows, err := store.Delete(BOOK).Where(BOOK_C_ID.Matches(1)).Execute()
+		affectedRows, err := store.Delete(BOOK).Where(BOOK_C_ID.Matches(2)).Execute()
 		if err != nil {
 			return err
 		}
 		if affectedRows != 1 {
-			t.Fatal("The record was not updated")
+			t.Fatal("The record was not deleted")
 		}
 
 		return nil
 	}); err != nil {
-		t.Fatalf("Failed ... Test: %s", err)
+		t.Fatalf("Failed with: %s", err)
 	}
 }
 
@@ -505,17 +539,17 @@ func TestStructDelete(t *testing.T) {
 
 	if err := TM.Transaction(func(store IDb) error {
 		// clears any relation with book id = 1
-		store.Delete(AUTHOR_BOOK).Where(AUTHOR_BOOK_C_BOOK_ID.Matches(1)).Execute()
+		store.Delete(AUTHOR_BOOK).Where(AUTHOR_BOOK_C_BOOK_ID.Matches(2)).Execute()
 
 		var book Book
-		book.Id = ext.Int64Ptr(1)
+		book.Id = ext.Int64Ptr(2)
 		book.Version = ext.Int64Ptr(1)
 		affectedRows, err := store.Delete(BOOK).Submit(book)
 		if err != nil {
 			return err
 		}
 		if affectedRows != 1 {
-			t.Fatal("The record was not updated")
+			t.Fatal("The record was not deleted")
 		}
 
 		return nil
@@ -1171,5 +1205,27 @@ func TestJoinTableDiscriminator(t *testing.T) {
 		if v.Id == nil {
 			t.Fatal("Expected a valid Id, but got nil")
 		}
+	}
+}
+
+func TestVirtualColumns(t *testing.T) {
+	ResetDB()
+
+	// get the database context
+	store := TM.Store()
+	// the target entity
+	var book = Book{}
+
+	query := store.Query(BOOK).
+		All().
+		Where(BOOK_C_ID.Matches(1))
+	// 'store' could be custom, setting this parameter in a centralized way
+	query.SetParameter("lang", LANG)
+
+	ok, err := query.SelectTo(&book)
+	if err != nil {
+		t.Fatalf("Failed TestVirtualColumns: %s", err)
+	} else if !ok || *book.Id != 1 || *book.Version != 1 || *book.Title != BOOK_LANG_TITLE {
+		t.Fatalf("The record for book with id 1, was not properly retrived. Retrived %s", (&book).String())
 	}
 }

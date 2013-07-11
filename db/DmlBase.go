@@ -182,9 +182,9 @@ func (this *DmlBase) inner(associations ...*Association) {
 	this.rawSQL = nil
 }
 
-func (this *DmlBase) join() {
+func (this *DmlBase) join(path []*PathElement) {
 	// resets path
-	this.joinTo("")
+	this.joinTo("", path)
 }
 
 /*
@@ -192,12 +192,12 @@ Indicates that the current association chain should be used to join only.
 A table end alias can also be supplied.
 This
 */
-func (this *DmlBase) joinTo(endAlias string) {
-	if len(this.path) > 0 {
-		this.addJoin(endAlias, this.path, false)
+func (this *DmlBase) joinTo(endAlias string, path []*PathElement) {
+	if len(path) > 0 {
+		this.addJoin(endAlias, path, false)
 
 		// the first position refers to constraints applied to the table, due to a association discriminator
-		pathCriterias := this.buildPathCriterias(this.path)
+		pathCriterias := this.buildPathCriterias(path)
 		var firstCriterias []*Criteria
 		// process the acumulated criterias
 		for index, pathCriteria := range pathCriterias {
@@ -218,19 +218,16 @@ func (this *DmlBase) joinTo(endAlias string) {
 							conds = append(tmp, firstCriterias...)
 							firstCriterias = nil
 						}
-						this.applyOn(this.path[:index], And(conds...))
+						this.applyOn(path[:index], And(conds...))
 					}
 				}
 
 				if pathCriteria.Columns != nil {
-					this.applyInclude(this.path[:index], pathCriteria.Columns...)
+					this.applyInclude(path[:index], pathCriteria.Columns...)
 				}
 			}
 		}
 	}
-	this.path = nil
-
-	this.rawSQL = nil
 }
 
 /*
@@ -336,7 +333,7 @@ func (this *DmlBase) addJoin(lastAlias string, associations []*PathElement, fetc
 			fks[f], _ = association.Clone().(*Association)
 
 			/*
-				processes the associations
+				Processes the associations.
 				The alias of the initial side (from) of the first associations
 				is assigned the value 'firstAlias' (main table value)
 				The alias of the final side of the last association is assigned the
@@ -486,10 +483,14 @@ func (this *DmlBase) applyInclude(chain []*PathElement, tokens ...Tokener) {
 func (this *DmlBase) joinVirtualColumns(token Tokener, previous []*PathElement) {
 	members := token.GetMembers()
 	if ch, ok := token.(*ColumnHolder); ok {
-		if ch.GetColumn().IsVirtual() {
+		var column = ch.GetColumn()
+		if column.IsVirtual() {
+			var associations []*PathElement
 			// sets the VIRTUAL table alias (it's the alias of the current table)
+			// it is used to match the result column to the struct field
 			if len(previous) > 0 {
 				ch.SetVirtualTableAlias(this.lastFkAlias)
+				associations = append(associations, previous...)
 			} else {
 				ch.SetVirtualTableAlias(this.tableAlias)
 			}
@@ -497,16 +498,15 @@ func (this *DmlBase) joinVirtualColumns(token Tokener, previous []*PathElement) 
 			join := this.lastJoin
 			fkAlias := this.lastFkAlias
 
-			discriminator := ch.GetColumn().GetVirtual().Association
-			var associations []*PathElement
-			associations = append(associations, previous...)
 			pe := new(PathElement)
-			pe.Base = discriminator
+			pe.Base = column.GetVirtual().Association
 			pe.Inner = false
 			associations = append(associations, pe)
 
-			this.addJoin("", associations, false)
+			this.joinTo("", associations)
+			//this.addJoin("", associations, false)
 
+			// this is used to generate the sql join
 			ch.SetTableAlias(this.lastFkAlias)
 
 			// reset

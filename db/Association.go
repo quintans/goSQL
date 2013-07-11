@@ -75,7 +75,7 @@ func NewAssociationCopy(fk *Association) *Association {
 	} else {
 		rels := make([]Relation, len(fk.relations))
 		for k, v := range fk.relations {
-			rels[k] = v // creates new copy
+			rels[k] = NewRelation(v.From.GetColumn(), v.To.GetColumn())
 		}
 		this.defineAssociation(false, fk.Alias, rels...)
 		this.discriminators = fk.discriminators
