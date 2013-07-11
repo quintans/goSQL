@@ -657,12 +657,6 @@ func (this *GenericTranslator) Init(overrider db.Translator) {
 		return RolloverParameter(dmlType, tx, m, " - ")
 	})
 
-	this.RegisterTranslation(db.TOKEN_SECONDSDIFF, func(dmlType db.DmlType, token db.Tokener, tx db.Translator) string {
-		m := token.GetMembers()
-		// swaped
-		return RolloverParameter(dmlType, tx, []db.Tokener{m[1], m[0]}, " - ")
-	})
-
 	this.RegisterTranslation(db.TOKEN_MULTIPLY, func(dmlType db.DmlType, token db.Tokener, tx db.Translator) string {
 		m := token.GetMembers()
 		return RolloverParameter(dmlType, tx, m, " * ")

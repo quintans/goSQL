@@ -32,23 +32,23 @@ func And(operations ...*Criteria) *Criteria {
 	return NewCriteria(TOKEN_AND, criteriasToInterface(operations)...)
 }
 
-func Greater(left interface{}, right interface{}) *Criteria {
+func Greater(left, right interface{}) *Criteria {
 	return NewCriteria(TOKEN_GT, left, right)
 }
 
-func GreaterOrMatch(left interface{}, right interface{}) *Criteria {
+func GreaterOrMatch(left, right interface{}) *Criteria {
 	return NewCriteria(TOKEN_GTEQ, left, right)
 }
 
-func Lesser(left interface{}, right interface{}) *Criteria {
+func Lesser(left, right interface{}) *Criteria {
 	return NewCriteria(TOKEN_LT, left, right)
 }
 
-func LesserOrMatch(left interface{}, right interface{}) *Criteria {
+func LesserOrMatch(left, right interface{}) *Criteria {
 	return NewCriteria(TOKEN_LTEQ, left, right)
 }
 
-func Matches(left interface{}, right interface{}) *Criteria {
+func Matches(left, right interface{}) *Criteria {
 	return NewCriteria(TOKEN_EQ, left, right)
 }
 
@@ -169,11 +169,6 @@ func Minus(values ...interface{}) Tokener {
 // the args can be Columns, Tokens, nil or primitives
 func Multiply(values ...interface{}) Tokener {
 	return NewToken(TOKEN_MULTIPLY, values...)
-}
-
-// the args can be Columns, Tokens, nil or primitives
-func SecondsDiff(values ...interface{}) Tokener {
-	return NewToken(TOKEN_SECONDSDIFF, values...)
 }
 
 func SubQuery(sq *Query) Tokener {

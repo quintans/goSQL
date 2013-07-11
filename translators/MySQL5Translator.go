@@ -10,7 +10,9 @@ type MySQL5Translator struct {
 	*GenericTranslator
 }
 
-func NewMySQL5Translator() db.Translator {
+var _ db.Translator = &MySQL5Translator{}
+
+func NewMySQL5Translator() *MySQL5Translator {
 	this := new(MySQL5Translator)
 	this.GenericTranslator = new(GenericTranslator)
 	this.Init(this)
@@ -35,8 +37,6 @@ func (this *MySQL5DeleteBuilder) From(table *db.Table, alias string) {
 	// Multiple-table syntax:
 	this.tablePart.AddAsOne(alias, " USING ", this.translator.TableName(table), " AS ", alias)
 }
-
-var _ db.Translator = &MySQL5Translator{}
 
 func (this *MySQL5Translator) GetAutoKeyStrategy() db.AutoKeyStrategy {
 	return db.AUTOKEY_AFTER

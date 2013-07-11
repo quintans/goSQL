@@ -120,13 +120,15 @@ func init() {
 		panic(err)
 	}
 
+	translator := trx.NewMySQL5Translator()
+	
 	// transaction manager	
 	TM = NewTransactionManager(
 		// database
 		mydb,
 		// database context factory
 		func(c dbx.IConnection) IDb {
-			return NewDb(c, trx.NewMySQL5Translator())
+			return NewDb(c, translator)
 		},
 		// statement cache
 		1000,
@@ -536,7 +538,6 @@ for e := publishers.Enumerator(); e.HasNext(); {
 #### Column Subquery
 
 For this example we will use the following struct which will hold the result for each row.
-Notice that the struct does not represent any table.
 
 ```go
 type Dto struct {
@@ -545,6 +546,8 @@ type Dto struct {
 	Value     float64
 }
 ```
+
+> The struct does not represent any table.
 
 The following query gets the name of the publisher and the sum of the prices of books for each publisher (using a subquery to sum), building the result as a slice of `Sale`.
 
@@ -566,7 +569,7 @@ store.Query(PUBLISHER).Alias("p").
 })
 ```
 
-Notice that when I use the subquery variable an alias with the value “Value” is defined. This alias matches with a struct field in `Dto`. In this query the TArtist.C_NAME column as no associated alias, so the default column alias is used.
+Notice that when I use the subquery variable an alias `"Value"` is defined. This alias matches with a struct field in `Dto`. In this query the TArtist.C_NAME column as no associated alias, so the default column alias is used.
 
 #### Where Subquery 
 
@@ -748,26 +751,124 @@ store.Query(STATUS).
 
 ### Virtual Columns
 
-Virtual columns are columns declared in a table but in reality they belong to another table. These tables are related by a one-to-one association, with constraints guaranteeing the one-to-one relationship.  
-**Virtual columns are only used by queries**.  
-The columns are intended to resolve the case where the column value depends on the environment. For example, internationalization, were the value of the column would depend on the language. Another application is the case where we would like to have different descriptions depending on the business client that accesses the data, for example, mobile or web.  
-Let’s use an internationalization example.
+**Virtual columns are only used by queries**.
 
+Virtual columns are columns declared in a table but in reality they belong to another table. These tables are expected to be related by a one-to-one association, with constraints guaranteeing the one-to-one relationship.  
+The columns are intended to resolve the case where the column value depends on the environment. For example, internationalization, were the value of the column would depend on the language. Another application is the case where we would like to have different descriptions depending on the business client that accesses the data, for example, mobile or web.  
+
+Let’s use the internationalization cenario.
+
+We must have a table to hold the internationalized columns, an association from the parent table to the new internationalized table, and a virtual column declaration.
+
+Putting that in place we have the following ER
+
+![ER Diagram for i18n](test/er3.png)
+
+> `BOOK_I18N` has all the columns of `BOOK` that are subject to internationalization, in this case `TITLE`.
+
+Besides the normal mapping of the table `BOOK_I18N`, as seen in [test/entities.go](#test/entities.go), we have the association from `BOOK` to `BOOK_I18N`
+
+```go
+BOOK_A_BOOK_I18N = BOOK.
+			ASSOCIATE(BOOK_C_ID).
+			TO(BOOK_I18N_C_BOOK_ID).
+			As("I18n").
+			With(BOOK_I18N_C_LANG, Param("lang"))
+```				
+
+> The `Param("lang")` defines a parameter set by the `store` implementation
+
+and the virtual column declaration in `BOOK`
+
+```go
+BOOK_C_TITLE = BOOK.VCOLUMN(BOOK_I18N_C_TITLE, BOOK_A_BOOK_I18N)
+```
+
+After all this is declared, all queries remain the same. When flushing the result of a query to a struct we only need a field that matches the alias, in this case a field with the name `Title`.
+
+```go
+var book = Book{} // the target entity that has the field 'Title'
+ok, err := store.Query(BOOK).
+	All().
+	Where(BOOK_C_ID.Matches(1)).
+	SelectTo(&book)
+```
 
 ### Custom Functions
 
-### Raw SQL
+The supplyied Translators do not have all possible functions of all the databases, but one can register quite easily any missing function or even a custom function.
+
+The following steps demonstrates how to add to the MySQL Translator, and use a function that computes the difference in seconds between two dates. 
+
+1. Define the token name
+
+	```go
+	const TOKEN_SECONDSDIFF = "SECONDSDIFF"
+	```
+
+2. Register the translation for the token
+
+	```go
+	translator.RegisterTranslation(
+		TOKEN_SECONDSDIFF,
+		func(dmlType DmlType, token Tokener, tx Translator) string {
+			m := token.GetMembers()
+			return fmt.Sprintf(
+				"TIME_TO_SEC(TIMEDIFF(%s, %s))",
+				tx.Translate(dmlType, m[0]),
+				tx.Translate(dmlType, m[1]),
+			)
+		},
+	)
+	```
+
+3. Wrap the token creation in a function for easy use
+	
+	```go
+	func SecondsDiff(left, right interface{}) Tokener {
+		return NewToken(TOKEN_SECONDSDIFF, left, right)
+	}
+	```
+
+Now we are ready to use the new created function, `SecondsDiff`.
 
 ```go
+books := make([]*Book, 0)
+store.Query(BOOK).
+	All().
+	Where(
+	Greater(
+		SecondsDiff(
+			time.Date(2013, time.July, 24, 0, 0, 0, 0, time.UTC),
+			BOOK_C_PUBLISHED,
+		),
+		1000,
+	),
+).
+	ListFor(func() interface{} {
+	book := new(Book)
+	books = append(books, book)
+	return book
+})
+```
+
+
+### Raw SQL
+
+It is possible to execute native SQL, as the next example demonstrates.
+
+```go
+// get the database connection
+dba := dbx.NewSimpleDBA(TM.Store().GetConnection())
 result := make([]string, 0)
-dba.QueryClosure("select col1 from tab1 where col2 = ?", func(rows *sql.Rows) error {
-	var col1 string
-	if err := rows.Scan(&col1); err != nil {
+dba.QueryClosure("select `name` from `book` where `name` like ?", func(rows *sql.Rows) error {
+	var name string
+	if err := rows.Scan(&name); err != nil {
 		return err
 	}
-	result = append(result, col1)
+	result = append(result, name)
 	return nil
-}, param1)
+}, "%book")
 ```
 
 # Credits
@@ -775,6 +876,5 @@ dba.QueryClosure("select col1 from tab1 where col2 = ?", func(rows *sql.Rows) er
 
 # TODO
 - Add more tests
-- Virtual Columns: Columns that physically exist in another columns
-- Test more RDBMS
+- Include more RDBMS
 - Fix code documentation

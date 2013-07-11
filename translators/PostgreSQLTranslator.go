@@ -13,7 +13,9 @@ type PostgreSQLTranslator struct {
 	*GenericTranslator
 }
 
-func NewPostgreSQLTranslator() db.Translator {
+var _ db.Translator = &PostgreSQLTranslator{}
+
+func NewPostgreSQLTranslator() *PostgreSQLTranslator {
 	this := new(PostgreSQLTranslator)
 	this.GenericTranslator = new(GenericTranslator)
 	this.Init(this)
@@ -23,8 +25,6 @@ func NewPostgreSQLTranslator() db.Translator {
 	this.DeleteProcessorFactory = func() DeleteProcessor { return NewDeleteBuilder(this) }
 	return this
 }
-
-var _ db.Translator = &PostgreSQLTranslator{}
 
 func (this *PostgreSQLTranslator) GetAutoKeyStrategy() db.AutoKeyStrategy {
 	return db.AUTOKEY_RETURNING

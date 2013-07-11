@@ -10,6 +10,7 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 
 	"database/sql"
+	"fmt"
 	"testing"
 	"time"
 )
@@ -34,6 +35,14 @@ func (this *MyDb) Query(table *Table) *Query {
 	return query
 }
 
+const TOKEN_SECONDSDIFF = "SECONDSDIFF"
+
+// SecondsDiff Token factory
+// first parameter is greater than the second
+func SecondsDiff(left, right interface{}) Tokener {
+	return NewToken(TOKEN_SECONDSDIFF, left, right)
+}
+
 func init() {
 	log.Register("/", log.DEBUG, log.NewConsoleAppender(false))
 
@@ -55,6 +64,23 @@ func init() {
 		panic(err)
 	}
 
+	translator := trx.NewMySQL5Translator()
+	/*
+		registering custom function.
+		A custom translator could be created instead.
+	*/
+	translator.RegisterTranslation(
+		TOKEN_SECONDSDIFF,
+		func(dmlType DmlType, token Tokener, tx Translator) string {
+			m := token.GetMembers()
+			return fmt.Sprintf(
+				"TIME_TO_SEC(TIMEDIFF(%s, %s))",
+				tx.Translate(dmlType, m[0]),
+				tx.Translate(dmlType, m[1]),
+			)
+		},
+	)
+
 	TM = NewTransactionManager(
 		// database
 		mydb,
@@ -63,7 +89,7 @@ func init() {
 			//return db.NewDb(c, trx.NewFirebirdSQLTranslator())
 			//return NewDb(c, trx.NewMySQL5Translator())
 
-			return NewMyDb(c, trx.NewMySQL5Translator(), "pt")
+			return NewMyDb(c, translator, "pt")
 		},
 		// statement cache
 		1000,
@@ -530,7 +556,7 @@ func TestSimpleDelete(t *testing.T) {
 
 		return nil
 	}); err != nil {
-		t.Fatalf("Failed with: %s", err)
+		t.Fatalf("Failed TestSimpleDelete: %s", err)
 	}
 }
 
@@ -1215,17 +1241,79 @@ func TestVirtualColumns(t *testing.T) {
 	store := TM.Store()
 	// the target entity
 	var book = Book{}
-
-	query := store.Query(BOOK).
+	ok, err := store.Query(BOOK).
 		All().
-		Where(BOOK_C_ID.Matches(1))
-	// 'store' could be custom, setting this parameter in a centralized way
-	query.SetParameter("lang", LANG)
-
-	ok, err := query.SelectTo(&book)
+		Where(BOOK_C_ID.Matches(1)).
+		SelectTo(&book)
 	if err != nil {
 		t.Fatalf("Failed TestVirtualColumns: %s", err)
 	} else if !ok || *book.Id != 1 || *book.Version != 1 || *book.Title != BOOK_LANG_TITLE {
 		t.Fatalf("The record for book with id 1, was not properly retrived. Retrived %s", (&book).String())
+	}
+}
+
+func TestCustomFunction(t *testing.T) {
+	ResetDB()
+
+	// get the database context
+	store := TM.Store()
+	books := make([]*Book, 0)
+	err := store.Query(BOOK).
+		All().
+		Where(
+		Greater(
+			SecondsDiff(
+				time.Date(2013, time.July, 24, 0, 0, 0, 0, time.UTC),
+				BOOK_C_PUBLISHED,
+			),
+			1000,
+		),
+	).
+		ListFor(func() interface{} {
+		book := new(Book)
+		books = append(books, book)
+		return book
+	})
+
+	if err != nil {
+		t.Fatalf("Failed TestCustomFunction: %s", err)
+	}
+
+	if len(books) != 2 {
+		t.Fatalf("Expected 2 Books, but got %v", len(books))
+	}
+
+	for k, v := range books {
+		logger.Debugf("books[%v] = %s", k, v.String())
+		if v.Id == nil {
+			t.Fatal("Expected a valid Id, but got nil")
+		}
+	}
+}
+
+func TestRawSQL(t *testing.T) {
+	ResetDB()
+
+	// get the database connection
+	dba := dbx.NewSimpleDBA(TM.Store().GetConnection())
+	result := make([]string, 0)
+	err := dba.QueryClosure("select `name` from `book` where `name` like ?", func(rows *sql.Rows) error {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return err
+		}
+		result = append(result, name)
+		return nil
+	}, "%book")
+
+	if err != nil {
+		t.Fatalf("Failed TestRawSQL: %s", err)
+	}
+
+	for k, v := range result {
+		logger.Debugf("books[%v] = %s", k, v)
+		if v == "" {
+			t.Fatal("Expected a valid Name, but got empty")
+		}
 	}
 }

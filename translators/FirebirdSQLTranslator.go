@@ -10,7 +10,9 @@ type FirebirdSQLTranslator struct {
 	*GenericTranslator
 }
 
-func NewFirebirdSQLTranslator() db.Translator {
+var _ db.Translator = &FirebirdSQLTranslator{}
+
+func NewFirebirdSQLTranslator() *FirebirdSQLTranslator {
 	this := new(FirebirdSQLTranslator)
 	this.GenericTranslator = new(GenericTranslator)
 	this.Init(this)
@@ -20,8 +22,6 @@ func NewFirebirdSQLTranslator() db.Translator {
 	this.DeleteProcessorFactory = func() DeleteProcessor { return NewDeleteBuilder(this) }
 	return this
 }
-
-var _ db.Translator = &FirebirdSQLTranslator{}
 
 func (this *FirebirdSQLTranslator) GetAutoKeyStrategy() db.AutoKeyStrategy {
 	return db.AUTOKEY_BEFORE

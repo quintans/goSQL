@@ -12,11 +12,13 @@ This is useful for columns that are internationalized. ex: BOOK [1]--[*] BOOK_I1
 */
 type VirtualColumn struct {
 	Association *Association // navigation to the table holding the REAL column
+	Column      *Column
 }
 
 func newVirtualColumn(column *Column, association *Association) *VirtualColumn {
 	vc := new(VirtualColumn)
 	vc.Association = association
+	vc.Column = column
 	return vc
 }
 
