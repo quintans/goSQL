@@ -3,7 +3,6 @@ package translators
 import (
 	"github.com/quintans/goSQL/db"
 	tk "github.com/quintans/toolkit"
-	coll "github.com/quintans/toolkit/collection"
 
 	"fmt"
 	"strconv"
@@ -24,17 +23,19 @@ type IJoiner interface {
 type QueryProcessor interface {
 	IJoiner
 
-	Column(tokens []db.Tokener)
-	From(table *db.Table, alias string)
-	FromSubQuery(query *db.Query, alias string)
-	Where(criteria *db.Criteria)
+	Column(query *db.Query)
+	From(query *db.Query)
+	FromSubQuery(query *db.Query)
+	Where(query *db.Query)
 	WherePart() string
-	Group(columns []db.Tokener)
-	Order(orders []*db.Order)
-	Union(unions []*db.Union)
+	Group(query *db.Query)
+	Having(query *db.Query)
+	Order(query *db.Query)
+	Union(query *db.Query)
 	ColumnPart() string
 	FromPart() string
 	GroupPart() string
+	HavingPart() string
 	OrderPart() string
 	UnionPart() string
 }
@@ -46,6 +47,7 @@ type QueryBuilder struct {
 	joinPart   *tk.StrBuffer
 	wherePart  *tk.Joiner
 	groupPart  *tk.Joiner
+	havingPart *tk.StrBuffer
 	orderPart  *tk.Joiner
 	unionPart  *tk.StrBuffer
 }
@@ -63,6 +65,7 @@ func (this *QueryBuilder) Super(translator db.Translator) {
 	this.joinPart = tk.NewStrBuffer()
 	this.wherePart = tk.NewJoiner(" AND ")
 	this.groupPart = tk.NewJoiner(", ")
+	this.havingPart = tk.NewStrBuffer()
 	this.orderPart = tk.NewJoiner(", ")
 	this.unionPart = tk.NewStrBuffer()
 
@@ -88,6 +91,10 @@ func (this *QueryBuilder) GroupPart() string {
 	return this.groupPart.String()
 }
 
+func (this *QueryBuilder) HavingPart() string {
+	return this.havingPart.String()
+}
+
 func (this *QueryBuilder) OrderPart() string {
 	return this.orderPart.String()
 }
@@ -96,8 +103,8 @@ func (this *QueryBuilder) UnionPart() string {
 	return this.unionPart.String()
 }
 
-func (this *QueryBuilder) Column(tokens []db.Tokener) {
-	for k, token := range tokens {
+func (this *QueryBuilder) Column(query *db.Query) {
+	for k, token := range query.Columns {
 		this.columnPart.Add(this.translator.Translate(db.QUERY, token))
 		a := this.translator.ColumnAlias(token, k+1)
 		if a != "" {
@@ -106,11 +113,15 @@ func (this *QueryBuilder) Column(tokens []db.Tokener) {
 	}
 }
 
-func (this *QueryBuilder) From(table *db.Table, alias string) {
+func (this *QueryBuilder) From(query *db.Query) {
+	table := query.GetTable()
+	alias := query.GetTableAlias()
 	this.fromPart.AddAsOne(this.translator.TableName(table), " ", alias)
 }
 
-func (this *QueryBuilder) FromSubQuery(subquery *db.Query, alias string) {
+func (this *QueryBuilder) FromSubQuery(query *db.Query) {
+	subquery := query.GetSubQuery()
+	alias := query.GetSubQueryAlias()
 	this.fromPart.AddAsOne("(", this.translator.GetSqlForQuery(subquery), ")")
 	if alias != "" {
 		this.fromPart.Append(" ", alias)
@@ -140,19 +151,30 @@ func (this *QueryBuilder) JoinCriteria(criteria *db.Criteria) {
 	this.joinPart.Add(" AND ", this.translator.Translate(db.QUERY, criteria))
 }
 
-func (this *QueryBuilder) Where(criteria *db.Criteria) {
+func (this *QueryBuilder) Where(query *db.Query) {
+	criteria := query.GetCriteria()
 	if criteria != nil {
 		this.wherePart.Add(this.translator.Translate(db.QUERY, criteria))
 	}
 }
 
-func (this *QueryBuilder) Group(columns []db.Tokener) {
-	for _, token := range columns {
-		this.groupPart.Add(this.translator.Translate(db.QUERY, token))
+func (this *QueryBuilder) Group(query *db.Query) {
+	groups := query.GetGroupByTokens()
+	for _, group := range groups {
+		//this.groupPart.Add(this.translator.ColumnAlias(group.Token, group.Position))
+		this.groupPart.Add(this.translator.Translate(db.QUERY, group.Token))
 	}
 }
 
-func (this *QueryBuilder) Order(orders []*db.Order) {
+func (this *QueryBuilder) Having(query *db.Query) {
+	having := query.GetHaving()
+	if having != nil {
+		this.havingPart.Add(this.translator.Translate(db.QUERY, having))
+	}
+}
+
+func (this *QueryBuilder) Order(query *db.Query) {
+	orders := query.GetOrders()
 	for _, ord := range orders {
 		if ord.GetHolder() != nil {
 			this.orderPart.Add(this.translator.Translate(db.QUERY, ord.GetHolder()))
@@ -168,7 +190,8 @@ func (this *QueryBuilder) Order(orders []*db.Order) {
 	}
 }
 
-func (this *QueryBuilder) Union(unions []*db.Union) {
+func (this *QueryBuilder) Union(query *db.Query) {
+	unions := query.GetUnions()
 	for _, u := range unions {
 		this.unionPart.Add(" UNION ")
 		if u.All {
@@ -185,11 +208,11 @@ func (this *QueryBuilder) Union(unions []*db.Union) {
  */
 
 type UpdateProcessor interface {
-	Column(values coll.Map, tableAlias string)
-	From(table *db.Table, alias string)
+	Column(update *db.Update)
+	From(update *db.Update)
 	ColumnPart() string
 	TablePart() string
-	Where(criteria *db.Criteria)
+	Where(update *db.Update)
 	WherePart() string
 }
 
@@ -226,7 +249,9 @@ func (this *UpdateBuilder) WherePart() string {
 	return this.wherePart.String()
 }
 
-func (this *UpdateBuilder) Column(values coll.Map, tableAlias string) {
+func (this *UpdateBuilder) Column(update *db.Update) {
+	values := update.GetValues()
+	tableAlias := update.GetTableAlias()
 	for it := values.Iterator(); it.HasNext(); {
 		entry := it.Next()
 		column := entry.Key.(*db.Column)
@@ -240,11 +265,14 @@ func (this *UpdateBuilder) Column(values coll.Map, tableAlias string) {
 	}
 }
 
-func (this *UpdateBuilder) From(table *db.Table, alias string) {
+func (this *UpdateBuilder) From(update *db.Update) {
+	table := update.GetTable()
+	alias := update.GetTableAlias()
 	this.tablePart.AddAsOne(this.translator.TableName(table), " ", alias)
 }
 
-func (this *UpdateBuilder) Where(criteria *db.Criteria) {
+func (this *UpdateBuilder) Where(update *db.Update) {
+	criteria := update.GetCriteria()
 	if criteria != nil {
 		this.wherePart.Add(this.translator.Translate(db.UPDATE, criteria))
 	}
@@ -257,9 +285,9 @@ func (this *UpdateBuilder) Where(criteria *db.Criteria) {
  */
 
 type DeleteProcessor interface {
-	From(table *db.Table, alias string)
+	From(del *db.Delete)
 	TablePart() string
-	Where(criteria *db.Criteria)
+	Where(del *db.Delete)
 	WherePart() string
 }
 
@@ -290,11 +318,14 @@ func (this *DeleteBuilder) WherePart() string {
 	return this.wherePart.String()
 }
 
-func (this *DeleteBuilder) From(table *db.Table, alias string) {
+func (this *DeleteBuilder) From(del *db.Delete) {
+	table := del.GetTable()
+	alias := del.GetTableAlias()
 	this.tablePart.AddAsOne(this.translator.TableName(table), " ", alias)
 }
 
-func (this *DeleteBuilder) Where(criteria *db.Criteria) {
+func (this *DeleteBuilder) Where(del *db.Delete) {
+	criteria := del.GetCriteria()
 	if criteria != nil {
 		this.wherePart.Add(this.translator.Translate(db.DELETE, criteria))
 	}
@@ -307,8 +338,8 @@ func (this *DeleteBuilder) Where(criteria *db.Criteria) {
  */
 
 type InsertProcessor interface {
-	Column(values coll.Map, parameters map[string]interface{})
-	From(table *db.Table, alias string)
+	Column(insert *db.Insert)
+	From(insert *db.Insert)
 	ColumnPart() string
 	ValuePart() string
 	TablePart() string
@@ -346,7 +377,9 @@ func (this *InsertBuilder) TablePart() string {
 	return this.tablePart.String()
 }
 
-func (this *InsertBuilder) Column(values coll.Map, parameters map[string]interface{}) {
+func (this *InsertBuilder) Column(insert *db.Insert) {
+	values := insert.GetValues()
+	parameters := insert.GetParameters()
 	var val string
 	for it := values.Iterator(); it.HasNext(); {
 		entry := it.Next()
@@ -377,7 +410,8 @@ func (this *InsertBuilder) Column(values coll.Map, parameters map[string]interfa
 	}
 }
 
-func (this *InsertBuilder) From(table *db.Table, alias string) {
+func (this *InsertBuilder) From(insert *db.Insert) {
+	table := insert.GetTable()
 	this.tablePart.Add(this.translator.TableName(table))
 }
 
@@ -431,6 +465,11 @@ func (this *GenericTranslator) Init(overrider db.Translator) {
 	this.RegisterTranslation(db.TOKEN_EQ, func(dmlType db.DmlType, token db.Tokener, tx db.Translator) string {
 		o := token.GetMembers()
 		return tx.Translate(dmlType, o[0]) + " = " + tx.Translate(dmlType, o[1])
+	})
+
+	// Match
+	this.RegisterTranslation(db.TOKEN_NULL, func(dmlType db.DmlType, token db.Tokener, tx db.Translator) string {
+		return "NULL"
 	})
 
 	// Val
@@ -719,8 +758,8 @@ func (this *GenericTranslator) PaginationColumnOffset(query *db.Query) int {
 // INSERT
 func (this *GenericTranslator) CreateInsertProcessor(insert *db.Insert) InsertProcessor {
 	proc := this.InsertProcessorFactory()
-	proc.Column(insert.GetValues(), insert.GetParameters())
-	proc.From(insert.GetTable(), insert.GetTableAlias())
+	proc.Column(insert)
+	proc.From(insert)
 	return proc
 }
 
@@ -746,9 +785,9 @@ func (this *GenericTranslator) GetAutoNumberQuery(column *db.Column) string {
 // UPDATE
 func (this *GenericTranslator) CreateUpdateProcessor(update *db.Update) UpdateProcessor {
 	proc := this.UpdateProcessorFactory()
-	proc.Column(update.GetValues(), update.GetTableAlias())
-	proc.From(update.GetTable(), update.GetTableAlias())
-	proc.Where(update.GetCriteria())
+	proc.Column(update)
+	proc.From(update)
+	proc.Where(update)
 	return proc
 }
 
@@ -772,8 +811,8 @@ func (this *GenericTranslator) GetSqlForUpdate(update *db.Update) string {
 // DELETE
 func (this *GenericTranslator) CreateDeleteProcessor(del *db.Delete) DeleteProcessor {
 	proc := this.DeleteProcessorFactory()
-	proc.From(del.GetTable(), del.GetTableAlias())
-	proc.Where(del.GetCriteria())
+	proc.From(del)
+	proc.Where(del)
 	return proc
 }
 
@@ -800,19 +839,20 @@ func (this *GenericTranslator) GetSqlForDelete(del *db.Delete) string {
 func (this *GenericTranslator) CreateQueryProcessor(query *db.Query) QueryProcessor {
 	proc := this.QueryProcessorFactory()
 
-	proc.Column(query.Columns)
+	proc.Column(query)
 	if query.GetTable() != nil {
-		proc.From(query.GetTable(), query.GetTableAlias())
+		proc.From(query)
 	} else {
-		proc.FromSubQuery(query.GetSubQuery(), query.GetSubQueryAlias())
+		proc.FromSubQuery(query)
 	}
-	proc.Where(query.GetCriteria())
+	proc.Where(query)
 	// it is after the where clause because the joins can go to the where clause,
 	// and this way the restrictions over the driving table will be applied first
 	AppendJoins(query.GetJoins(), proc)
-	proc.Group(query.GetGroupByColumns())
-	proc.Union(query.GetUnions())
-	proc.Order(query.GetOrders())
+	proc.Group(query)
+	proc.Having(query)
+	proc.Union(query)
+	proc.Order(query)
 
 	return proc
 }
@@ -836,9 +876,12 @@ func (this *GenericTranslator) GetSqlForQuery(query *db.Query) string {
 		sel.Add(" WHERE ", proc.WherePart())
 	}
 	// GROUP BY
-	cols := query.GetGroupByColumns() // is computed
-	if len(cols) != 0 {
+	if len(query.GetGroupBy()) != 0 {
 		sel.Add(" GROUP BY ", proc.GroupPart())
+	}
+	// HAVING
+	if query.GetHaving() != nil {
+		sel.Add(" HAVING ", proc.HavingPart())
 	}
 	// UNION
 	if len(query.GetUnions()) != 0 {

@@ -22,8 +22,8 @@ type EntityTransformerOverrider interface {
 type EntityTransformer struct {
 	Overrider              EntityTransformerOverrider
 	Query                  *Query
-	Factory                func() interface{}
-	Return                 bool
+	Factory                func() reflect.Value
+	Returner               reflect.Value
 	PaginationColumnOffset int
 	Properties             map[string]*EntityProperty
 	TemplateData           []interface{}
@@ -33,36 +33,38 @@ type EntityTransformer struct {
 var _ dbx.IRowTransformer = &EntityTransformer{}
 
 func NewEntityTransformer(query *Query, instance interface{}) *EntityTransformer {
-	var isPtr bool
-	typ := reflect.TypeOf(instance)
-	if typ.Kind() == reflect.Ptr {
-		isPtr = true
-		typ = typ.Elem()
-	}
-	// used as super by extenders
-	this := NewEntityFactoryTransformer(query, func() interface{} {
-		if isPtr {
-			return reflect.New(typ).Interface()
-		}
-		return reflect.Zero(typ).Interface()
-	})
-	this.Return = true
-	return this
+	return NewEntityFactoryTransformer(query, reflect.TypeOf(instance), reflect.Value{})
 }
 
-func NewEntityFactoryTransformer(query *Query, factory func() interface{}) *EntityTransformer {
+func NewEntityFactoryTransformer(query *Query, typ reflect.Type, returner reflect.Value) *EntityTransformer {
 	this := new(EntityTransformer)
 	this.Overrider = this
 
 	// used as super by extenders
-	this.Super(query, factory)
+	this.Super(query, createFactory(typ), returner)
 
 	return this
 }
 
-func (this *EntityTransformer) Super(query *Query, factory func() interface{}) {
+func createFactory(typ reflect.Type) func() reflect.Value {
+	var isPtr bool
+	if typ.Kind() == reflect.Ptr {
+		isPtr = true
+		typ = typ.Elem()
+	}
+
+	return func() reflect.Value {
+		if isPtr {
+			return reflect.New(typ)
+		}
+		return reflect.Zero(typ)
+	}
+}
+
+func (this *EntityTransformer) Super(query *Query, factory func() reflect.Value, returner reflect.Value) {
 	this.Query = query
 	this.Factory = factory
+	this.Returner = returner
 
 	this.PaginationColumnOffset = query.GetDb().GetTranslator().PaginationColumnOffset(query)
 }
@@ -127,8 +129,8 @@ func (this *EntityTransformer) AfterAll(result coll.Collection) {
 }
 
 func (this *EntityTransformer) Transform(rows *sql.Rows) (interface{}, error) {
-	instance := this.Factory()
-	val := reflect.ValueOf(instance)
+	val := this.Factory()
+	instance := val.Interface()
 
 	if this.Properties == nil {
 		this.Properties = this.Overrider.PopulateMapping("", val.Type())
@@ -164,10 +166,12 @@ func (this *EntityTransformer) Transform(rows *sql.Rows) (interface{}, error) {
 		return nil, err
 	}
 
-	if this.Return {
+	if this.Returner.Kind() == reflect.Invalid {
 		if H, isH := instance.(tk.Hasher); isH {
 			return H, nil
 		}
+	} else {
+		this.Returner.Call([]reflect.Value{val})
 	}
 
 	return nil, nil

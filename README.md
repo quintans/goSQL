@@ -7,7 +7,7 @@ a ORM like library in Go's (golang) that makes it easy to use SQL.
 
 (English is not my native language so please bear with me)
 
-goSQL aims to facilitate the convertion between database tables and structs and make easy
+**goSQL** aims to facilitate the convertion between database tables and structs and make easy
 the use of complex joins. 
 It has no intention of hiding the SQL from the developer and a closer idiom to SQL is also part of the library.  
 Structs can be used as a representation of a table record for CRUD operations but there is no direct dependency between a struct and a table. It is the field of a struct that is matched with the column alias of SQL statement to build a result. 
@@ -455,17 +455,14 @@ err := store.Query(PUBLISHER).
 
 #### ListFor
 
-Executes a query where the target entity is created by a supplied factory closure.
-Supplying the entity at the start, avoid us of having to cast the result from a generic result, as we see later.
+Executes a query, with the target entity being determined by the receiving type of the function.
 
 ```go
 books := make([]*Book, 0) // mandatory use pointers
 err := store.Query(BOOK).
 	All().
-	ListFor(func() interface{} {
-	book := new(Book)
+	ListFor(func(book *Book) {
 	books = append(books, book)
-	return book
 })
 ```
 
@@ -506,10 +503,8 @@ store.Query(PUBLISHER).
 	Outer(PUBLISHER_A_BOOKS).
 	Fetch(). // add all columns off book in the query
 	Where(PUBLISHER_C_ID.Matches(2)).
-	ListFlatTreeFor(func() interface{} {
-	publisher := new(Publisher)
+	ListFlatTreeFor(func(publisher *Publisher) {
 	publishers = append(publishers, publisher)
-	return publisher
 })
 ```
 
@@ -562,10 +557,8 @@ var dtos = make([]*Dto, 0)
 store.Query(PUBLISHER).Alias("p").
 	Column(PUBLISHER_C_NAME).
 	Column(subquery).As("Value").
-	ListFor(func() interface{} {
-	dto := new(Dto)
+	ListFor(func(dto *Dto) {
 	dtos = append(dtos, dto)
-	return dto
 })
 ```
 
@@ -592,10 +585,8 @@ store.Query(PUBLISHER).
 	Include(BOOK_C_PRICE).As("Value").
 	Join().
 	Where(PUBLISHER_C_ID.In(subquery)).
-	ListFor(func() interface{} {
-	dto := new(Dto)
+	ListFor(func(dto *Dto) {
 	dtos = append(dtos, dto)
-	return dto
 })
 ```
 
@@ -616,10 +607,8 @@ store.Query(PUBLISHER).
 	Inner(PUBLISHER_A_BOOKS).
 	On(BOOK_C_PUBLISHED.Lesser(time.Date(2013, time.January, 1, 0, 0, 0, 0, time.UTC))).
 	Join().
-	ListFor(func() interface{} {
-	publisher := new(Publisher)
+	ListFor(func(publisher *Publisher) {
 	publishers = append(publishers, publisher)
-	return publisher
 })
 ```
 
@@ -647,11 +636,36 @@ store.Query(PUBLISHER).
 	IncludeToken(Sum(BOOK_C_PRICE)).As("Value").
 	Join().
 	GroupByPos(1).
-	ListFor(func() interface{} {
-	dto := new(Dto)
+	ListFor(func(dto *Dto) {
 	dtos = append(dtos, dto)
-	return dto
 })
+```
+
+### Having
+
+The criteria used in the `Having` clause must refer to columns of the `Query`. This reference is achieved using the columns alias.  
+To demonstrate this I will use the following struct which will hold the result for each row.
+
+```go
+type PublisherSales struct {
+	Name         string
+	ThisYear     float64
+	PreviousYear float64
+}
+```
+
+```go
+sales := make([]*PublisherSales, 0)
+store.Query(PUBLISHER).
+	Column(PUBLISHER_C_NAME).
+	Outer(PUBLISHER_A_BOOKS).
+	Include(Sum(BOOK_C_PRICE)).As("ThisYear").
+	Join().
+	GroupByPos(1).
+	Having(Alias("ThisYear").Greater(30)).
+	ListFor(func(sale *PublisherSales) {
+	sales = append(sales, sale)
+}) 
 ```
 
 ### Order By
@@ -664,10 +678,8 @@ store.Query(PUBLISHER).
 	All().
 	OrderBy(PUBLISHER_C_NAME).
 	Asc(true).
-	ListFor(func() interface{} {
-	publisher := new(Publisher)
+	ListFor(func(publisher *Publisher) {
 	publishers = append(publishers, publisher)
-	return publisher
 })
 ```
 
@@ -675,6 +687,62 @@ It is possible to add more orders, and even to order by columns belonging to oth
 
 
 ### Union
+
+This example list all `Publishers` and shows side by side the sales of this year and the previous year.
+The function used in `ListFor` is responsible for agregating the result.
+
+```go
+sales := make([]*PublisherSales, 0)
+store.Query(PUBLISHER).
+	Column(PUBLISHER_C_ID).
+	Column(PUBLISHER_C_NAME).
+	Outer(PUBLISHER_A_BOOKS).
+	Include(Sum(Coalesce(BOOK_C_PRICE, 0))).As("ThisYear").
+	On(
+	Range(
+		BOOK_C_PUBLISHED,
+		time.Date(2013, time.January, 01, 0, 0, 0, 0, time.UTC),
+		time.Date(2013, time.December, 31, 23, 59, 59, 1e9-1, time.UTC),
+	),
+).
+	Join().
+	Column(AsIs(0)).As("PreviousYear").
+	GroupByPos(1).
+	UnionAll(
+	store.Query(PUBLISHER).Alias("u").
+		Column(PUBLISHER_C_ID).
+		Column(PUBLISHER_C_NAME).
+		Outer(PUBLISHER_A_BOOKS).
+		Column(AsIs(0)).As("ThisYear").
+		Include(Sum(Coalesce(BOOK_C_PRICE, 0))).As("PreviousYear").
+		On(
+		Range(
+			BOOK_C_PUBLISHED,
+			time.Date(2012, time.January, 01, 0, 0, 0, 0, time.UTC),
+			time.Date(2012, time.December, 31, 23, 59, 59, 1e9-1, time.UTC),
+		),
+	).
+		Join().
+		GroupByPos(1),
+).
+	ListFor(func(sale *PublisherSales) {
+	found := false
+	for _, v := range sales {
+		if sale.Id == v.Id {
+			v.ThisYear += sale.ThisYear
+			v.PreviousYear += sale.PreviousYear
+			found = true
+			break
+		}
+	}
+	if !found {
+		sales = append(sales, sale)
+	}
+})
+```
+
+> The alias in the second query is necessary to avoid overlaping replaced parameters between the two queries
+
 
 ### Pagination
 
@@ -689,10 +757,8 @@ store.Query(PUBLISHER).
 	Order(PUBLISHER_C_NAME).Asc(true).
 	Skip(2).  // skip the first 2 records
 	Limit(3). // returns next 3 records
-	ListFlatTreeFor(func() interface{} {
-	publisher := new(Publisher)
+	ListFlatTreeFor(func(publisher *Publisher) {
 	publishers = append(publishers, publisher)
-	return publisher
 })
 ```
 
@@ -741,10 +807,8 @@ The creation script and table definitions for the next example are at [test/tabl
 statuses := make([]*Status, 0)
 store.Query(STATUS).
 	All().
-	ListFor(func() interface{} {
-	status := new(Status)
+	ListFor(func(status *Status) {
 	statuses = append(statuses, status)
-	return status
 })
 ```
 
@@ -825,7 +889,7 @@ The following steps demonstrates how to add to the MySQL Translator, and use a f
 3. Wrap the token creation in a function for easy use
 	
 	```go
-	func SecondsDiff(left, right interface{}) Tokener {
+	func SecondsDiff(left, right interface{}) *Token {
 		return NewToken(TOKEN_SECONDSDIFF, left, right)
 	}
 	```
@@ -837,18 +901,14 @@ books := make([]*Book, 0)
 store.Query(BOOK).
 	All().
 	Where(
-	Greater(
-		SecondsDiff(
-			time.Date(2013, time.July, 24, 0, 0, 0, 0, time.UTC),
-			BOOK_C_PUBLISHED,
-		),
-		1000,
-	),
+	SecondsDiff(
+		time.Date(2013, time.July, 24, 0, 0, 0, 0, time.UTC),
+		BOOK_C_PUBLISHED,
+	).
+		Greater(1000),
 ).
-	ListFor(func() interface{} {
-	book := new(Book)
+	ListFor(func(book *Book) {
 	books = append(books, book)
-	return book
 })
 ```
 

@@ -8,8 +8,14 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"reflect"
 	"time"
 )
+
+type Group struct {
+	Position int
+	Token    Tokener
+}
 
 const OFFSET_PARAM = "OFFSET_PARAM"
 const LIMIT_PARAM = "LIMIT_PARAM"
@@ -26,6 +32,7 @@ type Query struct {
 	unions []*Union
 	// saves position of columnHolder
 	groupBy   []int
+	having    *Criteria
 	skip      int64
 	limit     int64
 	lastToken Tokener
@@ -168,7 +175,7 @@ func (this *Query) ColumnsReset() {
 }
 
 func (this *Query) Column(column interface{}) *Query {
-	this.lastToken = tokenizeOne(column)
+	this.lastToken, _ = tokenizeOne(column)
 	this.replaceRaw(this.lastToken)
 
 	// TODO: implement virtual columns
@@ -412,14 +419,18 @@ func (this *Query) JoinTo(endAlias string) *Query {
 }
 
 /*
- adds columns refering the last defined association
+ adds tokens refering the last defined association
 */
-func (this *Query) Include(columns ...*Column) *Query {
+func (this *Query) Include(columns ...interface{}) *Query {
 	if len(this.path) > 0 {
+		var isNew bool
 		// create tokens from the columns
 		tokens := make([]Tokener, len(columns), len(columns))
 		for k, c := range columns {
-			this.lastToken = NewColumnHolder(c)
+			this.lastToken, isNew = tokenizeOne(c)
+			if !isNew {
+				this.lastToken = this.lastToken.Clone().(Tokener)
+			}
 			tokens[k] = this.lastToken
 		}
 		// append the tokens to prevously added tokens
@@ -434,31 +445,6 @@ func (this *Query) Include(columns ...*Column) *Query {
 	} else {
 		panic("There is no current join")
 	}
-	return this
-}
-
-// adds a token refering the last defined association
-//
-// param function
-// return
-func (this *Query) IncludeToken(tokens ...Tokener) *Query {
-	if len(this.path) > 0 {
-		tokens2 := make([]Tokener, len(tokens), len(tokens))
-		for k, v := range tokens {
-			this.lastToken = v.Clone().(Tokener)
-			tokens2[k] = this.lastToken
-		}
-		// append the tokens to prevously added tokens
-		toks := this.path[len(this.path)-1].Columns
-		if toks == nil {
-			toks = make([]Tokener, 0)
-		}
-		this.path[len(this.path)-1].Columns = append(toks, tokens2...)
-		this.Columns = append(this.Columns, tokens2...)
-
-		this.rawSQL = nil
-	}
-
 	return this
 }
 
@@ -586,16 +572,17 @@ func (this *Query) GetGroupBy() []int {
 	return this.groupBy
 }
 
-func (this *Query) GetGroupByColumns() []Tokener {
-	var tokens []Tokener
+func (this *Query) GetGroupByTokens() []Group {
+	var groups []Group
 	length := len(this.groupBy)
 	if length > 0 {
-		tokens = make([]Tokener, length)
+		groups = make([]Group, length)
 		for k, idx := range this.groupBy {
-			tokens[k] = this.Columns[idx-1]
+			groups[k].Position = idx - 1
+			groups[k].Token = this.Columns[idx-1]
 		}
 	}
-	return tokens
+	return groups
 }
 
 func (this *Query) GroupBy(cols ...*Column) *Query {
@@ -656,6 +643,51 @@ func (this *Query) GroupByAs(aliases ...string) *Query {
 	}
 
 	return this
+}
+
+/*
+Adds a Having clause to the query.
+The tokens are not processed. You will have to explicitly set all table alias.
+*/
+func (this *Query) Having(having ...*Criteria) *Query {
+	if len(having) > 0 {
+		this.having = And(having...)
+		this.replaceAlias(this.having)
+	}
+
+	return this
+}
+
+func (this *Query) GetHaving() *Criteria {
+	return this.having
+}
+
+// replaces ALIAS with the respective select parcel
+func (this *Query) replaceAlias(token Tokener) {
+	members := token.GetMembers()
+	if token.GetOperator() == TOKEN_ALIAS {
+		alias := token.GetValue().(string)
+		for _, v := range this.Columns {
+			// full copies the matching
+			if v.GetAlias() == alias {
+				token.SetAlias(alias)
+				token.SetMembers(v.GetMembers()...)
+				token.SetOperator(v.GetOperator())
+				token.SetTableAlias(v.GetTableAlias())
+				token.SetValue(v.GetValue())
+				break
+			}
+		}
+		return
+	} else {
+		if members != nil {
+			for _, t := range members {
+				if t != nil {
+					this.replaceAlias(t)
+				}
+			}
+		}
+	}
 }
 
 // ======== RETRIVE ==============
@@ -754,15 +786,40 @@ func (this *Query) ListOf(instance interface{}) (coll.Collection, error) {
 }
 
 /*
-Executes a query, with the target entity instance being provided by the factory function.
-The function is also responsible for building the result.
+Executes a query, with the target entity being determined by the receiving type of the function.
+The function is responsible for building the result.
+The argument must be a function with the signature func(<*Struct>).
 This method does not create a tree of related instances.
 
 Since there is no return collection, this can be used also for non-toolkit.Hasher entities.
 */
-func (this *Query) ListFor(factory func() interface{}) error {
-	_, err := this.List(NewEntityFactoryTransformer(this, factory))
+func (this *Query) ListFor(collector interface{}) error {
+	funcValue, typ := checkCollector(collector)
+
+	_, err := this.List(NewEntityFactoryTransformer(this, typ, funcValue))
 	return err
+}
+
+func checkCollector(collector interface{}) (reflect.Value, reflect.Type) {
+	var typ reflect.Type
+	funcValue := reflect.ValueOf(collector)
+	functype := funcValue.Type()
+	bad := true
+	if functype.NumIn() == 1 {
+		typ = functype.In(0)
+		if typ.Kind() == reflect.Struct || typ.Kind() == reflect.Ptr && typ.Elem().Kind() == reflect.Struct {
+			bad = false
+		}
+	}
+
+	if functype.NumOut() != 0 {
+		bad = true
+	}
+	if bad {
+		panic(fmt.Sprintf("Expected a function with the signature func(<struct>). got %s", functype.String()))
+	}
+
+	return funcValue, typ
 }
 
 /*
@@ -785,10 +842,14 @@ func (this *Query) ListFlatTreeOf(instance interface{}) (coll.Collection, error)
 
 /*
 Same as ListFlatTreeOf, except that the responsability of building the result
-is delegated to the factory function.
+is delegated to the passed function.
+The argument must be a function with the signature func(<*Struct>).
+See also ListFor.
 */
-func (this *Query) ListFlatTreeFor(factory func() interface{}) error {
-	_, err := this.List(NewEntityTreeFactoryTransformer(this, factory))
+func (this *Query) ListFlatTreeFor(collector interface{}) error {
+	funcValue, typ := checkCollector(collector)
+
+	_, err := this.List(NewEntityTreeFactoryTransformer(this, typ, funcValue))
 	return err
 }
 

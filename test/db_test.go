@@ -39,7 +39,7 @@ const TOKEN_SECONDSDIFF = "SECONDSDIFF"
 
 // SecondsDiff Token factory
 // first parameter is greater than the second
-func SecondsDiff(left, right interface{}) Tokener {
+func SecondsDiff(left, right interface{}) *Token {
 	return NewToken(TOKEN_SECONDSDIFF, left, right)
 }
 
@@ -155,7 +155,7 @@ func ResetDB() {
 		// insert book
 		insert = DB.Insert(BOOK).
 			Columns(BOOK_C_ID, BOOK_C_VERSION, BOOK_C_NAME, BOOK_C_PRICE, BOOK_C_PUBLISHED, BOOK_C_PUBLISHER_ID).
-			Values(1, 1, "Once Upon a Time...", 34.5, time.Date(2009, time.November, 10, 0, 0, 0, 0, time.UTC), 1)
+			Values(1, 1, "Once Upon a Time...", 34.5, time.Date(2012, time.November, 10, 0, 0, 0, 0, time.UTC), 1)
 		_, err = insert.Execute()
 		if err != nil {
 			return err
@@ -653,10 +653,8 @@ func TestListFor(t *testing.T) {
 	books := make([]*Book, 0) // mandatory use pointers
 	err := store.Query(BOOK).
 		All().
-		ListFor(func() interface{} {
-		book := new(Book)
+		ListFor(func(book *Book) {
 		books = append(books, book)
-		return book
 	})
 	if err != nil {
 		t.Fatalf("Failed ListFor Test: %s", err)
@@ -706,10 +704,8 @@ func TestListFlatTreeFor(t *testing.T) {
 		Outer(PUBLISHER_A_BOOKS).
 		Fetch(). // add all columns off book in the query
 		Where(PUBLISHER_C_ID.Matches(2)).
-		ListFlatTreeFor(func() interface{} {
-		publisher := new(Publisher)
+		ListFlatTreeFor(func(publisher *Publisher) {
 		publishers = append(publishers, publisher)
-		return publisher
 	})
 	if err != nil {
 		t.Fatalf("%s", err)
@@ -790,10 +786,8 @@ func TestColumnSubquery(t *testing.T) {
 	err := store.Query(PUBLISHER).Alias("p").
 		Column(PUBLISHER_C_NAME).
 		Column(subquery).As("Value").
-		ListFor(func() interface{} {
-		dto := new(Dto)
+		ListFor(func(dto *Dto) {
 		dtos = append(dtos, dto)
-		return dto
 	})
 
 	if err != nil {
@@ -828,10 +822,8 @@ func TestWhereSubquery(t *testing.T) {
 		Include(BOOK_C_PRICE).As("Value").
 		Join().
 		Where(PUBLISHER_C_ID.In(subquery)).
-		ListFor(func() interface{} {
-		dto := new(Dto)
+		ListFor(func(dto *Dto) {
 		dtos = append(dtos, dto)
-		return dto
 	})
 
 	if err != nil {
@@ -859,10 +851,8 @@ func TestInnerOn(t *testing.T) {
 		Inner(PUBLISHER_A_BOOKS).
 		On(BOOK_C_PUBLISHED.Lesser(time.Date(2013, time.January, 1, 0, 0, 0, 0, time.UTC))).
 		Join().
-		ListFor(func() interface{} {
-		publisher := new(Publisher)
+		ListFor(func(publisher *Publisher) {
 		publishers = append(publishers, publisher)
-		return publisher
 	})
 
 	if err != nil {
@@ -900,10 +890,8 @@ func TestInnerOn2(t *testing.T) {
 		Inner(BOOK_A_AUTHORS).
 		On(AUTHOR_C_NAME.Like("%Doe")).
 		Join().
-		ListFor(func() interface{} {
-		publisher := new(Publisher)
+		ListFor(func(publisher *Publisher) {
 		publishers = append(publishers, publisher)
-		return publisher
 	})
 
 	if err != nil {
@@ -983,13 +971,11 @@ func TestGroupBy(t *testing.T) {
 	err := store.Query(PUBLISHER).
 		Column(PUBLISHER_C_NAME).
 		Outer(PUBLISHER_A_BOOKS).
-		IncludeToken(Sum(BOOK_C_PRICE)).As("Value").
+		Include(Sum(BOOK_C_PRICE)).As("Value").
 		Join().
 		GroupByPos(1).
-		ListFor(func() interface{} {
-		dto := new(Dto)
+		ListFor(func(dto *Dto) {
 		dtos = append(dtos, dto)
-		return dto
 	})
 
 	if err != nil {
@@ -1014,10 +1000,8 @@ func TestOrderBy(t *testing.T) {
 		All().
 		OrderBy(PUBLISHER_C_NAME).
 		Asc(true).
-		ListFor(func() interface{} {
-		publisher := new(Publisher)
+		ListFor(func(publisher *Publisher) {
 		publishers = append(publishers, publisher)
-		return publisher
 	})
 
 	if err != nil {
@@ -1048,10 +1032,8 @@ func TestPagination(t *testing.T) {
 		Order(PUBLISHER_C_NAME).Asc(true).
 		Skip(2).  // skip the first 2 records
 		Limit(3). // returns next 3 records
-		ListFlatTreeFor(func() interface{} {
-		publisher := new(Publisher)
+		ListFlatTreeFor(func(publisher *Publisher) {
 		publishers = append(publishers, publisher)
-		return publisher
 	})
 
 	if err != nil {
@@ -1149,10 +1131,8 @@ func TestTableDiscriminator(t *testing.T) {
 	statuses := make([]*Status, 0)
 	err := store.Query(STATUS).
 		All().
-		ListFor(func() interface{} {
-		status := new(Status)
+		ListFor(func(status *Status) {
 		statuses = append(statuses, status)
-		return status
 	})
 
 	if err != nil {
@@ -1212,10 +1192,8 @@ func TestJoinTableDiscriminator(t *testing.T) {
 		All().
 		Outer(PROJECT_A_STATUS).
 		Fetch().
-		ListFlatTreeFor(func() interface{} {
-		project := new(Project)
+		ListFlatTreeFor(func(project *Project) {
 		result = append(result, project)
-		return project
 	})
 
 	if err != nil {
@@ -1261,18 +1239,14 @@ func TestCustomFunction(t *testing.T) {
 	err := store.Query(BOOK).
 		All().
 		Where(
-		Greater(
-			SecondsDiff(
-				time.Date(2013, time.July, 24, 0, 0, 0, 0, time.UTC),
-				BOOK_C_PUBLISHED,
-			),
-			1000,
-		),
+		SecondsDiff(
+			time.Date(2013, time.July, 24, 0, 0, 0, 0, time.UTC),
+			BOOK_C_PUBLISHED,
+		).
+			Greater(1000),
 	).
-		ListFor(func() interface{} {
-		book := new(Book)
+		ListFor(func(book *Book) {
 		books = append(books, book)
-		return book
 	})
 
 	if err != nil {
@@ -1316,4 +1290,97 @@ func TestRawSQL(t *testing.T) {
 			t.Fatal("Expected a valid Name, but got empty")
 		}
 	}
+}
+
+func TestHaving(t *testing.T) {
+	ResetDB()
+
+	// get the database context
+	store := TM.Store()
+	sales := make([]*PublisherSales, 0)
+	err := store.Query(PUBLISHER).
+		Column(PUBLISHER_C_NAME).
+		Outer(PUBLISHER_A_BOOKS).
+		Include(Sum(BOOK_C_PRICE)).As("ThisYear").
+		Join().
+		GroupByPos(1).
+		Having(Alias("ThisYear").Greater(30)).
+		ListFor(func(sale *PublisherSales) {
+		sales = append(sales, sale)
+	})
+
+	if err != nil {
+		t.Fatalf("Failed TestHaving: %s", err)
+	}
+
+	if len(sales) != 1 {
+		t.Fatalf("Expected 1 PublisherSales, but got %v", len(sales))
+	}
+
+	for k, v := range sales {
+		logger.Debugf("sales[%v] = %s", k, v.String())
+	}
+}
+
+func TestUnion(t *testing.T) {
+	ResetDB()
+
+	// get the database context
+	store := TM.Store()
+	sales := make([]*PublisherSales, 0)
+	err := store.Query(PUBLISHER).
+		Column(PUBLISHER_C_ID).
+		Column(PUBLISHER_C_NAME).
+		Outer(PUBLISHER_A_BOOKS).
+		Include(Sum(Coalesce(BOOK_C_PRICE, 0))).As("ThisYear").
+		On(
+		Range(
+			BOOK_C_PUBLISHED,
+			time.Date(2013, time.January, 01, 0, 0, 0, 0, time.UTC),
+			time.Date(2013, time.December, 31, 23, 59, 59, 1e9-1, time.UTC),
+		),
+	).
+		Join().
+		Column(AsIs(0)).As("PreviousYear").
+		GroupByPos(1).
+		UnionAll(
+		store.Query(PUBLISHER).Alias("u").
+			Column(PUBLISHER_C_ID).
+			Column(PUBLISHER_C_NAME).
+			Outer(PUBLISHER_A_BOOKS).
+			Column(AsIs(0)).As("ThisYear").
+			Include(Sum(Coalesce(BOOK_C_PRICE, 0))).As("PreviousYear").
+			On(
+			Range(
+				BOOK_C_PUBLISHED,
+				time.Date(2012, time.January, 01, 0, 0, 0, 0, time.UTC),
+				time.Date(2012, time.December, 31, 23, 59, 59, 1e9-1, time.UTC),
+			),
+		).
+			Join().
+			GroupByPos(1),
+	).
+		ListFor(func(sale *PublisherSales) {
+		found := false
+		for _, v := range sales {
+			if sale.Id == v.Id {
+				v.ThisYear += sale.ThisYear
+				v.PreviousYear += sale.PreviousYear
+				found = true
+				break
+			}
+		}
+		if !found {
+			sales = append(sales, sale)
+		}
+	})
+
+	if err != nil {
+		t.Fatalf("Failed TestUnion: %s", err)
+	}
+
+	for k, v := range sales {
+		logger.Debugf("sales[%v] = %s", k, v.String())
+	}
+
 }

@@ -3,6 +3,8 @@ package translators
 import (
 	"github.com/quintans/goSQL/db"
 	tk "github.com/quintans/toolkit"
+
+	"fmt"
 	"strings"
 )
 
@@ -20,7 +22,17 @@ func NewMySQL5Translator() *MySQL5Translator {
 	this.InsertProcessorFactory = func() InsertProcessor { return NewInsertBuilder(this) }
 	this.UpdateProcessorFactory = func() UpdateProcessor { return NewPgUpdateBuilder(this) }
 	this.DeleteProcessorFactory = func() DeleteProcessor { return NewMySQL5DeleteBuilder(this) }
+
+	this.resgisterTranslations()
+
 	return this
+}
+
+func (this *MySQL5Translator) resgisterTranslations() {
+	this.RegisterTranslation(db.TOKEN_COALESCE, func(dmlType db.DmlType, token db.Tokener, tx db.Translator) string {
+		m := token.GetMembers()
+		return fmt.Sprintf("COALESCE(%s)", RolloverParameter(dmlType, tx, m, ", "))
+	})
 }
 
 func NewMySQL5DeleteBuilder(translator db.Translator) *MySQL5DeleteBuilder {
@@ -33,7 +45,9 @@ type MySQL5DeleteBuilder struct {
 	DeleteBuilder
 }
 
-func (this *MySQL5DeleteBuilder) From(table *db.Table, alias string) {
+func (this *MySQL5DeleteBuilder) From(del *db.Delete) {
+	table := del.GetTable()
+	alias := del.GetTableAlias()
 	// Multiple-table syntax:
 	this.tablePart.AddAsOne(alias, " USING ", this.translator.TableName(table), " AS ", alias)
 }

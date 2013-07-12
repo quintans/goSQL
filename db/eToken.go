@@ -31,6 +31,7 @@ var TOKEN_NOT = "NOT"
 
 // FUNCTIONS
 var TOKEN_PARAM = "PARAM" // parameter
+var TOKEN_NULL = "NULL"   // sets a predefined value
 var TOKEN_RAW = "RAW"     // sets a predefined value
 var TOKEN_ASIS = "VAL"    // value is injected to the SQL as is.
 var TOKEN_ALIAS = "ALIAS"
@@ -49,3 +50,5 @@ var TOKEN_ADD = "ADD"
 var TOKEN_MINUS = "MINUS"
 
 var TOKEN_SUBQUERY = "SUBQUERY"
+
+var TOKEN_COALESCE = "COALESCE"

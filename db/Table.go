@@ -111,7 +111,8 @@ func (this *Table) With(column string, value interface{}) *Table {
 	if this.discriminators == nil {
 		this.discriminators = make([]Discriminator, 0)
 	}
-	discriminator := NewDiscriminator(this.COLUMN(column), tokenizeOne(value))
+	token, _ := tokenizeOne(value)
+	discriminator := NewDiscriminator(this.COLUMN(column), token)
 	this.discriminators = append(this.discriminators, discriminator)
 	return this
 }

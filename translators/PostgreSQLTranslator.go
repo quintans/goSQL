@@ -3,7 +3,6 @@ package translators
 import (
 	"github.com/quintans/goSQL/db"
 	tk "github.com/quintans/toolkit"
-	coll "github.com/quintans/toolkit/collection"
 
 	"strconv"
 	"strings"
@@ -71,7 +70,8 @@ func NewPgUpdateBuilder(translator db.Translator) *PgUpdateBuilder {
 	return this
 }
 
-func (this *PgUpdateBuilder) Column(values coll.Map, tableAlias string) {
+func (this *PgUpdateBuilder) Column(update *db.Update) {
+	values := update.GetValues()
 	for it := values.Iterator(); it.HasNext(); {
 		entry := it.Next()
 		column := entry.Key.(*db.Column)

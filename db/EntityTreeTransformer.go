@@ -23,33 +23,21 @@ type EntityTreeTransformer struct {
 }
 
 func NewEntityTreeTransformer(query *Query, reuse bool, instance interface{}) *EntityTreeTransformer {
-	var isPtr bool
-	typ := reflect.TypeOf(instance)
-	if typ.Kind() == reflect.Ptr {
-		isPtr = true
-		typ = typ.Elem()
-	}
-	this := NewEntityTreeFactoryTransformer(query, func() interface{} {
-		if isPtr {
-			return reflect.New(typ).Interface()
-		}
-		return reflect.Zero(typ).Interface()
-	})
+	this := NewEntityTreeFactoryTransformer(query, reflect.TypeOf(instance), reflect.Value{})
 	this.reuse = reuse
 	if reuse {
 		this.entities = coll.NewHashMap()
 	}
 
-	this.Return = true
 	return this
 }
 
 // since the creation of the list is managed outside the reue flag is set to false
-func NewEntityTreeFactoryTransformer(query *Query, factory func() interface{}) *EntityTreeTransformer {
+func NewEntityTreeFactoryTransformer(query *Query, typ reflect.Type, returner reflect.Value) *EntityTreeTransformer {
 	this := new(EntityTreeTransformer)
 	this.Overrider = this
 
-	this.Super(query, factory)
+	this.Super(query, createFactory(typ), returner)
 	this.cachedEntityMappings = make(map[string]map[string]*EntityProperty)
 
 	return this
@@ -78,8 +66,8 @@ func (this *EntityTreeTransformer) AfterAll(result coll.Collection) {
 }
 
 func (this *EntityTreeTransformer) Transform(rows *sql.Rows) (interface{}, error) {
-	instance := this.Factory()
-	val := reflect.ValueOf(instance)
+	val := this.Factory()
+	instance := val.Interface()
 
 	alias := this.Query.GetTableAlias()
 	if this.TemplateData == nil {
@@ -119,10 +107,12 @@ func (this *EntityTreeTransformer) Transform(rows *sql.Rows) (interface{}, error
 		return nil, err
 	}
 
-	if this.Return {
+	if this.Returner.Kind() == reflect.Invalid {
 		if H, isH := instance.(tk.Hasher); isH {
 			return H, nil
 		}
+	} else {
+		this.Returner.Call([]reflect.Value{val})
 	}
 
 	return nil, nil

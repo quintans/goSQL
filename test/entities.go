@@ -14,6 +14,23 @@ type Dto struct {
 	Value     float64
 }
 
+type PublisherSales struct {
+	Id           int64
+	Name         string
+	ThisYear     float64
+	PreviousYear float64
+}
+
+func (this *PublisherSales) String() string {
+	sb := tk.NewStrBuffer()
+	sb.Add("{Id: ", this.Id)
+	sb.Add(", Name: ", this.Name)
+	sb.Add(", ThisYear: ", this.ThisYear)
+	sb.Add(", PreviousYear: ", this.PreviousYear)
+	sb.Add("}")
+	return sb.String()
+}
+
 // since entities can be at the left outer join side, every field SHOULD be a pointer
 type EntityBase struct {
 	Id      *int64

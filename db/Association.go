@@ -161,7 +161,8 @@ func (this *Association) With(column *Column, value interface{}) *Association {
 	}
 
 	this.discriminatorTable = column.GetTable()
-	discriminator := NewDiscriminator(column, tokenizeOne(value))
+	token, _ := tokenizeOne(value)
+	discriminator := NewDiscriminator(column, token)
 	this.discriminators = append(this.discriminators, discriminator)
 	return this
 }

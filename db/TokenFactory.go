@@ -108,70 +108,74 @@ func Not(token interface{}) *Criteria {
 }
 
 // FUNCTION =======================
-func Param(str string) Tokener {
+func Param(str string) *Token {
 	return NewEndToken(TOKEN_PARAM, str) // RAW info
 }
 
-func Raw(o interface{}) Tokener {
+func Null() *Token {
+	return NewEndToken(TOKEN_NULL, nil)
+}
+
+func Raw(o interface{}) *Token {
 	return NewEndToken(TOKEN_RAW, o) // RAW info
 }
 
-func AsIs(o interface{}) Tokener {
+func AsIs(o interface{}) *Token {
 	return NewEndToken(TOKEN_ASIS, o) // AS IS info
 }
 
-func As(s string) Tokener {
+func Alias(s string) *Token {
 	return NewEndToken(TOKEN_ALIAS, s)
 }
 
-func Sum(token interface{}) Tokener {
+func Sum(token interface{}) *Token {
 	return NewToken(TOKEN_SUM, token)
 }
 
-func Max(token interface{}) Tokener {
+func Max(token interface{}) *Token {
 	return NewToken(TOKEN_MAX, token)
 }
 
-func Min(token interface{}) Tokener {
+func Min(token interface{}) *Token {
 	return NewToken(TOKEN_MIN, token)
 }
 
-func Upper(token interface{}) Tokener {
+func Upper(token interface{}) *Token {
 	return NewToken(TOKEN_UPPER, token)
 }
 
-func Lower(token interface{}) Tokener {
+func Lower(token interface{}) *Token {
 	return NewToken(TOKEN_LOWER, token)
 }
 
 // pass nil to ignore column
-func Count(column *Column) Tokener {
+func Count(column *Column) *Token {
 	if column == nil {
 		return NewEndToken(TOKEN_COUNT, nil)
 	}
 	return NewToken(TOKEN_COUNT_COLUMN, NewColumnHolder(column))
 }
 
-func Rtrim(token interface{}) Tokener {
+func Rtrim(token interface{}) *Token {
 	return NewToken(TOKEN_RTRIM, token)
 }
 
 // the args can be Columns, Tokens, nil or primitives
-func Add(values ...interface{}) Tokener {
+func Add(values ...interface{}) *Token {
 	return NewToken(TOKEN_ADD, values...)
 }
 
 // the args can be Columns, Tokens, nil or primitives
-func Minus(values ...interface{}) Tokener {
+func Minus(values ...interface{}) *Token {
 	return NewToken(TOKEN_MINUS, values...)
 }
 
 // the args can be Columns, Tokens, nil or primitives
-func Multiply(values ...interface{}) Tokener {
+func Multiply(values ...interface{}) *Token {
 	return NewToken(TOKEN_MULTIPLY, values...)
 }
 
-func SubQuery(sq *Query) Tokener {
+func SubQuery(sq *Query) *Token {
 	return NewEndToken(TOKEN_SUBQUERY, sq)
 }
 
@@ -180,3 +184,7 @@ func SubQuery(sq *Query) Tokener {
 		return NewToken(TOKEN_AUTONUM, NewColumnHolder(o));
 	}
 */
+
+func Coalesce(values ...interface{}) *Token {
+	return NewToken(TOKEN_COALESCE, values...)
+}

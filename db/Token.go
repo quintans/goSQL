@@ -7,27 +7,32 @@ import (
 
 var _ tk.Base = &Token{}
 
-func tokenizeOne(v interface{}) Tokener {
+/*
+Converts the interface to a token.
+Returns the token and if the convertion was performed
+*/
+func tokenizeOne(v interface{}) (Tokener, bool) {
 	var token Tokener
+	var isNew bool
 	switch t := v.(type) {
 	case *Column:
-		token = NewColumnHolder(t)
+		token, isNew = NewColumnHolder(t), true
 	case Tokener:
-		token = t
+		token, isNew = t, false
 	case *Criteria:
-		token = t
+		token, isNew = t, false
 	case *Query:
-		token = SubQuery(t)
+		token, isNew = SubQuery(t), true
 	default:
-		token = Raw(t)
+		token, isNew = Raw(t), true
 	}
-	return token
+	return token, isNew
 }
 
 func tokenizeAll(values []interface{}) []Tokener {
 	tokens := make([]Tokener, len(values))
 	for k, v := range values {
-		tokens[k] = tokenizeOne(v)
+		tokens[k], _ = tokenizeOne(v)
 	}
 	return tokens
 }
@@ -40,7 +45,7 @@ type Tokener interface {
 	SetAlias(alias string)
 	SetTableAlias(tableAlias string)
 	GetTableAlias() string
-	IsNull() bool
+	IsNil() bool
 	GetMembers() []Tokener
 	SetMembers(members ...Tokener)
 	SetValue(value interface{})
@@ -62,7 +67,9 @@ var _ Tokener = &Token{}
 func NewToken(operator string, members ...interface{}) *Token {
 	this := new(Token)
 	this.Operator = operator
-	this.Members = tokenizeAll(members)
+	if members != nil {
+		this.Members = tokenizeAll(members)
+	}
 	return this
 }
 
@@ -105,7 +112,7 @@ func (this *Token) GetTableAlias() string {
 	return ""
 }
 
-func (this *Token) IsNull() bool {
+func (this *Token) IsNil() bool {
 	return this.Members == nil && ext.IsNil(this.Value)
 }
 
@@ -169,11 +176,7 @@ func (this *Token) Clone() interface{} {
 
 func (this *Token) Equals(o interface{}) bool {
 	switch t := o.(type) { //type switch
-	case Token:
-		if this.Equals(t) {
-			return true
-		}
-
+	case *Token:
 		if this.Operator == t.Operator &&
 			this.Alias == t.Alias && this.matchMembers(t.Members) {
 			return true
@@ -206,4 +209,44 @@ func (this *Token) HashCode() int {
 	}
 
 	return this.hash
+}
+
+func (this *Token) Greater(value interface{}) *Criteria {
+	return Greater(this, value)
+}
+
+func (this *Token) GreaterOrMatch(value interface{}) *Criteria {
+	return GreaterOrMatch(this, value)
+}
+
+func (this *Token) Lesser(value interface{}) *Criteria {
+	return Lesser(this, value)
+}
+
+func (this *Token) LesserOrMatch(value interface{}) *Criteria {
+	return LesserOrMatch(this, value)
+}
+
+func (this *Token) Matches(value interface{}) *Criteria {
+	return Matches(this, value)
+}
+
+func (this *Token) IMatches(value interface{}) *Criteria {
+	return IMatches(this, value)
+}
+
+func (this *Token) Like(right interface{}) *Criteria {
+	return Like(this, right)
+}
+
+func (this *Token) ILike(right interface{}) *Criteria {
+	return ILike(this, right)
+}
+
+func (this *Token) Different(value interface{}) *Criteria {
+	return Different(this, value)
+}
+
+func (this *Token) IsNull() *Criteria {
+	return IsNull(this)
 }

@@ -167,6 +167,7 @@ func (this *Column) GetVirtual() *VirtualColumn {
 }
 
 // CONDITION ===========================
+
 func (this *Column) Greater(value interface{}) *Criteria {
 	return Greater(this, value)
 }

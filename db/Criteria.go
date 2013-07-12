@@ -1,9 +1,5 @@
 package db
 
-import (
-	tk "github.com/quintans/toolkit"
-)
-
 /*
  * Criteria
  */
@@ -25,22 +21,34 @@ func (this *Criteria) Not() *Criteria {
 	return this
 }
 
-func (this *Criteria) GetLeft() tk.Base {
-	if this.Members != nil && len(this.Members) > 0 {
-		return this.Members[0].(tk.Base)
+func (this *Criteria) GetLeft() Tokener {
+	if len(this.Members) > 0 {
+		return this.Members[0]
 	}
 	return nil
 }
 
-func (this *Criteria) GetRight() tk.Base {
-	if this.Members != nil && len(this.Members) > 1 {
-		return this.Members[1].(tk.Base)
+func (this *Criteria) GetRight() Tokener {
+	if len(this.Members) > 1 {
+		return this.Members[1]
 	}
 	return nil
+}
+
+func (this *Criteria) SetLeft(left interface{}) {
+	if len(this.Members) > 0 {
+		this.Members[0], _ = tokenizeOne(left)
+	}
+}
+
+func (this *Criteria) SetRight(right interface{}) {
+	if len(this.Members) > 1 {
+		this.Members[1], _ = tokenizeOne(right)
+	}
 }
 
 func (this *Criteria) Clone() interface{} {
-	c := NewCriteria(this.Operator, nil)
+	c := NewCriteria(this.Operator)
 	c.Token = this.Token.Clone().(*Token)
 
 	if this.IsNot {
