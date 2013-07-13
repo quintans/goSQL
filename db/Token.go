@@ -60,6 +60,8 @@ type Token struct {
 	Value    interface{}
 	Alias    string
 	hash     int
+
+	tableAlias string
 }
 
 var _ Tokener = &Token{}
@@ -98,6 +100,7 @@ func (this *Token) SetAlias(alias string) {
 
 // Propagates table alias
 func (this *Token) SetTableAlias(tableAlias string) {
+	this.tableAlias = tableAlias
 	if this.Members != nil {
 		for _, o := range this.Members {
 			// it may contains others. ex: param("foo")
@@ -109,7 +112,7 @@ func (this *Token) SetTableAlias(tableAlias string) {
 }
 
 func (this *Token) GetTableAlias() string {
-	return ""
+	return this.tableAlias
 }
 
 func (this *Token) IsNil() bool {

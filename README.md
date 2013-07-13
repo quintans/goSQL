@@ -53,11 +53,20 @@ store.Update(PUBLISHER).Submit(publisher)
  - Result Pagination
  - Extensible
 
+
+## Tested Databases
+ - MariaDB 5.5
+ - PostgreSQL 9.2
+ - FirebirdSQL 2.5
+
+
 ## Instalation
 
 `go get github.com/quintans/toolkit`
 
 `go get github.com/quintans/goSQL`
+
+
 
 ## Startup Guide
 

@@ -56,7 +56,7 @@ func (this *Insert) ReturnId(returnId bool) *Insert {
 
 func (this *Insert) Set(col *Column, value interface{}) *Insert {
 	this.DmlCore.set(col, value)
-	if col.GetTable().GetSingleKeyColumn() != nil && col.IsKey() {
+	if this.GetTable().GetSingleKeyColumn() != nil && col.IsKey() {
 		this.HasKeyValue = (value != nil)
 	}
 	return this
@@ -171,14 +171,14 @@ func (this *Insert) Execute() (int64, error) {
 	var lastId int64
 	var now time.Time
 	strategy := this.db.GetTranslator().GetAutoKeyStrategy()
+	singleKeyColumn := this.table.GetSingleKeyColumn()
 	switch strategy {
 	case AUTOKEY_BEFORE:
-		if this.returnId && !this.HasKeyValue {
-			column := this.table.GetSingleKeyColumn()
-			if lastId, err = this.getAutoNumber(column); err != nil {
+		if this.returnId && !this.HasKeyValue && singleKeyColumn != nil {
+			if lastId, err = this.getAutoNumber(singleKeyColumn); err != nil {
 				return 0, err
 			}
-			this.Set(column, lastId)
+			this.Set(singleKeyColumn, lastId)
 		}
 		rsql := this.getCachedSql()
 		this.debugSQL(rsql.OriSql)
@@ -189,7 +189,7 @@ func (this *Insert) Execute() (int64, error) {
 		rsql := this.getCachedSql()
 		this.debugSQL(rsql.OriSql)
 		now = time.Now()
-		if this.HasKeyValue {
+		if this.HasKeyValue || singleKeyColumn == nil {
 			_, err = this.dba.Insert(rsql.Sql, rsql.BuildValues(this.parameters)...)
 		} else {
 			params := rsql.BuildValues(this.parameters)
@@ -202,8 +202,8 @@ func (this *Insert) Execute() (int64, error) {
 		now = time.Now()
 		_, err = this.dba.Insert(rsql.Sql, rsql.BuildValues(this.parameters)...)
 		this.debugTime(now)
-		if this.returnId && !this.HasKeyValue {
-			if lastId, err = this.getAutoNumber(this.table.GetSingleKeyColumn()); err != nil {
+		if this.returnId && !this.HasKeyValue && singleKeyColumn != nil {
+			if lastId, err = this.getAutoNumber(singleKeyColumn); err != nil {
 				return 0, err
 			}
 		}

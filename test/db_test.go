@@ -7,7 +7,9 @@ import (
 	"github.com/quintans/toolkit/ext"
 	"github.com/quintans/toolkit/log"
 
+	_ "bitbucket.org/miquella/mgodbc" // float64 was fixed acording to issue #5
 	_ "github.com/go-sql-driver/mysql"
+	_ "github.com/lib/pq"
 
 	"database/sql"
 	"fmt"
@@ -42,10 +44,14 @@ func SecondsDiff(left, right interface{}) *Token {
 }
 
 func init() {
-	log.Register("/", log.INFO, log.NewConsoleAppender(false))
+	log.Register("/", log.DEBUG, log.NewConsoleAppender(false))
 }
 
-func InitMySQL5() ITransactionManager {
+var RAW_SQL string
+
+func InitMySQL5() (ITransactionManager, *sql.DB) {
+	RAW_SQL = "SELECT `name` FROM `book` WHERE `name` LIKE ?"
+
 	translator := trx.NewMySQL5Translator()
 	/*
 		registering custom function.
@@ -66,7 +72,45 @@ func InitMySQL5() ITransactionManager {
 	return InitDB("mysql", "root:root@/ezsql?parseTime=true", translator)
 }
 
-func InitDB(driverName, dataSourceName string, translator Translator) ITransactionManager {
+func InitPostgreSQL() (ITransactionManager, *sql.DB) {
+	RAW_SQL = "SELECT name FROM book WHERE name LIKE $1"
+
+	translator := trx.NewPostgreSQLTranslator()
+	translator.RegisterTranslation(
+		TOKEN_SECONDSDIFF,
+		func(dmlType DmlType, token Tokener, tx Translator) string {
+			m := token.GetMembers()
+			return fmt.Sprintf(
+				"EXTRACT(EPOCH FROM (%s - %s))",
+				tx.Translate(dmlType, m[0]),
+				tx.Translate(dmlType, m[1]),
+			)
+		},
+	)
+
+	return InitDB("postgres", "dbname=postgres user=postgres password=postgres sslmode=disable", translator)
+}
+
+func InitFirebirdSQL() (ITransactionManager, *sql.DB) {
+	RAW_SQL = "SELECT name FROM book WHERE name LIKE ?"
+
+	translator := trx.NewFirebirdSQLTranslator()
+	translator.RegisterTranslation(
+		TOKEN_SECONDSDIFF,
+		func(dmlType DmlType, token Tokener, tx Translator) string {
+			m := token.GetMembers()
+			return fmt.Sprintf(
+				"DATEDIFF(SECOND, %s, %s)",
+				tx.Translate(dmlType, m[1]),
+				tx.Translate(dmlType, m[0]),
+			)
+		},
+	)
+
+	return InitDB("mgodbc", "dsn=FirebirdEZSQL;uid=SYSDBA;pwd=masterkey", translator)
+}
+
+func InitDB(driverName, dataSourceName string, translator Translator) (ITransactionManager, *sql.DB) {
 	mydb, err := sql.Open(driverName, dataSourceName)
 	if err != nil {
 		panic(err)
@@ -89,7 +133,7 @@ func InitDB(driverName, dataSourceName string, translator Translator) ITransacti
 		},
 		// statement cache
 		1000,
-	)
+	), mydb
 }
 
 const (
@@ -99,7 +143,17 @@ const (
 )
 
 func TestAll(t *testing.T) {
-	RunAll(InitMySQL5(), t)
+	tm, theDB := InitFirebirdSQL()
+	RunAll(tm, t)
+	theDB.Close()
+
+	tm, theDB = InitPostgreSQL()
+	RunAll(tm, t)
+	theDB.Close()
+
+	tm, theDB = InitMySQL5()
+	RunAll(tm, t)
+	theDB.Close()
 }
 
 func RunAll(TM ITransactionManager, t *testing.T) {
@@ -437,6 +491,9 @@ func RunInsertReturningKey(TM ITransactionManager, t *testing.T) {
 			t.Fatal("The Auto Insert Key for a null ID column was not retrived")
 		}
 
+		logger.Debugf("The Auto Insert Key for a null ID column was %v", key)
+
+		key = 0
 		// now without declaring the ID column
 		key, err = store.Insert(PUBLISHER).
 			Columns(PUBLISHER_C_VERSION, PUBLISHER_C_NAME).
@@ -449,6 +506,8 @@ func RunInsertReturningKey(TM ITransactionManager, t *testing.T) {
 		if key == 0 {
 			t.Fatal("The Auto Insert Key for a absent ID column was not retrived")
 		}
+
+		logger.Debugf("The Auto Insert Key for a absent ID column was %v", key)
 
 		return nil
 	}); err != nil {
@@ -1296,7 +1355,7 @@ func RunRawSQL(TM ITransactionManager, t *testing.T) {
 	// get the database connection
 	dba := dbx.NewSimpleDBA(TM.Store().GetConnection())
 	result := make([]string, 0)
-	err := dba.QueryClosure("select `name` from `book` where `name` like ?", func(rows *sql.Rows) error {
+	err := dba.QueryClosure(RAW_SQL, func(rows *sql.Rows) error {
 		var name string
 		if err := rows.Scan(&name); err != nil {
 			return err
@@ -1367,7 +1426,7 @@ func RunUnion(TM ITransactionManager, t *testing.T) {
 	).
 		Join().
 		Column(AsIs(0)).As("PreviousYear").
-		GroupByPos(1).
+		GroupByPos(1, 2).
 		UnionAll(
 		store.Query(PUBLISHER).Alias("u").
 			Column(PUBLISHER_C_ID).
@@ -1383,9 +1442,10 @@ func RunUnion(TM ITransactionManager, t *testing.T) {
 			),
 		).
 			Join().
-			GroupByPos(1),
+			GroupByPos(1, 2),
 	).
 		ListFor(func(sale *PublisherSales) {
+		logger.Debugf("sales = %s", sale.String())
 		found := false
 		for _, v := range sales {
 			if sale.Id == v.Id {

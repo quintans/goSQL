@@ -4,7 +4,6 @@ import (
 	"github.com/quintans/goSQL/db"
 	tk "github.com/quintans/toolkit"
 
-	"fmt"
 	"strings"
 )
 
@@ -20,19 +19,10 @@ func NewMySQL5Translator() *MySQL5Translator {
 	this.Init(this)
 	this.QueryProcessorFactory = func() QueryProcessor { return NewQueryBuilder(this) }
 	this.InsertProcessorFactory = func() InsertProcessor { return NewInsertBuilder(this) }
-	this.UpdateProcessorFactory = func() UpdateProcessor { return NewPgUpdateBuilder(this) }
+	this.UpdateProcessorFactory = func() UpdateProcessor { return NewUpdateBuilder(this) }
 	this.DeleteProcessorFactory = func() DeleteProcessor { return NewMySQL5DeleteBuilder(this) }
 
-	this.resgisterTranslations()
-
 	return this
-}
-
-func (this *MySQL5Translator) resgisterTranslations() {
-	this.RegisterTranslation(db.TOKEN_COALESCE, func(dmlType db.DmlType, token db.Tokener, tx db.Translator) string {
-		m := token.GetMembers()
-		return fmt.Sprintf("COALESCE(%s)", RolloverParameter(dmlType, tx, m, ", "))
-	})
 }
 
 func NewMySQL5DeleteBuilder(translator db.Translator) *MySQL5DeleteBuilder {

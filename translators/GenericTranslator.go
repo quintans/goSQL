@@ -720,6 +720,12 @@ func (this *GenericTranslator) Init(overrider db.Translator) {
 		query := v.(*db.Query)
 		return fmt.Sprintf("( %s )", this.GetSqlForQuery(query))
 	})
+
+	this.RegisterTranslation(db.TOKEN_COALESCE, func(dmlType db.DmlType, token db.Tokener, tx db.Translator) string {
+		m := token.GetMembers()
+		return fmt.Sprintf("COALESCE(%s)", RolloverParameter(dmlType, tx, m, ", "))
+	})
+
 }
 
 func (this *GenericTranslator) RegisterTranslation(name string, handler func(dmlType db.DmlType, token db.Tokener, tx db.Translator) string) {
@@ -971,6 +977,9 @@ func (this *GenericTranslator) ColumnAlias(token db.Tokener, position int) strin
 		} else if db.TOKEN_ALIAS != token.GetOperator() {
 			alias = "COL_" + strconv.Itoa(position)
 		}
+	} else {
+		//alias += "_" + strconv.Itoa(position) // avoids collision with reserved words
+		alias = token.GetTableAlias() + "_" + alias
 	}
 
 	return alias

@@ -41,9 +41,10 @@ func (this *PostgreSQLTranslator) GetSqlForInsert(insert *db.Insert) string {
 	// only ONE numeric id is allowed
 	// if no value was defined for the key, it is assumed an auto number,
 	// otherwise is a guid (or something else)
-	if !insert.HasKeyValue {
+	singleKeyColumn := insert.GetTable().GetSingleKeyColumn()
+	if !insert.HasKeyValue && singleKeyColumn != nil {
 		str := tk.NewStrBuffer()
-		str.Add(sql, " RETURNING ", this.overrider.ColumnName(insert.GetTable().GetSingleKeyColumn()))
+		str.Add(sql, " RETURNING ", this.overrider.ColumnName(singleKeyColumn))
 		sql = str.String()
 	}
 
@@ -85,7 +86,6 @@ func (this *PgUpdateBuilder) Column(update *db.Update) {
 	}
 }
 
-// TODO: implement PaginateSQL
 func (this *PostgreSQLTranslator) PaginateSQL(query *db.Query, sql string) string {
 	sb := tk.NewStrBuffer()
 	if query.GetLimit() > 0 {
