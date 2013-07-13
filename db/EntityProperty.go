@@ -1,7 +1,6 @@
 package db
 
 import (
-	"fmt"
 	"reflect"
 )
 
@@ -24,7 +23,6 @@ func (this *EntityProperty) IsMany() bool {
 func (this *EntityProperty) Set(instance reflect.Value, value reflect.Value) {
 	// do not set nil values
 	if value.Kind() != reflect.Ptr || !value.IsNil() {
-		fmt.Println("===> instance:", instance.String())
 		if instance.Kind() == reflect.Ptr {
 			instance = instance.Elem()
 		}

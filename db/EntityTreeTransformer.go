@@ -87,10 +87,6 @@ func (this *EntityTreeTransformer) Transform(rows *sql.Rows) (interface{}, error
 
 		// instanciate all target types
 		this.InitFullRowData(this.TemplateData, val.Type(), alias)
-		//for _, v := range this.TemplateData {
-		//	fmt.Printf("%T; ", v)
-		//}
-		fmt.Println("")
 		this.crawler.Rewind()
 	}
 	// makes a copy

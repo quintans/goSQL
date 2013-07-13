@@ -15,8 +15,6 @@ import (
 	"time"
 )
 
-var TM ITransactionManager
-
 var logger = log.LoggerFor("github.com/quintans/goSQL/test")
 
 // custom Db - for setting default parameters
@@ -44,26 +42,10 @@ func SecondsDiff(left, right interface{}) *Token {
 }
 
 func init() {
-	log.Register("/", log.DEBUG, log.NewConsoleAppender(false))
+	log.Register("/", log.INFO, log.NewConsoleAppender(false))
+}
 
-	/*
-	 * =======================
-	 * BEGIN DATABASE CONFIG
-	 * =======================
-	 */
-	// database configuration
-
-	mydb, err := sql.Open("mysql", "root:root@/ezsql?parseTime=true")
-	if err != nil {
-		panic(err)
-	}
-
-	// wake up the database pool
-	err = mydb.Ping()
-	if err != nil {
-		panic(err)
-	}
-
+func InitMySQL5() ITransactionManager {
 	translator := trx.NewMySQL5Translator()
 	/*
 		registering custom function.
@@ -81,24 +63,33 @@ func init() {
 		},
 	)
 
-	TM = NewTransactionManager(
+	return InitDB("mysql", "root:root@/ezsql?parseTime=true", translator)
+}
+
+func InitDB(driverName, dataSourceName string, translator Translator) ITransactionManager {
+	mydb, err := sql.Open(driverName, dataSourceName)
+	if err != nil {
+		panic(err)
+	}
+
+	// wake up the database pool
+	err = mydb.Ping()
+	if err != nil {
+		panic(err)
+	}
+
+	return NewTransactionManager(
 		// database
 		mydb,
 		// databse context factory
 		func(c dbx.IConnection) IDb {
 			//return db.NewDb(c, trx.NewFirebirdSQLTranslator())
 			//return NewDb(c, trx.NewMySQL5Translator())
-
 			return NewMyDb(c, translator, "pt")
 		},
 		// statement cache
 		1000,
 	)
-	/*
-	 * =======================
-	 * END DATABASE CONFIG
-	 * =======================
-	 */
 }
 
 const (
@@ -107,7 +98,47 @@ const (
 	BOOK_LANG_TITLE     = "Era uma vez..."
 )
 
-func ResetDB() {
+func TestAll(t *testing.T) {
+	RunAll(InitMySQL5(), t)
+}
+
+func RunAll(TM ITransactionManager, t *testing.T) {
+	RunSelectUTF8(TM, t)
+	RunInsertReturningKey(TM, t)
+	RunInsertStructReturningKey(TM, t)
+	RunSimpleUpdate(TM, t)
+	RunStructUpdate(TM, t)
+	RunUpdateSubquery(TM, t)
+	RunSimpleDelete(TM, t)
+	RunStructDelete(TM, t)
+	RunSelectInto(TM, t)
+	RunSelectTreeTo(TM, t)
+	RunSelectTree(TM, t)
+	RunListFor(TM, t)
+	RunListOf(TM, t)
+	RunListFlatTreeFor(TM, t)
+	RunListTreeOf(TM, t)
+	RunListSimpleFor(TM, t)
+	RunColumnSubquery(TM, t)
+	RunWhereSubquery(TM, t)
+	RunInnerOn(TM, t)
+	RunInnerOn2(TM, t)
+	RunOuterFetch(TM, t)
+	RunGroupBy(TM, t)
+	RunOrderBy(TM, t)
+	RunPagination(TM, t)
+	RunAssociationDiscriminator(TM, t)
+	RunAssociationDiscriminatorReverse(TM, t)
+	RunTableDiscriminator(TM, t)
+	RunJoinTableDiscriminator(TM, t)
+	RunVirtualColumns(TM, t)
+	RunCustomFunction(TM, t)
+	RunRawSQL(TM, t)
+	RunHaving(TM, t)
+	RunUnion(TM, t)
+}
+
+func ResetDB(TM ITransactionManager) {
 	if err := TM.Transaction(func(DB IDb) error {
 		var err error
 
@@ -247,7 +278,7 @@ func ResetDB() {
 	}
 }
 
-func ResetDB2() {
+func ResetDB2(TM ITransactionManager) {
 	if err := TM.Transaction(func(DB IDb) error {
 		var err error
 
@@ -320,7 +351,7 @@ func ResetDB2() {
 	}
 }
 
-func ResetDB3() {
+func ResetDB3(TM ITransactionManager) {
 	if err := TM.Transaction(func(DB IDb) error {
 		var err error
 
@@ -369,8 +400,8 @@ func ResetDB3() {
 	}
 }
 
-func TestSelectUTF8(t *testing.T) {
-	ResetDB()
+func RunSelectUTF8(TM ITransactionManager, t *testing.T) {
+	ResetDB(TM)
 
 	// get the database context
 	store := TM.Store()
@@ -389,8 +420,8 @@ func TestSelectUTF8(t *testing.T) {
 	}
 }
 
-func TestInsertReturningKey(t *testing.T) {
-	ResetDB()
+func RunInsertReturningKey(TM ITransactionManager, t *testing.T) {
+	ResetDB(TM)
 
 	var err error
 	if err = TM.Transaction(func(store IDb) error {
@@ -425,8 +456,8 @@ func TestInsertReturningKey(t *testing.T) {
 	}
 }
 
-func TestInsertStructReturningKey(t *testing.T) {
-	ResetDB()
+func RunInsertStructReturningKey(TM ITransactionManager, t *testing.T) {
+	ResetDB(TM)
 
 	var err error
 	if err = TM.Transaction(func(store IDb) error {
@@ -458,8 +489,8 @@ func TestInsertStructReturningKey(t *testing.T) {
 	}
 }
 
-func TestSimpleUpdate(t *testing.T) {
-	ResetDB()
+func RunSimpleUpdate(TM ITransactionManager, t *testing.T) {
+	ResetDB(TM)
 
 	var err error
 	if err = TM.Transaction(func(store IDb) error {
@@ -485,8 +516,8 @@ func TestSimpleUpdate(t *testing.T) {
 	}
 }
 
-func TestStructUpdate(t *testing.T) {
-	ResetDB()
+func RunStructUpdate(TM ITransactionManager, t *testing.T) {
+	ResetDB(TM)
 
 	var err error
 	if err = TM.Transaction(func(store IDb) error {
@@ -509,8 +540,8 @@ func TestStructUpdate(t *testing.T) {
 	}
 }
 
-func TestUpdateSubquery(t *testing.T) {
-	ResetDB()
+func RunUpdateSubquery(TM ITransactionManager, t *testing.T) {
+	ResetDB(TM)
 
 	if err := TM.Transaction(func(store IDb) error {
 		sub := store.Query(BOOK).Alias("b").
@@ -539,8 +570,8 @@ func TestUpdateSubquery(t *testing.T) {
 	}
 }
 
-func TestSimpleDelete(t *testing.T) {
-	ResetDB()
+func RunSimpleDelete(TM ITransactionManager, t *testing.T) {
+	ResetDB(TM)
 
 	if err := TM.Transaction(func(store IDb) error {
 		// clears any relation with book id = 2
@@ -560,8 +591,8 @@ func TestSimpleDelete(t *testing.T) {
 	}
 }
 
-func TestStructDelete(t *testing.T) {
-	ResetDB()
+func RunStructDelete(TM ITransactionManager, t *testing.T) {
+	ResetDB(TM)
 
 	if err := TM.Transaction(func(store IDb) error {
 		// clears any relation with book id = 1
@@ -584,8 +615,8 @@ func TestStructDelete(t *testing.T) {
 	}
 }
 
-func TestSelectInto(t *testing.T) {
-	ResetDB()
+func RunSelectInto(TM ITransactionManager, t *testing.T) {
+	ResetDB(TM)
 
 	store := TM.Store()
 	var name string
@@ -600,8 +631,8 @@ func TestSelectInto(t *testing.T) {
 	}
 }
 
-func TestSelectTreeTo(t *testing.T) {
-	ResetDB()
+func RunSelectTreeTo(TM ITransactionManager, t *testing.T) {
+	ResetDB(TM)
 
 	store := TM.Store()
 	var publisher Publisher
@@ -623,8 +654,8 @@ func TestSelectTreeTo(t *testing.T) {
 	}
 }
 
-func TestSelectTree(t *testing.T) {
-	ResetDB()
+func RunSelectTree(TM ITransactionManager, t *testing.T) {
+	ResetDB(TM)
 
 	store := TM.Store()
 	result, err := store.Query(PUBLISHER).
@@ -646,8 +677,8 @@ func TestSelectTree(t *testing.T) {
 	}
 }
 
-func TestListFor(t *testing.T) {
-	ResetDB()
+func RunListFor(TM ITransactionManager, t *testing.T) {
+	ResetDB(TM)
 
 	store := TM.Store()
 	books := make([]*Book, 0) // mandatory use pointers
@@ -671,8 +702,8 @@ func TestListFor(t *testing.T) {
 	}
 }
 
-func TestListOf(t *testing.T) {
-	ResetDB()
+func RunListOf(TM ITransactionManager, t *testing.T) {
+	ResetDB(TM)
 
 	store := TM.Store()
 	books, err := store.Query(BOOK).
@@ -694,8 +725,8 @@ func TestListOf(t *testing.T) {
 	}
 }
 
-func TestListFlatTreeFor(t *testing.T) {
-	ResetDB()
+func RunListFlatTreeFor(TM ITransactionManager, t *testing.T) {
+	ResetDB(TM)
 
 	store := TM.Store()
 	publishers := make([]*Publisher, 0)
@@ -724,8 +755,8 @@ func TestListFlatTreeFor(t *testing.T) {
 	}
 }
 
-func TestListTreeOf(t *testing.T) {
-	ResetDB()
+func RunListTreeOf(TM ITransactionManager, t *testing.T) {
+	ResetDB(TM)
 
 	store := TM.Store()
 	publishers, err := store.Query(PUBLISHER).
@@ -752,8 +783,8 @@ func TestListTreeOf(t *testing.T) {
 	}
 }
 
-func TestListSimpleFor(t *testing.T) {
-	ResetDB()
+func RunListSimpleFor(TM ITransactionManager, t *testing.T) {
+	ResetDB(TM)
 
 	store := TM.Store()
 	names := make([]string, 0)
@@ -772,8 +803,8 @@ func TestListSimpleFor(t *testing.T) {
 	}
 }
 
-func TestColumnSubquery(t *testing.T) {
-	ResetDB()
+func RunColumnSubquery(TM ITransactionManager, t *testing.T) {
+	ResetDB(TM)
 
 	store := TM.Store()
 	subquery := store.Query(BOOK).Alias("b").
@@ -803,8 +834,8 @@ func TestColumnSubquery(t *testing.T) {
 	}
 }
 
-func TestWhereSubquery(t *testing.T) {
-	ResetDB()
+func RunWhereSubquery(TM ITransactionManager, t *testing.T) {
+	ResetDB(TM)
 
 	store := TM.Store()
 	subquery := store.Query(BOOK).
@@ -839,8 +870,8 @@ func TestWhereSubquery(t *testing.T) {
 	}
 }
 
-func TestInnerOn(t *testing.T) {
-	ResetDB()
+func RunInnerOn(TM ITransactionManager, t *testing.T) {
+	ResetDB(TM)
 
 	// gets all publishers that had a book published before 2013
 	store := TM.Store()
@@ -871,14 +902,8 @@ func TestInnerOn(t *testing.T) {
 	}
 }
 
-/*
-Query query = db.createQuery(TPainting.T_PAINTING)
-		.innerJoin(TPainting.A_ARTIST).on(TArtist.C_ID.is(1L))
-		.innerJoin(TPainting.A_GALLERIES).on(TGallery.C_NAME.ilk("%AZUL"));
-*/
-
-func TestInnerOn2(t *testing.T) {
-	ResetDB()
+func RunInnerOn2(TM ITransactionManager, t *testing.T) {
+	ResetDB(TM)
 
 	store := TM.Store()
 	var publishers = make([]*Publisher, 0)
@@ -910,8 +935,8 @@ func TestInnerOn2(t *testing.T) {
 	}
 }
 
-func TestOuterFetch(t *testing.T) {
-	ResetDB()
+func RunOuterFetch(TM ITransactionManager, t *testing.T) {
+	ResetDB(TM)
 
 	store := TM.Store()
 	result, err := store.Query(PUBLISHER).
@@ -963,8 +988,8 @@ func TestOuterFetch(t *testing.T) {
 	}
 }
 
-func TestGroupBy(t *testing.T) {
-	ResetDB()
+func RunGroupBy(TM ITransactionManager, t *testing.T) {
+	ResetDB(TM)
 
 	store := TM.Store()
 	var dtos = make([]*Dto, 0)
@@ -991,8 +1016,8 @@ func TestGroupBy(t *testing.T) {
 	}
 }
 
-func TestOrderBy(t *testing.T) {
-	ResetDB()
+func RunOrderBy(TM ITransactionManager, t *testing.T) {
+	ResetDB(TM)
 
 	store := TM.Store()
 	var publishers = make([]*Publisher, 0)
@@ -1020,8 +1045,8 @@ func TestOrderBy(t *testing.T) {
 	}
 }
 
-func TestPagination(t *testing.T) {
-	ResetDB()
+func RunPagination(TM ITransactionManager, t *testing.T) {
+	ResetDB(TM)
 
 	store := TM.Store()
 	var publishers = make([]*Publisher, 0)
@@ -1052,8 +1077,8 @@ func TestPagination(t *testing.T) {
 	}
 }
 
-func TestAssociationDiscriminator(t *testing.T) {
-	ResetDB2()
+func RunAssociationDiscriminator(TM ITransactionManager, t *testing.T) {
+	ResetDB2(TM)
 
 	store := TM.Store()
 	result, err := store.Query(PROJECT).
@@ -1087,8 +1112,8 @@ func TestAssociationDiscriminator(t *testing.T) {
 	}
 }
 
-func TestAssociationDiscriminatorReverse(t *testing.T) {
-	ResetDB2()
+func RunAssociationDiscriminatorReverse(TM ITransactionManager, t *testing.T) {
+	ResetDB2(TM)
 
 	store := TM.Store()
 	result, err := store.Query(EMPLOYEE).
@@ -1124,8 +1149,8 @@ func TestAssociationDiscriminatorReverse(t *testing.T) {
 
 }
 
-func TestTableDiscriminator(t *testing.T) {
-	ResetDB3()
+func RunTableDiscriminator(TM ITransactionManager, t *testing.T) {
+	ResetDB3(TM)
 
 	store := TM.Store()
 	statuses := make([]*Status, 0)
@@ -1183,8 +1208,8 @@ func TestTableDiscriminator(t *testing.T) {
 
 }
 
-func TestJoinTableDiscriminator(t *testing.T) {
-	ResetDB3()
+func RunJoinTableDiscriminator(TM ITransactionManager, t *testing.T) {
+	ResetDB3(TM)
 
 	store := TM.Store()
 	result := make([]*Project, 0)
@@ -1212,8 +1237,8 @@ func TestJoinTableDiscriminator(t *testing.T) {
 	}
 }
 
-func TestVirtualColumns(t *testing.T) {
-	ResetDB()
+func RunVirtualColumns(TM ITransactionManager, t *testing.T) {
+	ResetDB(TM)
 
 	// get the database context
 	store := TM.Store()
@@ -1230,8 +1255,8 @@ func TestVirtualColumns(t *testing.T) {
 	}
 }
 
-func TestCustomFunction(t *testing.T) {
-	ResetDB()
+func RunCustomFunction(TM ITransactionManager, t *testing.T) {
+	ResetDB(TM)
 
 	// get the database context
 	store := TM.Store()
@@ -1265,8 +1290,8 @@ func TestCustomFunction(t *testing.T) {
 	}
 }
 
-func TestRawSQL(t *testing.T) {
-	ResetDB()
+func RunRawSQL(TM ITransactionManager, t *testing.T) {
+	ResetDB(TM)
 
 	// get the database connection
 	dba := dbx.NewSimpleDBA(TM.Store().GetConnection())
@@ -1292,8 +1317,8 @@ func TestRawSQL(t *testing.T) {
 	}
 }
 
-func TestHaving(t *testing.T) {
-	ResetDB()
+func RunHaving(TM ITransactionManager, t *testing.T) {
+	ResetDB(TM)
 
 	// get the database context
 	store := TM.Store()
@@ -1322,8 +1347,8 @@ func TestHaving(t *testing.T) {
 	}
 }
 
-func TestUnion(t *testing.T) {
-	ResetDB()
+func RunUnion(TM ITransactionManager, t *testing.T) {
+	ResetDB(TM)
 
 	// get the database context
 	store := TM.Store()

@@ -624,7 +624,7 @@ result, err := store.Query(PUBLISHER).
 	ListTreeOf((*Publisher)(nil))
 ```
 
-### Group By
+#### Group By
 
 For this example I will use the struct defined in [Column Subquery](#column-subquery).
 
@@ -641,7 +641,7 @@ store.Query(PUBLISHER).
 })
 ```
 
-### Having
+#### Having
 
 The criteria used in the `Having` clause must refer to columns of the `Query`. This reference is achieved using the columns alias.  
 To demonstrate this I will use the following struct which will hold the result for each row.
@@ -668,7 +668,7 @@ store.Query(PUBLISHER).
 }) 
 ```
 
-### Order By
+#### Order By
 
 List all publishers, ordering ascending by name.
 
@@ -686,7 +686,7 @@ store.Query(PUBLISHER).
 It is possible to add more orders, and even to order by columns belonging to other tables if joins were present.
 
 
-### Union
+#### Union
 
 This example list all `Publishers` and shows side by side the sales of this year and the previous year.
 The function used in `ListFor` is responsible for agregating the result.
@@ -744,7 +744,7 @@ store.Query(PUBLISHER).
 > The alias in the second query is necessary to avoid overlaping replaced parameters between the two queries
 
 
-### Pagination
+#### Pagination
 
 To paginate the results of a query we use the windowing functions `Skip` and `Limit`.
 
