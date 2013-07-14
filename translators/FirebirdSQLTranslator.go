@@ -1,7 +1,6 @@
 package translators
 
 import (
-	"fmt"
 	"github.com/quintans/goSQL/db"
 	tk "github.com/quintans/toolkit"
 	"strings"

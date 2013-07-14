@@ -32,6 +32,9 @@ func (this *EntityProperty) Set(instance reflect.Value, value reflect.Value) {
 			ptr.Set(value)
 			field.Set(ptr)
 		} else {
+			if value.Kind() == reflect.Ptr {
+				value = value.Elem()
+			}
 			field.Set(value)
 		}
 	}

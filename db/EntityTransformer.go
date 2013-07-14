@@ -166,6 +166,11 @@ func (this *EntityTransformer) Transform(rows *sql.Rows) (interface{}, error) {
 		return nil, err
 	}
 
+	// post trigger
+	if t, isT := instance.(PostRetriver); isT {
+		t.PostRetrive(this.Query.GetDb())
+	}
+
 	if this.Returner.Kind() == reflect.Invalid {
 		if H, isH := instance.(tk.Hasher); isH {
 			return H, nil
@@ -197,12 +202,6 @@ func (this *EntityTransformer) ToEntity(
 	instance reflect.Value,
 	properties map[string]*EntityProperty,
 ) (bool, error) {
-
-	//fmt.Printf("%s\n", typ)
-	//for _, v := range row {
-	//	fmt.Printf("%T %+v\n", v, v)
-	//}
-
 	for _, bp := range properties {
 		if bp.Position > 0 {
 			position := bp.Position + this.PaginationColumnOffset

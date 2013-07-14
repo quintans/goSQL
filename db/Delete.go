@@ -7,6 +7,14 @@ import (
 	"time"
 )
 
+type PreDeleter interface {
+	PreDelete(store IDb) error
+}
+
+type PostDeleter interface {
+	PostDelete(store IDb) error
+}
+
 type Delete struct {
 	DmlCore
 }
@@ -93,6 +101,14 @@ func (this *Delete) Submit(value interface{}) (int64, error) {
 		this.rawSQL = nil
 	}
 
+	// pre trigger
+	if t, isT := value.(PreDeleter); isT {
+		err := t.PreDelete(this.GetDb())
+		if err != nil {
+			return 0, err
+		}
+	}
+
 	affectedRows, err := this.Execute()
 	if err != nil {
 		return 0, err
@@ -100,6 +116,11 @@ func (this *Delete) Submit(value interface{}) (int64, error) {
 	if affectedRows == 0 && mustSucceed {
 		return 0, dbx.NewOptimisticLockFail("", fmt.Sprintf("Unable to DELETE record with id=%v and version=%v for table %s",
 			id, ver, this.GetTable().GetName()))
+	}
+
+	// post trigger
+	if t, isT := value.(PostDeleter); isT {
+		t.PostDelete(this.GetDb())
 	}
 	return affectedRows, nil
 }

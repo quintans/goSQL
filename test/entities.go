@@ -4,9 +4,12 @@ import (
 	. "github.com/quintans/goSQL/db"
 	tk "github.com/quintans/toolkit"
 	. "github.com/quintans/toolkit/ext"
+	"github.com/quintans/toolkit/log"
 
 	"time"
 )
+
+var logger = log.LoggerFor("github.com/quintans/goSQL/test")
 
 type Dto struct {
 	Name      string
@@ -160,6 +163,10 @@ type Book struct {
 	BookBin     *BookBin
 
 	Title *string
+}
+
+func (this *Publisher) PostRetrive(store IDb) {
+	logger.Infof("===> PostRetrive trigger for %s", this.String())
 }
 
 func (this *Book) String() string {

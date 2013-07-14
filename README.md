@@ -3,6 +3,8 @@
 
 a ORM like library in Go's (golang) that makes it easy to use SQL.
 
+
+
 ## Introduction
 
 (English is not my native language so please bear with me)
@@ -44,20 +46,29 @@ Another example with an update
 store.Update(PUBLISHER).Submit(publisher)
 ```
 
+
+
 ## Features
 
- - Static typing
- - Result Mapping
+ - SQL DSL
+ - Flush query results to an arbitrary Struct
+ - Pre/Post insert/update/delete Struct triggers
+ - Automatic setting of primary keys for inserts
+ - Automatic version increment
  - Database Abstraction
+ - Transactions
+ - Optimistic Locking
  - Joins made easy
  - Result Pagination
  - Extensible
+
 
 
 ## Tested Databases
  - MariaDB 5.5
  - PostgreSQL 9.2
  - FirebirdSQL 2.5
+
 
 
 ## Instalation
@@ -165,11 +176,15 @@ func main() {
 
 The is what you will find in [test/db_test.go](test/db_test.go).
 
+
+
 ## Usage
 In this chapter I will try to explain the several aspects of the library using a set of examples.
 These examples are supported by tables defined in [test/tables.sql](test/tables.sql), a MySQL database sql script.
 
 Before diving in to the examples I first describe the table model and how to map the entities.
+
+
 
 ### Entity Relation Diagram 
 ![ER Diagram](test/er.png)
@@ -178,6 +193,8 @@ Relationships explained:
 - **One-to-Many**: One Publisher can have many Books and one Book has one Publisher. 
 - **One-to-One**: One Book has one Book_Bin (Hardcover) - binary data is stored in separated in different table - and one Book_Bin has one Book.
 - **Many-to-Many**: One Author can have many Books and one Book can have many Authors
+
+
 
 ### Table definition
 
@@ -267,6 +284,8 @@ The order of the parameters is very important, because they indicate the directi
 
 The full definition of the tables and the struct entities used in this document are in [test/entities.go](test/entities.go), covering all aspects of table mapping.
 
+
+
 ### Insert Examples
 
 #### Simple Insert
@@ -290,6 +309,7 @@ In this example the value for the `name` parameter is directly supplied in the s
 One example, could be `language` (pt, eng, ...) for internationalized text, or `channel` (web, mobile, ...) for descriptions, etc.
 
 
+
 #### Insert With a Struct
 
 When inserting with a struct, the struct fields are matched with the respective columns. 
@@ -297,8 +317,19 @@ When inserting with a struct, the struct fields are matched with the respective 
 ```go
 var pub Publisher
 pub.Name = ext.StrPtr("Untited Editors")
-store.Insert(PUBLISHER).Submit(pub)
+store.Insert(PUBLISHER).Submit(&pub) // passing as a pointer
 ```
+
+A shorter version would be
+
+```go
+store.Create(&pub)
+```
+
+but this implies that the table was registered with the same alias as the struct name. In this case is `Publisher`.
+
+In both cases the values of the Id and Version fields of the struct are also set.
+
 
 #### Insert Returning Generated Key
 Any of the above snippets, if the Id field/column is undefined (0 or nil) it returns the generated key by the database.
@@ -309,6 +340,8 @@ key, _ := store.Insert(PUBLISHER).
 	Values(nil, 1, "New Editions").
 	Execute()
 ```
+
+
 
 ### Update Examples
 
@@ -324,6 +357,8 @@ store.Update(PUBLISHER).
 ).Execute()
 ```
 
+
+
 #### Update with struct
 
 When updating with a struct, the struct fields are matched with the respective columns. 
@@ -335,9 +370,26 @@ var publisher Publisher
 publisher.Name = ext.StrPtr("Untited Editors")
 publisher.Id = ext.Int64Ptr(1)      // identifies the record
 publisher.Version = ext.Int64Ptr(1) // for optimistic locking
-store.Update(PUBLISHER).Submit(publisher)
+store.Update(PUBLISHER).Submit(&publisher) // passing as a pointer
 ```
-	
+
+A shorter version would be
+
+```go
+store.Modify(&publisher)
+```
+
+In both cases the values of the Version field of the struct is set to the new value.
+
+There is also another interesting method that does a Insert or an Update, depending on the value of the version field.
+If the field version is zero or nil an insert is issued, otherwise is an update.
+
+```go
+store.Save(&publisher)
+```
+
+
+
 #### Update with SubQuery
 
 This example shows of subquery to do an update, and also the use of `Exists`.
@@ -358,11 +410,15 @@ affectedRows, err := store.Update(PUBLISHER).Alias("a").
 
 ### Delete Examples
 
+
+
 #### Simple Delete
 
 ```go
 store.Delete(BOOK).Where(BOOK_C_ID.Matches(2)).Execute()
 ```
+
+
 
 #### Delete with struct
 
@@ -373,10 +429,14 @@ book.Version = ext.Int64Ptr(1)
 store.Delete(BOOK).Submit(book)
 ```
 
+
+
 ### Query Examples
 
 The query operation is by far the richest operation of the ones we have seen.  
 Query operation that start with _Select*_ retrive one result, and  those that start with _List*_ return a list of results.
+
+
 
 #### SelectInto
 
@@ -390,6 +450,8 @@ ok, err := store.Query(PUBLISHER).
 	SelectInto(&name)
 ```
 
+
+
 #### SelectTo
 
 The result of the query is put in the supplied struct.
@@ -401,6 +463,8 @@ store.Query(PUBLISHER).
 	Where(PUBLISHER_C_ID.Matches(2)).
 	SelectTo(&publisher)
 ```
+
+
 
 #### SelectTreeTo
 Executes the query and builds a struct tree.
@@ -430,6 +494,8 @@ store.Query(PUBLISHER).
 	SelectTreeTo(&publisher, true)
 ```
 
+
+
 #### SelectTree
 
 Executes the query and returns a struct tree.
@@ -445,6 +511,8 @@ result := store.Query(PUBLISHER).
 	SelectTree((*Publisher)(nil), true)
 publisher := result.(*Publisher)	
 ```
+
+
 
 #### LisSimpleFor
 
@@ -462,6 +530,8 @@ err := store.Query(PUBLISHER).
 }, &name)
 ```
 
+
+
 #### ListFor
 
 Executes a query, with the target entity being determined by the receiving type of the function.
@@ -474,6 +544,8 @@ err := store.Query(BOOK).
 	books = append(books, book)
 })
 ```
+
+
 
 #### ListOf
 
@@ -498,6 +570,8 @@ for e := books.Enumerator(); e.HasNext(); {
 }
 ```
 
+
+
 #### ListFlatTreeFor
 
 Executes a query and flushes the result into the instance supplied by the factory function.
@@ -516,6 +590,8 @@ store.Query(PUBLISHER).
 	publishers = append(publishers, publisher)
 })
 ```
+
+
 
 #### ListTreeOf
 
@@ -538,6 +614,8 @@ for e := publishers.Enumerator(); e.HasNext(); {
 	// do something here
 }
 ```
+
+
 
 #### Column Subquery
 
@@ -573,6 +651,8 @@ store.Query(PUBLISHER).Alias("p").
 
 Notice that when I use the subquery variable an alias `"Value"` is defined. This alias matches with a struct field in `Dto`. In this query the TArtist.C_NAME column as no associated alias, so the default column alias is used.
 
+
+
 #### Where Subquery 
 
 In this example I get a list of records with the name of the Publisher, the name and price of every Book, where the price is lesser or equal than 10. The result is put in a slice of Sale instances.  
@@ -598,6 +678,8 @@ store.Query(PUBLISHER).
 	dtos = append(dtos, dto)
 })
 ```
+
+
 
 #### Joins
 
@@ -633,6 +715,8 @@ result, err := store.Query(PUBLISHER).
 	ListTreeOf((*Publisher)(nil))
 ```
 
+
+
 #### Group By
 
 For this example I will use the struct defined in [Column Subquery](#column-subquery).
@@ -649,6 +733,8 @@ store.Query(PUBLISHER).
 	dtos = append(dtos, dto)
 })
 ```
+
+
 
 #### Having
 
@@ -677,6 +763,8 @@ store.Query(PUBLISHER).
 }) 
 ```
 
+
+
 #### Order By
 
 List all publishers, ordering ascending by name.
@@ -693,6 +781,7 @@ store.Query(PUBLISHER).
 ```
 
 It is possible to add more orders, and even to order by columns belonging to other tables if joins were present.
+
 
 
 #### Union
@@ -753,6 +842,7 @@ store.Query(PUBLISHER).
 > The alias in the second query is necessary to avoid overlaping replaced parameters between the two queries
 
 
+
 #### Pagination
 
 To paginate the results of a query we use the windowing functions `Skip` and `Limit`.
@@ -770,6 +860,38 @@ store.Query(PUBLISHER).
 	publishers = append(publishers, publisher)
 })
 ```
+
+
+
+### Struct Triggers
+
+It is possible to define methods that are called before/after an insert/update/delete/query to the database.
+
+For example, defining the following method will trigger a call for every struct before a insert.
+
+```go
+PreInsert(store IDb) error
+```
+
+The same can be done for binding a trigger after an insert using the following signature.
+
+```go
+PostInsert(store IDb)
+```
+
+The remaining triggers are:
+
+```go
+PreUpdate(store IDb) error
+PostUpdate(store IDb)
+PreDelete(store IDb) error
+PostDelete(store IDb)
+PostRetrive(store IDb)
+```
+
+If an error is returned in a Pre trigger the action is not performed.
+
+
 
 ### Association Discriminator
 
@@ -803,6 +925,8 @@ store.Query(PROJECT).
 	ListTreeOf((*Project)(nil))
 ```
 
+
+
 ### Table Discriminator
 
 When mapping a table it is possible to declare that the domain of that table only refers to a subset of values of the physical table. This is done by defining a restriction (Discriminator) at the table definition.  
@@ -820,6 +944,7 @@ store.Query(STATUS).
 	statuses = append(statuses, status)
 })
 ```
+
 
 
 ### Virtual Columns
@@ -866,6 +991,8 @@ ok, err := store.Query(BOOK).
 	Where(BOOK_C_ID.Matches(1)).
 	SelectTo(&book)
 ```
+
+
 
 ### Custom Functions
 
@@ -922,6 +1049,7 @@ store.Query(BOOK).
 ```
 
 
+
 ### Raw SQL
 
 It is possible to execute native SQL, as the next example demonstrates.
@@ -940,7 +1068,11 @@ dba.QueryClosure("select `name` from `book` where `name` like ?", func(rows *sql
 }, "%book")
 ```
 
+
+
 # Credits
+
+
 
 
 # TODO

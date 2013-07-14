@@ -18,6 +18,14 @@ const (
 	AUTOKEY_AFTER
 )
 
+type PreInserter interface {
+	PreInsert(store IDb) error
+}
+
+type PostInserter interface {
+	PostInsert(store IDb)
+}
+
 type Insert struct {
 	DmlCore
 	returnId        bool
@@ -91,12 +99,22 @@ func (this *Insert) Values(vals ...interface{}) *Insert {
 // param instance: The instance to match
 // return this
 func (this *Insert) Submit(instance interface{}) (int64, error) {
-	var mappings map[string]*EntityProperty
+	var invalid bool
 	typ := reflect.TypeOf(instance)
 	if typ.Kind() == reflect.Ptr {
 		typ = typ.Elem()
+		if typ.Kind() != reflect.Struct {
+			invalid = true
+		}
+	} else {
+		invalid = true
 	}
 
+	if invalid {
+		return 0, errors.New("The argument must be a struct pointer")
+	}
+
+	var mappings map[string]*EntityProperty
 	if typ == this.lastType {
 		mappings = this.lastMappings
 	} else {
@@ -105,23 +123,20 @@ func (this *Insert) Submit(instance interface{}) (int64, error) {
 		this.lastType = typ
 	}
 
-	var elem reflect.Value
-	var calcElem bool = true
+	elem := reflect.ValueOf(instance)
+	if elem.Kind() == reflect.Ptr {
+		elem = elem.Elem()
+	}
+
+	var version int64 = 1
 	for e := this.table.GetColumns().Enumerator(); e.HasNext(); {
 		column := e.Next().(*Column)
 		if !column.IsVirtual() {
 			if column.IsVersion() {
-				this.Set(column, 1)
+				this.Set(column, version)
 			} else {
 				bp := mappings[column.GetAlias()]
 				if bp != nil {
-					if calcElem {
-						elem = reflect.ValueOf(instance)
-						if elem.Kind() == reflect.Ptr {
-							elem = elem.Elem()
-						}
-						calcElem = false
-					}
 					v := bp.Get(elem)
 					if v.Kind() == reflect.Ptr && v.IsNil() {
 						this.Set(column, nil)
@@ -154,7 +169,37 @@ func (this *Insert) Submit(instance interface{}) (int64, error) {
 		}
 	}
 
-	return this.Execute()
+	// pre trigger
+	if t, isT := instance.(PreInserter); isT {
+		err := t.PreInsert(this.GetDb())
+		if err != nil {
+			return 0, err
+		}
+	}
+
+	key, err := this.Execute()
+	if err != nil {
+		return 0, err
+	}
+
+	column := this.table.GetSingleKeyColumn()
+	if column != nil {
+		bp := mappings[column.GetAlias()]
+		bp.Set(elem, reflect.ValueOf(&key))
+	}
+
+	column = this.table.GetVersionColumn()
+	if column != nil {
+		bp := mappings[column.GetAlias()]
+		bp.Set(elem, reflect.ValueOf(&version))
+	}
+
+	// post trigger
+	if t, isT := instance.(PostInserter); isT {
+		t.PostInsert(this.GetDb())
+	}
+
+	return key, nil
 }
 
 func (this *Insert) getCachedSql() *RawSql {

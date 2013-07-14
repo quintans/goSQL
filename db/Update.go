@@ -5,10 +5,19 @@ import (
 	coll "github.com/quintans/toolkit/collection"
 
 	"database/sql/driver"
+	"errors"
 	"fmt"
 	"reflect"
 	"time"
 )
+
+type PreUpdater interface {
+	PreUpdate(store IDb) error
+}
+
+type PostUpdater interface {
+	PostUpdate(store IDb)
+}
 
 type Update struct {
 	DmlCore
@@ -41,20 +50,28 @@ func (this *Update) Values(vals ...interface{}) *Update {
 	return this
 }
 
-//  Loads sets all the columns of the table to matching bean property
-//
-// param <T>
-// param bean
-//             The bean to match
-// return affected rows
-func (this *Update) Submit(value interface{}) (int64, error) {
-	var mappings map[string]*EntityProperty
-	var criterias []*Criteria
-
-	typ := reflect.TypeOf(value)
+/*
+Updates all the columns of the table to matching struct fields.
+Returns the number of affected rows
+*/
+func (this *Update) Submit(instance interface{}) (int64, error) {
+	var invalid bool
+	typ := reflect.TypeOf(instance)
 	if typ.Kind() == reflect.Ptr {
 		typ = typ.Elem()
+		if typ.Kind() != reflect.Struct {
+			invalid = true
+		}
+	} else {
+		invalid = true
 	}
+
+	if invalid {
+		return 0, errors.New("The argument must be a struct pointer")
+	}
+
+	var mappings map[string]*EntityProperty
+	var criterias []*Criteria
 
 	if typ == this.lastType {
 		mappings = this.lastMappings
@@ -66,17 +83,22 @@ func (this *Update) Submit(value interface{}) (int64, error) {
 		this.lastType = typ
 	}
 
-	var mustSucceed bool
 	var id interface{}
 	var ver int64
+	var verColumn *Column
+
+	elem := reflect.ValueOf(instance)
+	if elem.Kind() == reflect.Ptr {
+		elem = elem.Elem()
+	}
+
 	for e := this.table.GetColumns().Enumerator(); e.HasNext(); {
 		column := e.Next().(*Column)
 		if !column.IsVirtual() {
 			alias := column.GetAlias()
 			bp := mappings[alias]
 			if bp != nil {
-				//val := bp.Get(reflect.ValueOf(value).Elem())
-				val := bp.Get(reflect.ValueOf(value))
+				val := bp.Get(elem)
 				if val.Kind() == reflect.Ptr {
 					val = val.Elem()
 				}
@@ -84,7 +106,7 @@ func (this *Update) Submit(value interface{}) (int64, error) {
 				if column.IsKey() {
 					if val.Kind() == reflect.Ptr {
 						if val.IsNil() {
-							panic(fmt.Sprintf("Value for key property '%s' cannot be nil.", alias))
+							return 0, errors.New(fmt.Sprintf("Value for key property '%s' cannot be nil.", alias))
 						}
 						val = val.Elem()
 					}
@@ -103,6 +125,7 @@ func (this *Update) Submit(value interface{}) (int64, error) {
 					}
 
 					ver = val.Int()
+					// if version is 0 it means an update where optimistic locking is ignored
 					if ver != 0 {
 						alias_old := alias + "_old"
 						if criterias != nil {
@@ -111,7 +134,7 @@ func (this *Update) Submit(value interface{}) (int64, error) {
 						this.SetParameter(alias_old, ver)
 						// increments the version
 						this.Set(column, ver+1)
-						mustSucceed = true
+						verColumn = column
 					}
 				} else {
 					var isNil bool
@@ -146,14 +169,35 @@ func (this *Update) Submit(value interface{}) (int64, error) {
 		this.rawSQL = nil
 	}
 
+	// pre trigger
+	if t, isT := instance.(PreUpdater); isT {
+		err := t.PreUpdate(this.GetDb())
+		if err != nil {
+			return 0, err
+		}
+	}
+
 	affectedRows, err := this.Execute()
 	if err != nil {
 		return 0, err
 	}
-	if affectedRows == 0 && mustSucceed {
-		return 0, dbx.NewOptimisticLockFail("", fmt.Sprintf("Unable to UPDATE record with id=%v and version=%v for table %s",
-			id, ver, this.GetTable().GetName()))
+
+	if verColumn != nil {
+		if affectedRows == 0 {
+			return 0, dbx.NewOptimisticLockFail("", fmt.Sprintf("Unable to UPDATE record with id=%v and version=%v for table %s",
+				id, ver, this.GetTable().GetName()))
+		}
+
+		ver += 1
+		bp := mappings[verColumn.GetAlias()]
+		bp.Set(elem, reflect.ValueOf(&ver))
 	}
+
+	// post trigger
+	if t, isT := instance.(PostUpdater); isT {
+		t.PostUpdate(this.GetDb())
+	}
+
 	return affectedRows, nil
 }
 
