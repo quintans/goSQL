@@ -23,7 +23,7 @@ type EntityTreeTransformer struct {
 }
 
 func NewEntityTreeTransformer(query *Query, reuse bool, instance interface{}) *EntityTreeTransformer {
-	this := NewEntityTreeFactoryTransformer(query, reflect.TypeOf(instance), reflect.Value{})
+	this := NewEntityTreeFactoryTransformer(query, reflect.TypeOf(instance), nil)
 	this.reuse = reuse
 	if reuse {
 		this.entities = coll.NewHashMap()
@@ -33,7 +33,7 @@ func NewEntityTreeTransformer(query *Query, reuse bool, instance interface{}) *E
 }
 
 // since the creation of the list is managed outside the reue flag is set to false
-func NewEntityTreeFactoryTransformer(query *Query, typ reflect.Type, returner reflect.Value) *EntityTreeTransformer {
+func NewEntityTreeFactoryTransformer(query *Query, typ reflect.Type, returner func(val reflect.Value)) *EntityTreeTransformer {
 	this := new(EntityTreeTransformer)
 	this.Overrider = this
 
@@ -103,12 +103,12 @@ func (this *EntityTreeTransformer) Transform(rows *sql.Rows) (interface{}, error
 		return nil, err
 	}
 
-	if this.Returner.Kind() == reflect.Invalid {
+	if this.Returner == nil {
 		if H, isH := instance.(tk.Hasher); isH {
 			return H, nil
 		}
 	} else {
-		this.Returner.Call([]reflect.Value{val})
+		this.Returner(val)
 	}
 
 	return nil, nil

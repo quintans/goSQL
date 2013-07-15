@@ -56,11 +56,11 @@ var _ ITransactionManager = &TransactionManager{}
 
 type TransactionManager struct {
 	database  *sql.DB
-	dbFactory func(c dbx.IConnection) IDb
+	dbFactory func(inTx bool, c dbx.IConnection) IDb
 	stmtCache *cache.LRUCache
 }
 
-func NewTransactionManager(database *sql.DB, dbFactory func(c dbx.IConnection) IDb, capacity int) *TransactionManager {
+func NewTransactionManager(database *sql.DB, dbFactory func(inTx bool, c dbx.IConnection) IDb, capacity int) *TransactionManager {
 	this := new(TransactionManager)
 	this.database = database
 	this.dbFactory = dbFactory
@@ -91,7 +91,7 @@ func (this *TransactionManager) Transaction(handler func(db IDb) error) error {
 	} else {
 		myTx = &MyTx{tx, this.stmtCache}
 	}
-	err = handler(this.dbFactory(myTx))
+	err = handler(this.dbFactory(true, myTx))
 	if err == nil {
 		tx.Commit()
 	} else {
@@ -109,5 +109,5 @@ func (this TransactionManager) WithoutTransaction(handler func(db IDb) error) er
 */
 
 func (this *TransactionManager) Store() IDb {
-	return this.dbFactory(this.database)
+	return this.dbFactory(false, this.database)
 }

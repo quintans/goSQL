@@ -696,20 +696,21 @@ func (this *Query) replaceAlias(token Tokener) {
 
 // ======== RETRIVE ==============
 
-// list simple variables
-// a closure is used to build the result list.
-// The types for scanning are supplied by the instances parameter.
-//
-// ex:
-// roles = make([]string, 0)
-// var role string
-// q.ListSimpleFor(func() {
-// 		roles = append(roles, role)
-// }, &role)
+/*
+List simple variables.
+A closure is used to build the result list.
+The types for scanning are supplied by the instances parameter.
+No reflection is used.
 
-// query.
-func (this *Query) ListSimpleFor(closure func(), instances ...interface{}) error {
-	return this.ListClosure(func(rows *sql.Rows) error {
+ex:
+roles = make([]string, 0)
+var role string
+q.ListSimple(func() {
+	roles = append(roles, role)
+}, &role)
+*/
+func (this *Query) ListSimple(closure func(), instances ...interface{}) error {
+	return this.listClosure(func(rows *sql.Rows) error {
 		err := rows.Scan(instances...)
 		if err != nil {
 			return err
@@ -720,7 +721,7 @@ func (this *Query) ListSimpleFor(closure func(), instances ...interface{}) error
 }
 
 // the transformer will be responsible for creating  the result list
-func (this *Query) ListClosure(transformer func(rows *sql.Rows) error) error {
+func (this *Query) listClosure(transformer func(rows *sql.Rows) error) error {
 	// if no columns were added, add all columns of the driving table
 	if len(this.Columns) == 0 {
 		this.All()
@@ -738,7 +739,7 @@ func (this *Query) ListClosure(transformer func(rows *sql.Rows) error) error {
 	return nil
 }
 
-func (this *Query) ListSimple(transformer func(rows *sql.Rows) (interface{}, error)) ([]interface{}, error) {
+func (this *Query) listSimpleTransformer(transformer func(rows *sql.Rows) (interface{}, error)) ([]interface{}, error) {
 	// if no columns were added, add all columns of the driving table
 	if len(this.Columns) == 0 {
 		this.All()
@@ -761,7 +762,7 @@ Executes a query and transform the results according to the transformer
 
 Accepts a row transformer and returns a collection of transformed results
 */
-func (this *Query) List(rowMapper dbx.IRowTransformer) (coll.Collection, error) {
+func (this *Query) list(rowMapper dbx.IRowTransformer) (coll.Collection, error) {
 	// if no columns were added, add all columns of the driving table
 	if len(this.Columns) == 0 {
 		this.All()
@@ -786,25 +787,61 @@ matching the alias with struct property name. If no alias is supplied, it is use
 Accepts as parameter the struct type and returns a collection of structs (needs cast)
 */
 func (this *Query) ListOf(instance interface{}) (coll.Collection, error) {
-	return this.List(NewEntityTransformer(this, instance))
+	return this.list(NewEntityTransformer(this, instance))
 }
 
 /*
-Executes a query, with the target entity being determined by the receiving type of the function.
-The function is responsible for building the result.
-The argument must be a function with the signature func(<*Struct>).
+Executes a query, putting the result in a slice, passed as an argument or
+delegating the responsability of building the result to a processor function.
+The argument must be a function with the signature func(*struct) or a slice like *[]*struct.
+
 This method does not create a tree of related instances.
-
-Since there is no return collection, this can be used also for non-toolkit.Hasher entities.
 */
-func (this *Query) ListFor(collector interface{}) error {
-	funcValue, typ := checkCollector(collector)
+func (this *Query) List(target interface{}) error {
+	caller, typ, ok := checkSlice(target)
+	if !ok {
+		caller, typ, ok = checkCollector(target)
+		if !ok {
+			return errors.New(fmt.Sprintf("goSQL: Expected an slice of type *[]*struct or a function with the signature func(<*struct>). got %s", typ.String()))
+		}
+	}
 
-	_, err := this.List(NewEntityFactoryTransformer(this, typ, funcValue))
+	_, err := this.list(NewEntityFactoryTransformer(this, typ, caller))
 	return err
 }
 
-func checkCollector(collector interface{}) (reflect.Value, reflect.Type) {
+func checkSlice(i interface{}) (func(val reflect.Value), reflect.Type, bool) {
+	arr := reflect.ValueOf(i)
+	// pointer to the slice
+	if arr.Kind() == reflect.Ptr {
+		arr = arr.Elem()
+	} else {
+		return nil, nil, false
+	}
+
+	// slice element
+	var typ reflect.Type
+	if arr.Kind() == reflect.Slice {
+		typ = arr.Type().Elem()
+	} else {
+		return nil, nil, false
+	}
+
+	// element element
+	if typ.Kind() != reflect.Ptr {
+		return nil, nil, false
+	}
+
+	slice := reflect.New(arr.Type()).Elem()
+	slicer := func(val reflect.Value) {
+		slice = reflect.Append(slice, val)
+		arr.Set(slice)
+	}
+
+	return slicer, typ, true
+}
+
+func checkCollector(collector interface{}) (func(val reflect.Value), reflect.Type, bool) {
 	var typ reflect.Type
 	funcValue := reflect.ValueOf(collector)
 	functype := funcValue.Type()
@@ -819,11 +856,16 @@ func checkCollector(collector interface{}) (reflect.Value, reflect.Type) {
 	if functype.NumOut() != 0 {
 		bad = true
 	}
+
 	if bad {
-		panic(fmt.Sprintf("Expected a function with the signature func(<struct>). got %s", functype.String()))
+		return nil, nil, false
 	}
 
-	return funcValue, typ
+	caller := func(val reflect.Value) {
+		funcValue.Call([]reflect.Value{val})
+	}
+
+	return caller, typ, true
 }
 
 /*
@@ -834,26 +876,25 @@ If the transformed data matches a previous converted entity the previous one is 
 Receives a template instance and returns a collection of structs.
 */
 func (this *Query) ListTreeOf(instance tk.Hasher) (coll.Collection, error) {
-	return this.List(NewEntityTreeTransformer(this, true, instance))
-}
-
-// Executes a query and transform the results to the bean type,
-// matching the alias with bean property name, building a struct tree.
-// A new instance is created for every new data type.
-func (this *Query) ListFlatTreeOf(instance interface{}) (coll.Collection, error) {
-	return this.List(NewEntityTreeTransformer(this, false, instance))
+	return this.list(NewEntityTreeTransformer(this, true, instance))
 }
 
 /*
-Same as ListFlatTreeOf, except that the responsability of building the result
-is delegated to the passed function.
-The argument must be a function with the signature func(<*Struct>).
-See also ListFor.
+Executes a query, putting the result in a slice, passed as an argument or
+delegating the responsability of building the result to a processor function.
+The argument must be a function with the signature func(*struct) or a slice like *[]*struct.
+See also List.
 */
-func (this *Query) ListFlatTreeFor(collector interface{}) error {
-	funcValue, typ := checkCollector(collector)
+func (this *Query) ListFlatTree(target interface{}) error {
+	caller, typ, ok := checkSlice(target)
+	if !ok {
+		caller, typ, ok = checkCollector(target)
+		if !ok {
+			return errors.New(fmt.Sprintf("goSQL: Expected an slice of type *[]*struct or a function with the signature func(<*struct>). got %s", typ.String()))
+		}
+	}
 
-	_, err := this.List(NewEntityTreeFactoryTransformer(this, typ, funcValue))
+	_, err := this.list(NewEntityTreeFactoryTransformer(this, typ, caller))
 	return err
 }
 
@@ -885,17 +926,16 @@ func (this *Query) SelectInto(dest ...interface{}) (bool, error) {
 Returns a struct tree. When reuse is true the supplied template instance must implement
 the toolkit.Hasher interface.
 
-
 This is pretty much the same as SelectTreeTo.
 */
-func (this *Query) SelectTree(typ interface{}, reuse bool) (interface{}, error) {
+func (this *Query) selectTree(typ interface{}, reuse bool) (interface{}, error) {
 	if reuse {
 		_, ok := typ.(tk.Hasher)
 		if !ok {
 			return nil, errors.New(fmt.Sprintf("When reuse is true, the type %T must implement toolkit.Hasher", typ))
 		}
 
-		list, err := this.List(NewEntityTreeTransformer(this, true, typ))
+		list, err := this.list(NewEntityTreeTransformer(this, true, typ))
 		if err != nil {
 			return nil, err
 		}
@@ -907,7 +947,7 @@ func (this *Query) SelectTree(typ interface{}, reuse bool) (interface{}, error) 
 		}
 	}
 
-	return this.Select(NewEntityTreeTransformer(this, false, typ))
+	return this.selectTransformer(NewEntityTreeTransformer(this, false, typ))
 }
 
 /*
@@ -915,7 +955,7 @@ The first result of the query is put in the passed struct.
 Returns true if a result was found, false if no result
 */
 func (this *Query) SelectTo(typ interface{}) (bool, error) {
-	res, err := this.Select(NewEntityTransformer(this, typ))
+	res, err := this.selectTransformer(NewEntityTransformer(this, typ))
 	if err != nil {
 		return false, err
 	}
@@ -927,9 +967,29 @@ func (this *Query) SelectTo(typ interface{}) (bool, error) {
 }
 
 /*
-Executes the query and builds a struct tree putting the first element in the supplied struct.
+Executes the query and builds a struct tree, reusing previously obtained entities,
+putting the first element in the supplied struct pointer.
+Since the struct instances are going to be reused it is mandatory that all the structs
+participating in the result tree implement the toolkit.Hasher interface.
+Returns true if a result was found, false if no result.
+See also SelectFlatTree.
+*/
+func (this *Query) SelectTree(instance interface{}) (bool, error) {
+	return this.selectTreeTo(instance, true)
+}
 
-The first parameter must be a struct pointer.
+/*
+Executes the query and builds a flat struct tree putting the first element in the supplied struct pointer.
+Since the struct instances are not going to be reused it is not mandatory that the structs implement the toolkit.Hasher interface.
+Returns true if a result was found, false if no result.
+See also SelectTree.
+*/
+func (this *Query) SelectFlatTree(instance interface{}) (bool, error) {
+	return this.selectTreeTo(instance, false)
+}
+
+/*
+Executes the query and builds a struct tree putting the first element in the supplied struct pointer.
 
 If the reuse parameter is true, when a
 new entity is needed, the cache is checked to see if there is one instance for this entity,
@@ -944,8 +1004,8 @@ the toolkit.Hasher interface.
 The first result of the query is put in the passed struct.
 Returns true if a result was found, false if no result
 */
-func (this *Query) SelectTreeTo(instance interface{}, reuse bool) (bool, error) {
-	res, err := this.SelectTree(instance, reuse)
+func (this *Query) selectTreeTo(instance interface{}, reuse bool) (bool, error) {
+	res, err := this.selectTree(instance, reuse)
 	if err != nil {
 		return false, err
 	}
@@ -956,16 +1016,12 @@ func (this *Query) SelectTreeTo(instance interface{}, reuse bool) (bool, error) 
 	return false, nil
 }
 
-//	func (this *Query) <T> T selectSingleTree(Class<T> klass) {
-//		return selectSingleTree(klass, true);
-//	}
-
-func (this *Query) Select(rowMapper dbx.IRowTransformer) (interface{}, error) {
+func (this *Query) selectTransformer(rowMapper dbx.IRowTransformer) (interface{}, error) {
 	oldMax := this.limit
 	this.Limit(1)
 	defer this.Limit(oldMax)
 
-	list, err := this.List(rowMapper)
+	list, err := this.list(rowMapper)
 	if err != nil {
 		return nil, err
 	}

@@ -23,7 +23,7 @@ type EntityTransformer struct {
 	Overrider              EntityTransformerOverrider
 	Query                  *Query
 	Factory                func() reflect.Value
-	Returner               reflect.Value
+	Returner               func(val reflect.Value)
 	PaginationColumnOffset int
 	Properties             map[string]*EntityProperty
 	TemplateData           []interface{}
@@ -33,10 +33,10 @@ type EntityTransformer struct {
 var _ dbx.IRowTransformer = &EntityTransformer{}
 
 func NewEntityTransformer(query *Query, instance interface{}) *EntityTransformer {
-	return NewEntityFactoryTransformer(query, reflect.TypeOf(instance), reflect.Value{})
+	return NewEntityFactoryTransformer(query, reflect.TypeOf(instance), nil)
 }
 
-func NewEntityFactoryTransformer(query *Query, typ reflect.Type, returner reflect.Value) *EntityTransformer {
+func NewEntityFactoryTransformer(query *Query, typ reflect.Type, returner func(val reflect.Value)) *EntityTransformer {
 	this := new(EntityTransformer)
 	this.Overrider = this
 
@@ -61,7 +61,7 @@ func createFactory(typ reflect.Type) func() reflect.Value {
 	}
 }
 
-func (this *EntityTransformer) Super(query *Query, factory func() reflect.Value, returner reflect.Value) {
+func (this *EntityTransformer) Super(query *Query, factory func() reflect.Value, returner func(val reflect.Value)) {
 	this.Query = query
 	this.Factory = factory
 	this.Returner = returner
@@ -171,12 +171,12 @@ func (this *EntityTransformer) Transform(rows *sql.Rows) (interface{}, error) {
 		t.PostRetrive(this.Query.GetDb())
 	}
 
-	if this.Returner.Kind() == reflect.Invalid {
+	if this.Returner == nil {
 		if H, isH := instance.(tk.Hasher); isH {
 			return H, nil
 		}
 	} else {
-		this.Returner.Call([]reflect.Value{val})
+		this.Returner(val)
 	}
 
 	return nil, nil

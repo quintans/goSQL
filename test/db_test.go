@@ -20,8 +20,8 @@ import (
 //var logger = log.LoggerFor("github.com/quintans/goSQL/test")
 
 // custom Db - for setting default parameters
-func NewMyDb(connection dbx.IConnection, translator Translator, lang string) *MyDb {
-	baseDb := NewDb(connection, translator)
+func NewMyDb(inTx bool, connection dbx.IConnection, translator Translator, lang string) *MyDb {
+	baseDb := NewDb(inTx, connection, translator)
 	return &MyDb{baseDb, lang}
 }
 
@@ -127,10 +127,8 @@ func InitDB(driverName, dataSourceName string, translator Translator) (ITransact
 		// database
 		mydb,
 		// databse context factory
-		func(c dbx.IConnection) IDb {
-			//return db.NewDb(c, trx.NewFirebirdSQLTranslator())
-			//return NewDb(c, trx.NewMySQL5Translator())
-			return NewMyDb(c, translator, "pt")
+		func(inTx bool, c dbx.IConnection) IDb {
+			return NewMyDb(inTx, c, translator, "pt")
 		},
 		// statement cache
 		1000,
@@ -158,39 +156,40 @@ func TestAll(t *testing.T) {
 }
 
 func RunAll(TM ITransactionManager, t *testing.T) {
-	//RunSelectUTF8(TM, t)
-	//RunInsertReturningKey(TM, t)
-	//RunInsertStructReturningKey(TM, t)
-	//RunSimpleUpdate(TM, t)
+	RunSelectUTF8(TM, t)
+	RunInsertReturningKey(TM, t)
+	RunInsertStructReturningKey(TM, t)
+	RunSimpleUpdate(TM, t)
 	RunStructUpdate(TM, t)
-	//RunUpdateSubquery(TM, t)
-	//RunSimpleDelete(TM, t)
-	//RunStructDelete(TM, t)
-	//RunSelectInto(TM, t)
-	//RunSelectTreeTo(TM, t)
-	//RunSelectTree(TM, t)
-	//RunListFor(TM, t)
-	//RunListOf(TM, t)
-	//RunListFlatTreeFor(TM, t)
-	//RunListTreeOf(TM, t)
-	//RunListSimpleFor(TM, t)
-	//RunColumnSubquery(TM, t)
-	//RunWhereSubquery(TM, t)
-	//RunInnerOn(TM, t)
-	//RunInnerOn2(TM, t)
-	//RunOuterFetch(TM, t)
-	//RunGroupBy(TM, t)
-	//RunOrderBy(TM, t)
-	//RunPagination(TM, t)
-	//RunAssociationDiscriminator(TM, t)
-	//RunAssociationDiscriminatorReverse(TM, t)
-	//RunTableDiscriminator(TM, t)
-	//RunJoinTableDiscriminator(TM, t)
-	//RunVirtualColumns(TM, t)
-	//RunCustomFunction(TM, t)
-	//RunRawSQL(TM, t)
-	//RunHaving(TM, t)
-	//RunUnion(TM, t)
+	RunStructSaveAndRetrive(TM, t)
+	RunUpdateSubquery(TM, t)
+	RunSimpleDelete(TM, t)
+	RunStructDelete(TM, t)
+	RunSelectInto(TM, t)
+	RunSelectTree(TM, t)
+	RunSelectFlatTree(TM, t)
+	RunList(TM, t)
+	RunListOf(TM, t)
+	RunListFlatTree(TM, t)
+	RunListTreeOf(TM, t)
+	RunListSimple(TM, t)
+	RunColumnSubquery(TM, t)
+	RunWhereSubquery(TM, t)
+	RunInnerOn(TM, t)
+	RunInnerOn2(TM, t)
+	RunOuterFetch(TM, t)
+	RunGroupBy(TM, t)
+	RunOrderBy(TM, t)
+	RunPagination(TM, t)
+	RunAssociationDiscriminator(TM, t)
+	RunAssociationDiscriminatorReverse(TM, t)
+	RunTableDiscriminator(TM, t)
+	RunJoinTableDiscriminator(TM, t)
+	RunVirtualColumns(TM, t)
+	RunCustomFunction(TM, t)
+	RunRawSQL(TM, t)
+	RunHaving(TM, t)
+	RunUnion(TM, t)
 }
 
 func ResetDB(TM ITransactionManager) {
@@ -637,6 +636,90 @@ func RunStructUpdate(TM ITransactionManager, t *testing.T) {
 	}
 }
 
+func RunStructSaveAndRetrive(TM ITransactionManager, t *testing.T) {
+	ResetDB(TM)
+
+	var err error
+	if err = TM.Transaction(func(store IDb) error {
+		var publisher Publisher
+		// === save insert ===
+		publisher.Name = ext.StrPtr("Super Duper Test")
+		ok, err := store.Save(&publisher)
+		if err != nil {
+			t.Fatalf("Failed RunStructSaveAndRetrive: %s", err)
+		}
+
+		if !ok {
+			t.Fatal("The record was not Saved")
+		}
+
+		if *publisher.Version != 1 {
+			t.Fatalf("Expected Version = 1, got %v", *publisher.Version)
+		}
+
+		// === check insert ===
+		var oldPub Publisher
+		ok, err = store.Retrive(&oldPub, publisher.Id)
+		if err != nil {
+			t.Fatalf("Failed RunStructSaveAndRetrive: %s", err)
+		}
+
+		if !ok {
+			t.Fatal("The record was not Saved")
+		}
+
+		if *publisher.Version != *oldPub.Version {
+			t.Fatalf("Expected same Version = 1, got %v", *oldPub.Version)
+		}
+
+		// === save update ===
+		publisher.Name = ext.StrPtr("UPDDATE: Super Duper Test")
+		ok, err = store.Save(&publisher)
+		if err != nil {
+			t.Fatalf("Failed RunStructSaveAndRetrive: %s", err)
+		}
+
+		if !ok {
+			t.Fatal("The record was not Saved")
+		}
+
+		if *publisher.Version != 2 {
+			t.Fatalf("Expected Version = 2, got %v", *publisher.Version)
+		}
+
+		// === check update ===
+		oldPub = Publisher{}
+		ok, err = store.Retrive(&oldPub, publisher.Id)
+		if err != nil {
+			t.Fatalf("Failed RunStructSaveAndRetrive: %s", err)
+		}
+
+		if !ok {
+			t.Fatal("The record was not Saved")
+		}
+
+		if *publisher.Version != *oldPub.Version {
+			t.Fatalf("Expected same Version, got %v", *oldPub.Version)
+		}
+
+		// === check optimistic lock ===
+		*publisher.Version = 1 // invalid version
+		ok, err = store.Save(&publisher)
+		fail, _ := err.(*dbx.OptimisticLockFail)
+		if fail == nil {
+			t.Fatalf("Failed RunStructSaveAndRetrive: %s", err)
+		}
+
+		if ok {
+			t.Fatal("The record was Saved, without an optimistic lock fail")
+		}
+
+		return nil
+	}); err != nil {
+		t.Fatalf("Failed Update Test: %s", err)
+	}
+}
+
 func RunUpdateSubquery(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
@@ -692,7 +775,7 @@ func RunStructDelete(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	if err := TM.Transaction(func(store IDb) error {
-		// clears any relation with book id = 1
+		// clears any relation with book id = 2
 		store.Delete(AUTHOR_BOOK).Where(AUTHOR_BOOK_C_BOOK_ID.Matches(2)).Execute()
 
 		var book Book
@@ -700,9 +783,22 @@ func RunStructDelete(TM ITransactionManager, t *testing.T) {
 		book.Version = ext.Int64Ptr(1)
 		affectedRows, err := store.Delete(BOOK).Submit(book)
 		if err != nil {
-			return err
+			t.Fatalf("Failed RunStructDelete: %s", err)
 		}
 		if affectedRows != 1 {
+			t.Fatal("The record was not deleted")
+		}
+
+		// short version
+		// clears any relation with book id = 3
+		store.Delete(AUTHOR_BOOK).Where(AUTHOR_BOOK_C_BOOK_ID.Matches(3)).Execute()
+		*book.Id = 3
+		var ok bool
+		ok, err = store.Remove(book)
+		if err != nil {
+			t.Fatalf("Failed RunStructDelete: %s", err)
+		}
+		if !ok {
 			t.Fatal("The record was not deleted")
 		}
 
@@ -728,7 +824,7 @@ func RunSelectInto(TM ITransactionManager, t *testing.T) {
 	}
 }
 
-func RunSelectTreeTo(TM ITransactionManager, t *testing.T) {
+func RunSelectTree(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	store := TM.Store()
@@ -738,7 +834,7 @@ func RunSelectTreeTo(TM ITransactionManager, t *testing.T) {
 		Outer(PUBLISHER_A_BOOKS).
 		Fetch(). // add all columns off book in the query
 		Where(PUBLISHER_C_ID.Matches(2)).
-		SelectTreeTo(&publisher, true)
+		SelectTree(&publisher)
 	if err != nil {
 		t.Fatalf("%s", err)
 	} else if !ok || publisher.Id == nil {
@@ -751,50 +847,68 @@ func RunSelectTreeTo(TM ITransactionManager, t *testing.T) {
 	}
 }
 
-func RunSelectTree(TM ITransactionManager, t *testing.T) {
+func RunSelectFlatTree(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	store := TM.Store()
-	result, err := store.Query(PUBLISHER).
+	var publisher Publisher
+	ok, err := store.Query(PUBLISHER).
 		All().
 		Outer(PUBLISHER_A_BOOKS).
 		Fetch(). // add all columns off book in the query
 		Where(PUBLISHER_C_ID.Matches(2)).
-		SelectTree((*Publisher)(nil), true)
+		SelectFlatTree(&publisher)
 	if err != nil {
 		t.Fatalf("%s", err)
-	} else if result == nil {
+	} else if !ok || publisher.Id == nil {
 		t.Fatal("The record for publisher id 2, was not retrived")
 	} else {
-		publisher := result.(*Publisher)
 		// check list size of books
-		if len(publisher.Books) != 2 {
-			t.Fatalf("The list of books for the publisher with id 2 was incorrectly retrived. Expected 2 got %v", len(publisher.Books))
+		if len(publisher.Books) != 1 {
+			t.Fatalf("The list of books for the publisher with id 2 was incorrectly retrived. Expected 1 got %v", len(publisher.Books))
 		}
 	}
 }
 
-func RunListFor(TM ITransactionManager, t *testing.T) {
+func RunList(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	store := TM.Store()
 	books := make([]*Book, 0) // mandatory use pointers
 	err := store.Query(BOOK).
 		All().
-		ListFor(func(book *Book) {
+		List(func(book *Book) {
 		books = append(books, book)
 	})
 	if err != nil {
-		t.Fatalf("Failed ListFor Test: %s", err)
+		t.Fatalf("Failed List Test: %s", err)
 	}
 
 	if len(books) != 3 {
 		t.Fatalf("Expected 3 returned books, but got %v", len(books))
-	} else {
-		for _, v := range books {
-			if v.Id == nil {
-				t.Fatalf("A book has invalid Id and therefore was not retrived")
-			}
+	}
+
+	for _, v := range books {
+		if v.Id == nil {
+			t.Fatalf("A book has invalid Id and therefore was not retrived")
+		}
+	}
+
+	var bks []*Book
+	err = store.Query(BOOK).
+		All().
+		List(&bks)
+	if err != nil {
+		t.Fatalf("Failed List Test: %s", err)
+	}
+
+	if len(bks) != 3 {
+		t.Fatalf("Expected 3 returned books, but got %v", len(bks))
+	}
+
+	for _, v := range bks {
+		if v.Id == nil {
+			t.Fatalf("A book has invalid Id and therefore was not retrived")
 		}
 	}
 }
@@ -822,34 +936,65 @@ func RunListOf(TM ITransactionManager, t *testing.T) {
 	}
 }
 
-func RunListFlatTreeFor(TM ITransactionManager, t *testing.T) {
+func RunListFlatTree(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	store := TM.Store()
-	publishers := make([]*Publisher, 0)
+
+	var publishers []*Publisher
 	err := store.Query(PUBLISHER).
 		All().
 		Outer(PUBLISHER_A_BOOKS).
 		Fetch(). // add all columns off book in the query
 		Where(PUBLISHER_C_ID.Matches(2)).
-		ListFlatTreeFor(func(publisher *Publisher) {
-		publishers = append(publishers, publisher)
-	})
+		ListFlatTree(&publishers)
+
 	if err != nil {
 		t.Fatalf("%s", err)
-	} else if len(publishers) != 2 {
+	}
+
+	if len(publishers) != 2 {
 		t.Fatalf("The record for publisher id 2, was not retrived. Expected collection size of 2, got %v", len(publishers))
-	} else {
-		for _, publisher := range publishers {
-			// check list size of books
-			if publisher.Id == nil {
-				t.Fatalf("A book has invalid Id and therefore was not retrived")
-			}
-			if len(publisher.Books) != 1 {
-				t.Fatalf("The list of books for the publisher with id 2 was incorrectly retrived. Expected 1 got %v", len(publisher.Books))
-			}
+	}
+
+	for _, publisher := range publishers {
+		// check list size of books
+		if publisher.Id == nil {
+			t.Fatalf("A book has invalid Id and therefore was not retrived")
+		}
+		if len(publisher.Books) != 1 {
+			t.Fatalf("The list of books for the publisher with id 2 was incorrectly retrived. Expected 1 got %v", len(publisher.Books))
 		}
 	}
+
+	publishers = make([]*Publisher, 0)
+	err = store.Query(PUBLISHER).
+		All().
+		Outer(PUBLISHER_A_BOOKS).
+		Fetch(). // add all columns off book in the query
+		Where(PUBLISHER_C_ID.Matches(2)).
+		ListFlatTree(func(publisher *Publisher) {
+		publishers = append(publishers, publisher)
+	})
+
+	if err != nil {
+		t.Fatalf("%s", err)
+	}
+
+	if len(publishers) != 2 {
+		t.Fatalf("The record for publisher id 2, was not retrived. Expected collection size of 2, got %v", len(publishers))
+	}
+
+	for _, publisher := range publishers {
+		// check list size of books
+		if publisher.Id == nil {
+			t.Fatalf("A book has invalid Id and therefore was not retrived")
+		}
+		if len(publisher.Books) != 1 {
+			t.Fatalf("The list of books for the publisher with id 2 was incorrectly retrived. Expected 1 got %v", len(publisher.Books))
+		}
+	}
+
 }
 
 func RunListTreeOf(TM ITransactionManager, t *testing.T) {
@@ -880,7 +1025,7 @@ func RunListTreeOf(TM ITransactionManager, t *testing.T) {
 	}
 }
 
-func RunListSimpleFor(TM ITransactionManager, t *testing.T) {
+func RunListSimple(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	store := TM.Store()
@@ -888,11 +1033,11 @@ func RunListSimpleFor(TM ITransactionManager, t *testing.T) {
 	var name string
 	err := store.Query(PUBLISHER).
 		Column(PUBLISHER_C_NAME).
-		ListSimpleFor(func() {
+		ListSimple(func() {
 		names = append(names, name)
 	}, &name)
 	if err != nil {
-		t.Fatalf("Failed TestListSimpleFor: %s", err)
+		t.Fatalf("Failed TestListSimple: %s", err)
 	}
 
 	if len(names) != 2 {
@@ -914,7 +1059,7 @@ func RunColumnSubquery(TM ITransactionManager, t *testing.T) {
 	err := store.Query(PUBLISHER).Alias("p").
 		Column(PUBLISHER_C_NAME).
 		Column(subquery).As("Value").
-		ListFor(func(dto *Dto) {
+		List(func(dto *Dto) {
 		dtos = append(dtos, dto)
 	})
 
@@ -950,7 +1095,7 @@ func RunWhereSubquery(TM ITransactionManager, t *testing.T) {
 		Include(BOOK_C_PRICE).As("Value").
 		Join().
 		Where(PUBLISHER_C_ID.In(subquery)).
-		ListFor(func(dto *Dto) {
+		List(func(dto *Dto) {
 		dtos = append(dtos, dto)
 	})
 
@@ -979,7 +1124,7 @@ func RunInnerOn(TM ITransactionManager, t *testing.T) {
 		Inner(PUBLISHER_A_BOOKS).
 		On(BOOK_C_PUBLISHED.Lesser(time.Date(2013, time.January, 1, 0, 0, 0, 0, time.UTC))).
 		Join().
-		ListFor(func(publisher *Publisher) {
+		List(func(publisher *Publisher) {
 		publishers = append(publishers, publisher)
 	})
 
@@ -1012,7 +1157,7 @@ func RunInnerOn2(TM ITransactionManager, t *testing.T) {
 		Inner(BOOK_A_AUTHORS).
 		On(AUTHOR_C_NAME.Like("%Doe")).
 		Join().
-		ListFor(func(publisher *Publisher) {
+		List(func(publisher *Publisher) {
 		publishers = append(publishers, publisher)
 	})
 
@@ -1096,7 +1241,7 @@ func RunGroupBy(TM ITransactionManager, t *testing.T) {
 		Include(Sum(BOOK_C_PRICE)).As("Value").
 		Join().
 		GroupByPos(1).
-		ListFor(func(dto *Dto) {
+		List(func(dto *Dto) {
 		dtos = append(dtos, dto)
 	})
 
@@ -1122,7 +1267,7 @@ func RunOrderBy(TM ITransactionManager, t *testing.T) {
 		All().
 		OrderBy(PUBLISHER_C_NAME).
 		Asc(true).
-		ListFor(func(publisher *Publisher) {
+		List(func(publisher *Publisher) {
 		publishers = append(publishers, publisher)
 	})
 
@@ -1154,7 +1299,7 @@ func RunPagination(TM ITransactionManager, t *testing.T) {
 		Order(PUBLISHER_C_NAME).Asc(true).
 		Skip(2).  // skip the first 2 records
 		Limit(3). // returns next 3 records
-		ListFlatTreeFor(func(publisher *Publisher) {
+		ListFlatTree(func(publisher *Publisher) {
 		publishers = append(publishers, publisher)
 	})
 
@@ -1253,7 +1398,7 @@ func RunTableDiscriminator(TM ITransactionManager, t *testing.T) {
 	statuses := make([]*Status, 0)
 	err := store.Query(STATUS).
 		All().
-		ListFor(func(status *Status) {
+		List(func(status *Status) {
 		statuses = append(statuses, status)
 	})
 
@@ -1314,7 +1459,7 @@ func RunJoinTableDiscriminator(TM ITransactionManager, t *testing.T) {
 		All().
 		Outer(PROJECT_A_STATUS).
 		Fetch().
-		ListFlatTreeFor(func(project *Project) {
+		ListFlatTree(func(project *Project) {
 		result = append(result, project)
 	})
 
@@ -1367,7 +1512,7 @@ func RunCustomFunction(TM ITransactionManager, t *testing.T) {
 		).
 			Greater(1000),
 	).
-		ListFor(func(book *Book) {
+		List(func(book *Book) {
 		books = append(books, book)
 	})
 
@@ -1427,7 +1572,7 @@ func RunHaving(TM ITransactionManager, t *testing.T) {
 		Join().
 		GroupByPos(1).
 		Having(Alias("ThisYear").Greater(30)).
-		ListFor(func(sale *PublisherSales) {
+		List(func(sale *PublisherSales) {
 		sales = append(sales, sale)
 	})
 
@@ -1482,7 +1627,7 @@ func RunUnion(TM ITransactionManager, t *testing.T) {
 			Join().
 			GroupByPos(1, 2),
 	).
-		ListFor(func(sale *PublisherSales) {
+		List(func(sale *PublisherSales) {
 		logger.Debugf("sales = %s", sale.String())
 		found := false
 		for _, v := range sales {

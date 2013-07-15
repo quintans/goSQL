@@ -184,7 +184,7 @@ func (this *Update) Submit(instance interface{}) (int64, error) {
 
 	if verColumn != nil {
 		if affectedRows == 0 {
-			return 0, dbx.NewOptimisticLockFail("", fmt.Sprintf("Unable to UPDATE record with id=%v and version=%v for table %s",
+			return 0, dbx.NewOptimisticLockFail("", fmt.Sprintf("Optimistic Lock Error: Unable to UPDATE record with id=%v and version=%v for table %s",
 				id, ver, this.GetTable().GetName()))
 		}
 
