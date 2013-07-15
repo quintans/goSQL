@@ -108,6 +108,8 @@ store.Modify(&publisher)
 
  - SQL DSL
  - Flush query results with joins to an arbitrary tree Struct
+ - Support for primitive pointer types like *string, *int64, *float64, *bool, etc
+ - Support for types implementing driver.Valuer and sql.Scanner interface
  - Automatic setting of primary keys for inserts
  - Automatic version increment
  - Pre/Post insert/update/delete Struct triggers
