@@ -8,6 +8,7 @@ a ORM like library in Go's (golang) that makes it easy to use SQL.
 * [Introduction](#introduction)
 * [Features](#features)
 * [Tested Databases](#tested-databases)
+* [Dependencies](#dependencies)
 * [Instalation](#instalation)
 * [Startup Guide](#startup-guide)
 * [Usage](#usage)
@@ -128,7 +129,9 @@ store.Modify(&publisher)
  - PostgreSQL 9.2
  - FirebirdSQL 2.5
 
+## Dependencies
 
+go 1.1
 
 ## Instalation
 
