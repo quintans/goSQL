@@ -23,6 +23,8 @@ var VERSION_SET_MSG = "Unable to set Version data."
 type IDb interface {
 	GetTranslator() Translator
 	GetConnection() dbx.IConnection
+	InTransaction() bool
+
 	Query(table *Table) *Query
 	Insert(table *Table) *Insert
 	Delete(table *Table) *Delete
@@ -37,9 +39,10 @@ type IDb interface {
 
 var _ IDb = &Db{}
 
-func NewDb(connection dbx.IConnection, translator Translator) *Db {
+func NewDb(inTx bool, connection dbx.IConnection, translator Translator) *Db {
 	this := new(Db)
 	this.Overrider = this
+	this.inTx = inTx
 	this.Connection = connection
 	this.Translator = translator
 	return this
@@ -47,6 +50,7 @@ func NewDb(connection dbx.IConnection, translator Translator) *Db {
 
 type Db struct {
 	Overrider  IDb
+	inTx       bool
 	Connection dbx.IConnection
 	Translator Translator
 
@@ -54,6 +58,10 @@ type Db struct {
 	lastUpdate *Update
 	lastDelete *Delete
 	lastQuery  *Query
+}
+
+func (this *Db) InTransaction() bool {
+	return this.inTx
 }
 
 func (this *Db) GetTranslator() Translator {
@@ -185,7 +193,7 @@ func (this *Db) Remove(instance interface{}) (bool, error) {
 		return false, err
 	}
 
-	// get Update from cache
+	// get Delete from cache
 	var dml *Delete
 	if this.lastDelete != nil && this.lastDelete.GetTable().Equals(table) {
 		dml = this.lastDelete
@@ -223,13 +231,13 @@ func (this *Db) Save(instance interface{}) (bool, error) {
 	v := val.FieldByName(verColumn.GetAlias())
 	if v.Kind() == reflect.Ptr {
 		if v.IsNil() {
+			var zero int64
 			ptr := reflect.New(v.Type()).Elem()
-			ptr.Set(reflect.ValueOf(0))
+			ptr.Set(reflect.ValueOf(&zero))
 			v.Set(ptr)
 			v = ptr
-		} else {
-			v = v.Elem()
 		}
+		v = v.Elem()
 	}
 
 	ver := v.Int()

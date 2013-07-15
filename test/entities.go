@@ -52,6 +52,10 @@ type Publisher struct {
 	Books []*Book
 }
 
+func (this *Publisher) PostRetrive(store IDb) {
+	logger.Infof("===> PostRetrive trigger for %s in transaction? %t", this.String(), store.InTransaction())
+}
+
 func (this *Publisher) String() string {
 	sb := tk.NewStrBuffer()
 	sb.Add("{Id: ", this.Id, ", Version: ", this.Version)
@@ -163,10 +167,6 @@ type Book struct {
 	BookBin     *BookBin
 
 	Title *string
-}
-
-func (this *Publisher) PostRetrive(store IDb) {
-	logger.Infof("===> PostRetrive trigger for %s", this.String())
 }
 
 func (this *Book) String() string {

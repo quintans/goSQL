@@ -20,8 +20,8 @@ import (
 //var logger = log.LoggerFor("github.com/quintans/goSQL/test")
 
 // custom Db - for setting default parameters
-func NewMyDb(connection dbx.IConnection, translator Translator, lang string) *MyDb {
-	baseDb := NewDb(connection, translator)
+func NewMyDb(inTx bool, connection dbx.IConnection, translator Translator, lang string) *MyDb {
+	baseDb := NewDb(inTx, connection, translator)
 	return &MyDb{baseDb, lang}
 }
 
@@ -127,10 +127,10 @@ func InitDB(driverName, dataSourceName string, translator Translator) (ITransact
 		// database
 		mydb,
 		// databse context factory
-		func(c dbx.IConnection) IDb {
+		func(inTx bool, c dbx.IConnection) IDb {
 			//return db.NewDb(c, trx.NewFirebirdSQLTranslator())
 			//return NewDb(c, trx.NewMySQL5Translator())
-			return NewMyDb(c, translator, "pt")
+			return NewMyDb(inTx, c, translator, "pt")
 		},
 		// statement cache
 		1000,
@@ -158,39 +158,40 @@ func TestAll(t *testing.T) {
 }
 
 func RunAll(TM ITransactionManager, t *testing.T) {
-	//RunSelectUTF8(TM, t)
-	//RunInsertReturningKey(TM, t)
-	//RunInsertStructReturningKey(TM, t)
-	//RunSimpleUpdate(TM, t)
+	RunSelectUTF8(TM, t)
+	RunInsertReturningKey(TM, t)
+	RunInsertStructReturningKey(TM, t)
+	RunSimpleUpdate(TM, t)
 	RunStructUpdate(TM, t)
-	//RunUpdateSubquery(TM, t)
-	//RunSimpleDelete(TM, t)
-	//RunStructDelete(TM, t)
-	//RunSelectInto(TM, t)
-	//RunSelectTreeTo(TM, t)
-	//RunSelectTree(TM, t)
-	//RunListFor(TM, t)
-	//RunListOf(TM, t)
-	//RunListFlatTreeFor(TM, t)
-	//RunListTreeOf(TM, t)
-	//RunListSimpleFor(TM, t)
-	//RunColumnSubquery(TM, t)
-	//RunWhereSubquery(TM, t)
-	//RunInnerOn(TM, t)
-	//RunInnerOn2(TM, t)
-	//RunOuterFetch(TM, t)
-	//RunGroupBy(TM, t)
-	//RunOrderBy(TM, t)
-	//RunPagination(TM, t)
-	//RunAssociationDiscriminator(TM, t)
-	//RunAssociationDiscriminatorReverse(TM, t)
-	//RunTableDiscriminator(TM, t)
-	//RunJoinTableDiscriminator(TM, t)
-	//RunVirtualColumns(TM, t)
-	//RunCustomFunction(TM, t)
-	//RunRawSQL(TM, t)
-	//RunHaving(TM, t)
-	//RunUnion(TM, t)
+	RunStructSaveAndRetrive(TM, t)
+	RunUpdateSubquery(TM, t)
+	RunSimpleDelete(TM, t)
+	RunStructDelete(TM, t)
+	RunSelectInto(TM, t)
+	RunSelectTreeTo(TM, t)
+	RunSelectTree(TM, t)
+	RunListFor(TM, t)
+	RunListOf(TM, t)
+	RunListFlatTreeFor(TM, t)
+	RunListTreeOf(TM, t)
+	RunListSimpleFor(TM, t)
+	RunColumnSubquery(TM, t)
+	RunWhereSubquery(TM, t)
+	RunInnerOn(TM, t)
+	RunInnerOn2(TM, t)
+	RunOuterFetch(TM, t)
+	RunGroupBy(TM, t)
+	RunOrderBy(TM, t)
+	RunPagination(TM, t)
+	RunAssociationDiscriminator(TM, t)
+	RunAssociationDiscriminatorReverse(TM, t)
+	RunTableDiscriminator(TM, t)
+	RunJoinTableDiscriminator(TM, t)
+	RunVirtualColumns(TM, t)
+	RunCustomFunction(TM, t)
+	RunRawSQL(TM, t)
+	RunHaving(TM, t)
+	RunUnion(TM, t)
 }
 
 func ResetDB(TM ITransactionManager) {
@@ -637,6 +638,90 @@ func RunStructUpdate(TM ITransactionManager, t *testing.T) {
 	}
 }
 
+func RunStructSaveAndRetrive(TM ITransactionManager, t *testing.T) {
+	ResetDB(TM)
+
+	var err error
+	if err = TM.Transaction(func(store IDb) error {
+		var publisher Publisher
+		// === save insert ===
+		publisher.Name = ext.StrPtr("Super Duper Test")
+		ok, err := store.Save(&publisher)
+		if err != nil {
+			t.Fatalf("Failed RunStructSaveAndRetrive: %s", err)
+		}
+
+		if !ok {
+			t.Fatal("The record was not Saved")
+		}
+
+		if *publisher.Version != 1 {
+			t.Fatalf("Expected Version = 1, got %v", *publisher.Version)
+		}
+
+		// === check insert ===
+		var oldPub Publisher
+		ok, err = store.Retrive(&oldPub, publisher.Id)
+		if err != nil {
+			t.Fatalf("Failed RunStructSaveAndRetrive: %s", err)
+		}
+
+		if !ok {
+			t.Fatal("The record was not Saved")
+		}
+
+		if *publisher.Version != *oldPub.Version {
+			t.Fatalf("Expected same Version = 1, got %v", *oldPub.Version)
+		}
+
+		// === save update ===
+		publisher.Name = ext.StrPtr("UPDDATE: Super Duper Test")
+		ok, err = store.Save(&publisher)
+		if err != nil {
+			t.Fatalf("Failed RunStructSaveAndRetrive: %s", err)
+		}
+
+		if !ok {
+			t.Fatal("The record was not Saved")
+		}
+
+		if *publisher.Version != 2 {
+			t.Fatalf("Expected Version = 2, got %v", *publisher.Version)
+		}
+
+		// === check update ===
+		oldPub = Publisher{}
+		ok, err = store.Retrive(&oldPub, publisher.Id)
+		if err != nil {
+			t.Fatalf("Failed RunStructSaveAndRetrive: %s", err)
+		}
+
+		if !ok {
+			t.Fatal("The record was not Saved")
+		}
+
+		if *publisher.Version != *oldPub.Version {
+			t.Fatalf("Expected same Version, got %v", *oldPub.Version)
+		}
+
+		// === check optimistic lock ===
+		*publisher.Version = 1 // invalid version
+		ok, err = store.Save(&publisher)
+		fail, _ := err.(*dbx.OptimisticLockFail)
+		if fail == nil {
+			t.Fatalf("Failed RunStructSaveAndRetrive: %s", err)
+		}
+
+		if ok {
+			t.Fatal("The record was Saved, without an optimistic lock fail")
+		}
+
+		return nil
+	}); err != nil {
+		t.Fatalf("Failed Update Test: %s", err)
+	}
+}
+
 func RunUpdateSubquery(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
@@ -692,7 +777,7 @@ func RunStructDelete(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	if err := TM.Transaction(func(store IDb) error {
-		// clears any relation with book id = 1
+		// clears any relation with book id = 2
 		store.Delete(AUTHOR_BOOK).Where(AUTHOR_BOOK_C_BOOK_ID.Matches(2)).Execute()
 
 		var book Book
@@ -700,9 +785,22 @@ func RunStructDelete(TM ITransactionManager, t *testing.T) {
 		book.Version = ext.Int64Ptr(1)
 		affectedRows, err := store.Delete(BOOK).Submit(book)
 		if err != nil {
-			return err
+			t.Fatalf("Failed RunStructDelete: %s", err)
 		}
 		if affectedRows != 1 {
+			t.Fatal("The record was not deleted")
+		}
+
+		// short version
+		// clears any relation with book id = 3
+		store.Delete(AUTHOR_BOOK).Where(AUTHOR_BOOK_C_BOOK_ID.Matches(3)).Execute()
+		*book.Id = 3
+		var ok bool
+		ok, err = store.Remove(book)
+		if err != nil {
+			t.Fatalf("Failed RunStructDelete: %s", err)
+		}
+		if !ok {
 			t.Fatal("The record was not deleted")
 		}
 

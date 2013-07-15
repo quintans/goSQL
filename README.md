@@ -3,6 +3,52 @@
 
 a ORM like library in Go's (golang) that makes it easy to use SQL.
 
+## Index
+
+* [Introduction](#introduction)
+* [Features](#features)
+* [Tested Databases](#tested-databases)
+* [Instalation](#instalation)
+* [Startup Guide](#startup-guide)
+* [Usage](#usage)
+* [Entity Relation Diagram](#entity-relation-diagram)
+* [Table definition](#table-definition)
+* [Transactions](#transactions)
+* [Insert Examples](#insert-examples)
+	* [Simple Insert](#simple-insert)
+	* [Insert With a Struct](#insert-with-a-struct)
+	* [Insert Returning Generated Key](#insert-returning-generated-key)
+* [Update Examples](#update-examples)
+	* [Update selected columns with Optimistic lock](#update-selected-columns-with-optimistic-lock)
+	* [Update with struct](#update-with-struct)
+	* [Update with SubQuery](#update-with-subQuery)
+* [Delete Examples](#delete-examples)
+	* [Simple Delete](#simple-delete)
+	* [Delete with struct](#delete-with-struct)
+* [Query Examples](#query-examples)
+	* [SelectInto](#selectInto)
+	* [SelectTo](#selectTo)
+	* [SelectTreeTo](#selectTreeTo)
+	* [SelectTree](#selectTree)
+	* [LisSimpleFor](#lisSimpleFor)
+	* [ListFor](#listFor)
+	* [ListOf](#listOf)
+	* [ListFlatTreeFor](#listFlatTreeFor)
+	* [ListTreeOf](#listTreeOf)
+	* [Column Subquery](#column-subquery)
+	* [Where Subquery](#where-subquery)
+	* [Joins](#joins)
+	* [Group By](#group-by)
+	* [Having](#having)
+	* [Order By](#order-by)
+	* [Union](#union)
+	* [Pagination](#pagination)
+* [Struct Triggers](#struct-triggers)
+* [Association Discriminator](#association-discriminator)
+* [Table Discriminator](#table-discriminator)
+* [Virtual Columns](#virtual-columns)
+* [Custom Functions](#custom-functions)
+* [Raw SQL](#raw-sQL)
 
 
 ## Introduction
@@ -12,7 +58,7 @@ a ORM like library in Go's (golang) that makes it easy to use SQL.
 **goSQL** aims to facilitate the convertion between database tables and structs and make easy
 the use of complex joins. 
 It has no intention of hiding the SQL from the developer and a closer idiom to SQL is also part of the library.  
-Structs can be used as a representation of a table record for CRUD operations but there is no direct dependency between a struct and a table. It is the field of a struct that is matched with the column alias of SQL statement to build a result. 
+Structs can be used as a representation of a table record for CRUD operations but there is no direct dependency between a struct and a table. The fields of a struct are matched with the column alias of the SQL statement to build a result. 
 
 This library is not locked to any database vendor. This database abstraction is achieved by what I called _Translators_. Translators for MySQL, PostgreSQL and FirebirdSQL are provided.
 These Translators can be extended  by registering functions to implement functionality not covered by the initial Translators or customize to something specific to a project. 
@@ -29,7 +75,13 @@ store.Query(PUBLISHER).
 	Where(PUBLISHER_C_ID.Matches(2)).
 	SelectTo(&publisher)
 ```
-		
+
+Short version
+
+```go
+store.Retrive(&publisher, 2)
+```
+
 We are not restricted to the use of structs as demonstrated by the next snippet
 	
 ```go
@@ -43,22 +95,27 @@ store.Query(PUBLISHER).
 Another example with an update
 
 ```go
-store.Update(PUBLISHER).Submit(publisher)
+store.Update(PUBLISHER).Submit(&publisher)
 ```
 
+and the shorter version...
 
+```go
+store.Modify(&publisher)
+```
 
 ## Features
 
  - SQL DSL
- - Flush query results to an arbitrary Struct
- - Pre/Post insert/update/delete Struct triggers
+ - Flush query results with joins to an arbitrary tree Struct
  - Automatic setting of primary keys for inserts
  - Automatic version increment
+ - Pre/Post insert/update/delete Struct triggers
+ - Quick CRUD actions
  - Database Abstraction
  - Transactions
  - Optimistic Locking
- - Joins made easy
+ - Joins
  - Result Pagination
  - Extensible
 
@@ -180,7 +237,7 @@ The is what you will find in [test/db_test.go](test/db_test.go).
 
 ## Usage
 In this chapter I will try to explain the several aspects of the library using a set of examples.
-These examples are supported by tables defined in [test/tables.sql](test/tables.sql), a MySQL database sql script.
+These examples are supported by tables defined in [test/tables_mysql.sql](test/tables_mysql.sql), a MySQL database sql script.
 
 Before diving in to the examples I first describe the table model and how to map the entities.
 
@@ -283,6 +340,21 @@ var AUTHOR_A_BOOKS = NewM2MAssociation(
 The order of the parameters is very important, because they indicate the direction of the association.
 
 The full definition of the tables and the struct entities used in this document are in [test/entities.go](test/entities.go), covering all aspects of table mapping.
+
+
+### Transactions
+
+To wrap operations inside a transaction we do this:
+
+```go
+TM.Transaction(func(store IDb) error {
+	// put you actions here
+});	
+```	
+
+If an error is returned or panic occurs, the transaction is rolled back, otherwise is commited.
+
+[db_test.go](test/db_test.go) has several examples of transactions.
 
 
 
@@ -388,6 +460,7 @@ If the field version is zero or nil an insert is issued, otherwise is an update.
 store.Save(&publisher)
 ```
 
+> Assumes that the table `PUBLISHER` was registered with the name `Publisher`.
 
 
 #### Update with SubQuery
@@ -410,14 +483,13 @@ affectedRows, err := store.Update(PUBLISHER).Alias("a").
 
 ### Delete Examples
 
-
-
 #### Simple Delete
 
 ```go
 store.Delete(BOOK).Where(BOOK_C_ID.Matches(2)).Execute()
 ```
 
+As we can see the Version column is not taken into account.
 
 
 #### Delete with struct
@@ -428,6 +500,14 @@ book.Id = ext.Int64Ptr(2)
 book.Version = ext.Int64Ptr(1)
 store.Delete(BOOK).Submit(book)
 ```
+
+Shorter Version for the last instruction:
+
+```go
+store.Remove(book)
+```
+
+> Assumes that the table `BOOK` was registered with the name `Book`.
 
 
 
@@ -464,6 +544,15 @@ store.Query(PUBLISHER).
 	SelectTo(&publisher)
 ```
 
+The short version, that internally uses the previous query is:
+
+```go
+store.Retrive(&publisher, 2)
+```
+
+> Assumes that the table `PUBLISHER` was registered with the name `Publisher`.
+
+The Ids are in the same order as they are in the table declaration.
 
 
 #### SelectTreeTo
@@ -891,6 +980,8 @@ PostRetrive(store IDb)
 
 If an error is returned in a Pre trigger the action is not performed.
 
+To know if a trigger is called inside a transaction use `store.InTransaction()`.
+
 
 
 ### Association Discriminator
@@ -934,7 +1025,7 @@ With this we avoid of having to write a **where** condition every time we want t
 Inserts will automatically apply the discriminator.
 
 To demonstrate this I will use a physical table named CATALOG that can hold unrelated information, like gender, eye color, etc.  
-The creation script and table definitions for the next example are at [test/tables.sql](test/tables.sql) and [test/entities.go](test/entities.go) respectively.
+The creation script and table definitions for the next example are at [test/tables_mysql.sql](test/tables_mysql.sql) and [test/entities.go](test/entities.go) respectively.
 
 ```go
 statuses := make([]*Status, 0)

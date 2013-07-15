@@ -10,24 +10,30 @@ const FAULT_QUERY = "QRY01"
 const FAULT_TRANSFORM = "TRF01"
 const FAULT_OPTIMISTIC_LOCK = "OPT_LOCK"
 
+var _ error = &PersistenceFail{}
+
 type PersistenceFail struct {
-	tk.Fail
+	*tk.Fail
 }
 
 func NewPersistenceFail(code string, message string) *PersistenceFail {
 	fail := new(PersistenceFail)
-	fail.Code = code
-	fail.Message = message
+	fail.Fail = new(tk.Fail)
+	fail.Fail.Code = code
+	fail.Fail.Message = message
 	return fail
 }
 
+var _ error = &OptimisticLockFail{}
+
 type OptimisticLockFail struct {
-	tk.Fail
+	*tk.Fail
 }
 
 func NewOptimisticLockFail(code string, message string) *OptimisticLockFail {
 	fail := new(OptimisticLockFail)
-	fail.Code = code
-	fail.Message = message
+	fail.Fail = new(tk.Fail)
+	fail.Fail.Code = code
+	fail.Fail.Message = message
 	return fail
 }
