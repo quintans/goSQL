@@ -786,8 +786,8 @@ matching the alias with struct property name. If no alias is supplied, it is use
 
 Accepts as parameter the struct type and returns a collection of structs (needs cast)
 */
-func (this *Query) ListOf(instance interface{}) (coll.Collection, error) {
-	return this.list(NewEntityTransformer(this, instance))
+func (this *Query) ListOf(template interface{}) (coll.Collection, error) {
+	return this.list(NewEntityTransformer(this, template))
 }
 
 /*
@@ -869,14 +869,25 @@ func checkCollector(collector interface{}) (func(val reflect.Value), reflect.Typ
 }
 
 /*
-Executes a query and transform the results to the struct type.
+Executes a query and transform the results into a tree with the passed struct type as the head.
 It matches the alias with struct property name, building a struct tree.
 If the transformed data matches a previous converted entity the previous one is reused.
 
 Receives a template instance and returns a collection of structs.
 */
-func (this *Query) ListTreeOf(instance tk.Hasher) (coll.Collection, error) {
-	return this.list(NewEntityTreeTransformer(this, true, instance))
+func (this *Query) ListTreeOf(template tk.Hasher) (coll.Collection, error) {
+	return this.list(NewEntityTreeTransformer(this, true, template))
+}
+
+/*
+Executes a query and transform the results into a flat tree with the passed struct type as the head.
+It matches the alias with struct property name, building a struct tree.
+If the transformed data matches a previous converted entity the previous one is reused.
+
+Receives a template instance and returns a collection of structs.
+*/
+func (this *Query) ListFlatTreeOf(template interface{}) (coll.Collection, error) {
+	return this.list(NewEntityTreeTransformer(this, false, template))
 }
 
 /*
@@ -974,7 +985,7 @@ participating in the result tree implement the toolkit.Hasher interface.
 Returns true if a result was found, false if no result.
 See also SelectFlatTree.
 */
-func (this *Query) SelectTree(instance interface{}) (bool, error) {
+func (this *Query) SelectTree(instance tk.Hasher) (bool, error) {
 	return this.selectTreeTo(instance, true)
 }
 

@@ -39,7 +39,7 @@ type IDb interface {
 
 var _ IDb = &Db{}
 
-func NewDb(inTx bool, connection dbx.IConnection, translator Translator) *Db {
+func NewDb(inTx *bool, connection dbx.IConnection, translator Translator) *Db {
 	this := new(Db)
 	this.Overrider = this
 	this.inTx = inTx
@@ -50,7 +50,7 @@ func NewDb(inTx bool, connection dbx.IConnection, translator Translator) *Db {
 
 type Db struct {
 	Overrider  IDb
-	inTx       bool
+	inTx       *bool
 	Connection dbx.IConnection
 	Translator Translator
 
@@ -61,7 +61,7 @@ type Db struct {
 }
 
 func (this *Db) InTransaction() bool {
-	return this.inTx
+	return *this.inTx
 }
 
 func (this *Db) GetTranslator() Translator {

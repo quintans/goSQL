@@ -20,7 +20,7 @@ import (
 //var logger = log.LoggerFor("github.com/quintans/goSQL/test")
 
 // custom Db - for setting default parameters
-func NewMyDb(inTx bool, connection dbx.IConnection, translator Translator, lang string) *MyDb {
+func NewMyDb(inTx *bool, connection dbx.IConnection, translator Translator, lang string) *MyDb {
 	baseDb := NewDb(inTx, connection, translator)
 	return &MyDb{baseDb, lang}
 }
@@ -45,7 +45,7 @@ func SecondsDiff(left, right interface{}) *Token {
 }
 
 func init() {
-	log.Register("/", log.DEBUG, log.NewConsoleAppender(false))
+	log.Register("/", log.INFO, log.NewConsoleAppender(false))
 }
 
 var RAW_SQL string
@@ -127,7 +127,7 @@ func InitDB(driverName, dataSourceName string, translator Translator) (ITransact
 		// database
 		mydb,
 		// databse context factory
-		func(inTx bool, c dbx.IConnection) IDb {
+		func(inTx *bool, c dbx.IConnection) IDb {
 			return NewMyDb(inTx, c, translator, "pt")
 		},
 		// statement cache

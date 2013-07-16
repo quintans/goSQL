@@ -52,6 +52,10 @@ type Publisher struct {
 	Books []*Book
 }
 
+func (this *Publisher) PostInsert(store IDb) {
+	logger.Infof("===> PostInsert trigger for Publisher with Id %v in transaction? %t", *this.Id, store.InTransaction())
+}
+
 func (this *Publisher) PostRetrive(store IDb) {
 	logger.Infof("===> PostRetrive trigger for %s in transaction? %t", this.String(), store.InTransaction())
 }
