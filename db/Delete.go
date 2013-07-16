@@ -1,8 +1,10 @@
 package db
 
 import (
-	"fmt"
 	"github.com/quintans/goSQL/dbx"
+
+	"errors"
+	"fmt"
 	"reflect"
 	"time"
 )
@@ -50,7 +52,7 @@ func (this *Delete) Submit(value interface{}) (int64, error) {
 	}
 
 	var mustSucceed bool
-	var id interface{}
+	var hasId bool
 	var ver int64
 	for e := this.table.GetColumns().Enumerator(); e.HasNext(); {
 		column := e.Next().(*Column)
@@ -66,20 +68,21 @@ func (this *Delete) Submit(value interface{}) (int64, error) {
 				if column.IsKey() {
 					if val.Kind() == reflect.Ptr {
 						if val.IsNil() {
-							panic(fmt.Sprintf("Value for key property '%s' cannot be nil.", alias))
+							return 0, errors.New(fmt.Sprintf("goSQL: Value for key property '%s' cannot be nil.", alias))
 						}
 						val = val.Elem()
 					}
-					id = val.Interface()
+					id := val.Interface()
 
 					if criterias != nil {
 						criterias = append(criterias, column.Matches(Param(alias)))
 					}
 					this.SetParameter(alias, id)
+					hasId = true
 				} else if column.IsVersion() {
 					if val.Kind() == reflect.Ptr {
 						if val.IsNil() {
-							panic(fmt.Sprintf("Value for version property '%s' cannot be nil.", alias))
+							return 0, errors.New(fmt.Sprintf("goSQL: Value for version property '%s' cannot be nil.", alias))
 						}
 						val = val.Elem()
 					}
@@ -96,6 +99,11 @@ func (this *Delete) Submit(value interface{}) (int64, error) {
 			}
 		}
 	}
+
+	if !hasId {
+		return 0, errors.New(fmt.Sprintf("goSQL: No key field was identified in %s.", typ.String()))
+	}
+
 	if criterias != nil {
 		this.Where(criterias...)
 		this.rawSQL = nil
@@ -114,8 +122,7 @@ func (this *Delete) Submit(value interface{}) (int64, error) {
 		return 0, err
 	}
 	if affectedRows == 0 && mustSucceed {
-		return 0, dbx.NewOptimisticLockFail("", fmt.Sprintf("Unable to DELETE record with id=%v and version=%v for table %s",
-			id, ver, this.GetTable().GetName()))
+		return 0, dbx.NewOptimisticLockFail("", fmt.Sprintf("goSQL: Optimistic Lock Fail when deleting record for %+v", value))
 	}
 
 	// post trigger

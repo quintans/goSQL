@@ -1055,13 +1055,11 @@ func RunColumnSubquery(TM ITransactionManager, t *testing.T) {
 		BOOK_C_PUBLISHER_ID.Matches(Col(PUBLISHER_C_ID).For("p")),
 	)
 
-	var dtos = make([]*Dto, 0)
+	var dtos []*Dto
 	err := store.Query(PUBLISHER).Alias("p").
 		Column(PUBLISHER_C_NAME).
 		Column(subquery).As("Value").
-		List(func(dto *Dto) {
-		dtos = append(dtos, dto)
-	})
+		List(&dtos)
 
 	if err != nil {
 		t.Fatalf("Failed TestColumnSubquery: %s", err)
@@ -1087,7 +1085,7 @@ func RunWhereSubquery(TM ITransactionManager, t *testing.T) {
 		BOOK_C_PRICE.LesserOrMatch(10),
 	)
 
-	var dtos = make([]*Dto, 0)
+	var dtos []*Dto
 	err := store.Query(PUBLISHER).
 		Column(PUBLISHER_C_NAME).
 		Inner(PUBLISHER_A_BOOKS).
@@ -1095,9 +1093,7 @@ func RunWhereSubquery(TM ITransactionManager, t *testing.T) {
 		Include(BOOK_C_PRICE).As("Value").
 		Join().
 		Where(PUBLISHER_C_ID.In(subquery)).
-		List(func(dto *Dto) {
-		dtos = append(dtos, dto)
-	})
+		List(&dtos)
 
 	if err != nil {
 		t.Fatalf("Failed TestWhereSubquery: %s", err)
@@ -1148,7 +1144,7 @@ func RunInnerOn2(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	store := TM.Store()
-	var publishers = make([]*Publisher, 0)
+	var publishers []*Publisher
 	err := store.Query(PUBLISHER).
 		All().
 		Distinct().
@@ -1157,9 +1153,7 @@ func RunInnerOn2(TM ITransactionManager, t *testing.T) {
 		Inner(BOOK_A_AUTHORS).
 		On(AUTHOR_C_NAME.Like("%Doe")).
 		Join().
-		List(func(publisher *Publisher) {
-		publishers = append(publishers, publisher)
-	})
+		List(&publishers)
 
 	if err != nil {
 		t.Fatalf("Failed TestInnerOn: %s", err)
@@ -1234,16 +1228,14 @@ func RunGroupBy(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	store := TM.Store()
-	var dtos = make([]*Dto, 0)
+	var dtos []*Dto
 	err := store.Query(PUBLISHER).
 		Column(PUBLISHER_C_NAME).
 		Outer(PUBLISHER_A_BOOKS).
 		Include(Sum(BOOK_C_PRICE)).As("Value").
 		Join().
 		GroupByPos(1).
-		List(func(dto *Dto) {
-		dtos = append(dtos, dto)
-	})
+		List(&dtos)
 
 	if err != nil {
 		t.Fatalf("Failed TestGroupBy: %s", err)
@@ -1291,17 +1283,15 @@ func RunPagination(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	store := TM.Store()
-	var publishers = make([]*Publisher, 0)
+	var publishers []*Publisher
 	err := store.Query(PUBLISHER).
 		All().
 		Outer(PUBLISHER_A_BOOKS, BOOK_A_AUTHORS).
 		Fetch().
 		Order(PUBLISHER_C_NAME).Asc(true).
 		Skip(2).  // skip the first 2 records
-		Limit(3). // returns next 3 records
-		ListFlatTree(func(publisher *Publisher) {
-		publishers = append(publishers, publisher)
-	})
+		Limit(3). // limit to 3 records
+		ListFlatTree(&publishers)
 
 	if err != nil {
 		t.Fatalf("Failed TestPagination: %s", err)
@@ -1395,12 +1385,10 @@ func RunTableDiscriminator(TM ITransactionManager, t *testing.T) {
 	ResetDB3(TM)
 
 	store := TM.Store()
-	statuses := make([]*Status, 0)
+	var statuses []*Status
 	err := store.Query(STATUS).
 		All().
-		List(func(status *Status) {
-		statuses = append(statuses, status)
-	})
+		List(&statuses)
 
 	if err != nil {
 		t.Fatalf("Failed Query in TestTableDiscriminator: %s", err)
@@ -1454,14 +1442,12 @@ func RunJoinTableDiscriminator(TM ITransactionManager, t *testing.T) {
 	ResetDB3(TM)
 
 	store := TM.Store()
-	result := make([]*Project, 0)
+	var result []*Project
 	err := store.Query(PROJECT).
 		All().
 		Outer(PROJECT_A_STATUS).
 		Fetch().
-		ListFlatTree(func(project *Project) {
-		result = append(result, project)
-	})
+		ListFlatTree(&result)
 
 	if err != nil {
 		t.Fatalf("Failed TestJoinTableDiscriminator: %s", err)
@@ -1502,7 +1488,7 @@ func RunCustomFunction(TM ITransactionManager, t *testing.T) {
 
 	// get the database context
 	store := TM.Store()
-	books := make([]*Book, 0)
+	var books []*Book
 	err := store.Query(BOOK).
 		All().
 		Where(
@@ -1512,9 +1498,7 @@ func RunCustomFunction(TM ITransactionManager, t *testing.T) {
 		).
 			Greater(1000),
 	).
-		List(func(book *Book) {
-		books = append(books, book)
-	})
+		List(&books)
 
 	if err != nil {
 		t.Fatalf("Failed TestCustomFunction: %s", err)

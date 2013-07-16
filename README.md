@@ -57,8 +57,8 @@ a ORM like library in Go's (golang) that makes it easy to use SQL.
 (English is not my native language so please bear with me)
 
 **goSQL** aims to facilitate the convertion between database tables and structs and make easy
-the use of complex joins.
-It has no intention of hiding the SQL from the developer and a closer idiom to SQL is also part of the library.
+the use of complex joins.  
+It has no intention of hiding the SQL from the developer and a closer idiom to SQL is also part of the library.  
 Structs can be used as a representation of a table record for CRUD operations but there is no direct dependency between a struct and a table. The fields of a struct are matched with the column alias of the SQL statement to build a result.
 
 This library is not locked to any database vendor. This database abstraction is achieved by what I called _Translators_. Translators for MySQL, PostgreSQL and FirebirdSQL are provided.
@@ -209,8 +209,8 @@ func init() {
 		// database
 		mydb,
 		// database context factory
-		func(c dbx.IConnection) IDb {
-			return NewDb(c, translator)
+		func(inTx *bool, c dbx.IConnection) IDb {
+			return NewDb(inTx, c, translator)
 		},
 		// statement cache
 		1000,
@@ -236,7 +236,7 @@ func main() {
 }
 ```
 
-The is what you will find in [test/db_test.go](test/db_test.go).
+Something like this is what you will find in [test/db_test.go](test/db_test.go).
 
 
 
@@ -253,7 +253,7 @@ Before diving in to the examples I first describe the table model and how to map
 
 Relationships explained:
 - **One-to-Many**: One Publisher can have many Books and one Book has one Publisher.
-- **One-to-One**: One Book has one Book_Bin (Hardcover) - binary data is stored in separated in different table - and one Book_Bin has one Book.
+- **One-to-One**: One Book has one Book_Bin (Hardcover) - binary data is stored in a separated table - and one Book_Bin has one Book.
 - **Many-to-Many**: One Author can have many Books and one Book can have many Authors
 
 
@@ -317,10 +317,10 @@ In this example, we see the mapping of the relationship between
 The `.As("Books")` part indicates that when transforming a query result to a struct, it should follow
 the `Books` field to put the transformation part regarding to the `BOOK` entity.
 The Association knows nothing about the multiplicity of its edges.
-This association only covers going from `PUBLISHER` to `BOOK`. I we want to go from `BOOK` to `PUBLISHER` we
+This association only covers going from `PUBLISHER` to `BOOK`. If we want to go from `BOOK` to `PUBLISHER` we
 need to declare the reverse association.
 
-**Declaring an Composite association.**
+**Declaring a Composite association.**
 
 This kind of associations makes use on an intermediary table, and therefore we need to declare it.
 
@@ -337,7 +337,7 @@ And finally the Composite association declaration
 ```go
 var AUTHOR_A_BOOKS = NewM2MAssociation(
 	"Books",
-	ASSOCIATE(AUTHOR_BOOK_C_AUTHOR_ID).WITH(AUTHOR_C_ID),
+	ASSOCIATE(AUTHOR_C_ID).WITH(AUTHOR_BOOK_C_AUTHOR_ID),
 	ASSOCIATE(AUTHOR_BOOK_C_BOOK_ID).WITH(BOOK_C_ID),
 )
 ```
@@ -382,7 +382,7 @@ insert.SetParameter("name", "Geek Publications")
 insert.Values(1, 1, Param("name")).Execute()
 ```
 
-In this example the value for the `name` parameter is directly supplied in the snippet but it could be an "environment" variable supplied by a custom `store` for every CRUD operation.
+In this example the value for the `name` parameter is directly supplied in the snippet but it could be an "environment" variable supplied by a custom `store` for every CRUD operation.  
 One example, could be `language` (pt, eng, ...) for internationalized text, or `channel` (web, mobile, ...) for descriptions, etc.
 
 
@@ -405,7 +405,8 @@ store.Create(&pub)
 
 but this implies that the table was registered with the same alias as the struct name. In this case is `Publisher`.
 
-In both cases the values of the Id and Version fields of the struct are also set.
+In both cases the values of the Id and Version fields of the struct are also set if present.
+
 
 
 #### Insert Returning Generated Key
@@ -417,6 +418,8 @@ key, _ := store.Insert(PUBLISHER).
 	Values(nil, 1, "New Editions").
 	Execute()
 ```
+
+> **Key fields can be as many as we want. If a key field is of the type (*)int64 and single, it is considered to be a auto generated key.**
 
 
 
@@ -456,8 +459,6 @@ A shorter version would be
 store.Modify(&publisher)
 ```
 
-In both cases the values of the Version field of the struct is set to the new value.
-
 There is also another interesting method that does a Insert or an Update, depending on the value of the version field.
 If the field version is zero or nil an insert is issued, otherwise is an update.
 
@@ -470,7 +471,7 @@ store.Save(&publisher)
 
 #### Update with SubQuery
 
-This example shows of subquery to do an update, and also the use of `Exists`.
+This example shows the use of a subquery to do an update, and also the use of `Exists`.
 
 ```go
 sub := store.Query(BOOK).Alias("b").
@@ -500,11 +501,13 @@ As we can see the Version column is not taken into account.
 #### Delete with struct
 
 ```go
-var book Book // any struct with the fields Id and Version could be used
+var book Book
 book.Id = ext.Int64Ptr(2)
 book.Version = ext.Int64Ptr(1)
 store.Delete(BOOK).Submit(book)
 ```
+
+Althougt we are using `Book` to execute the delete, any struct with a fields named `Id` could be used. `Version` could also be present.
 
 Shorter Version for the last instruction:
 
@@ -514,18 +517,20 @@ store.Remove(book)
 
 > Assumes that the table `BOOK` was registered with the name `Book`.
 
+When deleting with a struct, the presence of a key field is mandatory.
+
 
 
 ### Query Examples
 
-The query operation is by far the richest operation of the ones we have seen.
-Query operation that start with `Select*` retrive **one** result, and those that start with `List*` return a **list** of results.
+The query operation is by far the richest operation of the ones we have seen.  
+Query operation that start with `Select*` retrive **one** instance, and those that start with `List*` returns **many** instances.
 
 
 
 #### SelectInto
 
-The result of the query is put in the supplied variables. Can be a value or a pointer.
+The result of the query is put in the supplied variables. They must be a pointers.
 
 ```go
 var name string
@@ -539,7 +544,7 @@ store.Query(PUBLISHER).
 
 #### SelectTo
 
-The result of the query is put in the supplied struct.
+The result of the query is put in the supplied struct pointer.
 
 ```go
 var publisher Publisher
@@ -549,7 +554,7 @@ store.Query(PUBLISHER).
 	SelectTo(&publisher)
 ```
 
-The short version, that internally uses the previous query is:
+The short version, that internally uses the previous query, is:
 
 ```go
 store.Retrive(&publisher, 2)
@@ -557,7 +562,7 @@ store.Retrive(&publisher, 2)
 
 > Assumes that the table `PUBLISHER` was registered with the name `Publisher`.
 
-The Ids are in the same order as they are in the table declaration.
+The supplied keys must be in the same order as they were declared in the table definition.
 
 
 #### SelectTree
@@ -565,17 +570,17 @@ The Ids are in the same order as they are in the table declaration.
 Executes the query and builds a struct tree, reusing previously obtained entities,
 putting the first element in the supplied struct pointer.
 When a new entity is needed, the cache is checked to see if there is one instance for this entity,
-and if found it will use it to build the tree.
+and if found it will use it instead.
 Since the struct instances are going to be reused it is mandatory that all the structs
-participating in the result tree implement the `toolkit.Hasher` interface.
-Returns true if a result was found, false if no result.
+participating in the result tree implement the `toolkit.Hasher` interface.  
+Returns true if a result was found, false otherwise.
 
 ```go
 var publisher Publisher
 store.Query(PUBLISHER).
 	All().
 	Outer(PUBLISHER_A_BOOKS).
-	Fetch(). // add all columns off book in the query
+	Fetch(). // add all columns off Book in the query
 	Where(PUBLISHER_C_ID.Matches(2)).
 	SelectTree(&publisher)
 ```
@@ -583,17 +588,21 @@ store.Query(PUBLISHER).
 #### SelectFlatTree
 
 Executes the query and builds a flat struct tree putting the first element in the supplied struct pointer.
+
+> A flat tree means that one entity will have at most one child, even if related by a one-to-many association.  
+Ex: 1 publisher -> 1 book -> 1 author
+ 
 Each element of the tree is always a new instance even if representing the same entity.
 This is most useful to display results in a table.
 Since the struct instances are not going to be reused it is not mandatory that the structs implement the `toolkit.Hasher` interface.
-Returns true if a result was found, false if no result.
+Returns true if a result was found, false otherwise.
 
 ```go
 var publisher Publisher
 store.Query(PUBLISHER).
 	All().
 	Outer(PUBLISHER_A_BOOKS).
-	Fetch(). // add all columns off book in the query
+	Fetch(). // add all columns off Book in the query
 	Where(PUBLISHER_C_ID.Matches(2)).
 	SelectFlatTree(&publisher)
 ```
@@ -601,8 +610,7 @@ store.Query(PUBLISHER).
 
 #### ListSimple
 
-Lists simple variables.
-A closure is used to build the result list.
+Lists simple variables using a closure to assemble the result list.
 The types for scanning are supplied by the instances parameter.
 
 ```go
@@ -641,6 +649,7 @@ store.Query(BOOK).
 
  The target entity is determined by the receiving type of the function.
 
+[Union](#union) has an example of result processing.
 
 
 #### ListOf
@@ -653,9 +662,7 @@ store.Query(BOOK).
 	ListOf((*Book)(nil))
 ```
 
-ListOf returns a `collection.Collection` interface.
-The reason to use a new data structure instead of the classic slices, was the need, in some cases, for returning a result where the an entity had to be unique, as we will see later on, and finding an instance in a hash collection is faster than finding it in a slice.
-For `collection.Collection` implementations that require an hashable elements, the struct instance to be added to the collection must implement the `toolkit.Hasher` interface, as is the case of Book.
+ListOf returns a `collection.Collection` interface. There are cases where we might wish to work with a generic list. Later on we will see another use for this new data type.
 
 To traverse the results we use the following code
 
@@ -702,16 +709,18 @@ store.Query(PUBLISHER).
 
 This is useful if we would like to do aditional logic, when building the array.
 The responsability of building the result is delegated to the receiving function.
+[Union](#union) has an example of result processing.
+
+There is another query function named `ListFlatTreeOf` with the same behaviour as `ListFlatTree` but returns a collection.
 
 
 #### ListTreeOf
 
-Executes a query and transform the results to the struct type.
-It matches the alias with struct property name, building a struct tree.
+Executes a query and transform the results into a tree with the head with the passed struct type.
+It matches the result column alias with the struct field name, building a struct tree.
 
-When creating the result, previouly fetched entities will be reused creating this way a tree of related entities.
-
-Receives a template instance and returns a collection of structs.
+When creating the result, previouly fetched entities will be searched and reused if found. A search in a hash collection is faster than search in a slice and that is why a hash that implements the `collection.Collection`interface is returned instead of the classic slice.  
+For a struct to be used in a  hash, the struct must implement the `toolkit.Hasher` interface, as is the case of `Book`.
 
 ```go
 publishers, _ := store.Query(PUBLISHER).
@@ -741,9 +750,9 @@ type Dto struct {
 }
 ```
 
-> The struct does not represent any table.
+> The struct does not represent any table. 
 
-The following query gets the name of the publisher and the sum of the prices of books for each publisher (using a subquery to sum), building the result as a slice of `Sale`.
+The following query gets the name of the publisher and the sum of the prices of books for each publisher (using a subquery to sum), building the result as a slice of `Dto`.
 
 ```go
 subquery := store.Query(BOOK).Alias("b").
@@ -752,23 +761,21 @@ subquery := store.Query(BOOK).Alias("b").
 	BOOK_C_PUBLISHER_ID.Matches(Col(PUBLISHER_C_ID).For("p")),
 )
 
-var dtos = make([]*Dto, 0)
+var dtos []*Dto
 store.Query(PUBLISHER).Alias("p").
 	Column(PUBLISHER_C_NAME).
 	Column(subquery).As("Value").
-	List(func(dto *Dto) {
-	dtos = append(dtos, dto)
-})
+	List(&dtos)
 ```
 
-Notice that when I use the subquery variable an alias `"Value"` is defined. This alias matches with a struct field in `Dto`. In this query the TArtist.C_NAME column as no associated alias, so the default column alias is used.
+Notice that when I use the subquery variable an alias `"Value"` is defined. This alias matches with a struct field in `Dto`. In this query the `PUBLISHER_C_NAME` column as no associated alias, so the default column alias is used.
 
 
 
 #### Where Subquery
 
-In this example I get a list of records with the name of the Publisher, the name and price of every Book, where the price is lesser or equal than 10. The result is put in a slice of Sale instances.
-For this a subquery used in the where clause.
+In this example I get a list of records with the name of the `Publisher`, the name and price of every `Book`, where the price is lesser or equal than 10. The result is put in a slice of `Dto` instances.  
+For this a subquery is used in the where clause.
 
 ```go
 subquery := store.Query(BOOK).
@@ -778,7 +785,7 @@ subquery := store.Query(BOOK).
 	BOOK_C_PRICE.LesserOrMatch(10),
 )
 
-var dtos = make([]*Dto, 0)
+var dtos []*Dto
 store.Query(PUBLISHER).
 	Column(PUBLISHER_C_NAME).
 	Inner(PUBLISHER_A_BOOKS).
@@ -786,38 +793,33 @@ store.Query(PUBLISHER).
 	Include(BOOK_C_PRICE).As("Value").
 	Join().
 	Where(PUBLISHER_C_ID.In(subquery)).
-	List(func(dto *Dto) {
-	dtos = append(dtos, dto)
-})
+	List(&dtos)
 ```
-
-
 
 #### Joins
 
 The concepts of joins was already introduced in the section [SelectTree](#selectTree) where we can see the use of an outer join.
-Joins can be seen has a chain of associations that extend from the main table to a target table. Along the way we can apply constraints and/or include columns from the participating tables. This chains can overlap without problem because they are seen as isolated from one another.
+In the context of goSQL, a Join is seen has a path of associations that goes from the main table to the target table. Along the way we can apply constraints and/or include columns from the participating tables. These paths can overlap without problem because they are seen as isolated from one another.  
+When declaring several paths only when a path deviates from previous path it starts contributing to the SQL generation.  
 Joins can be `Outer` or `Inner` and can have constraints applyied to the target table of the last added asscoiation through the use of the function `On()`.
-To delimite the joins we can use the function `Join()` or `Fetch()`. Both process the join but the later includes in the query all columns from all the tables of the joins. `Fetch()`is used when a struct tree is desired.
+To mark the end of a join definition we use the function `Join()` or `Fetch()`. Both process the join but the later includes in the query all columns from all the tables of the joins. `Fetch()` is used when a struct tree is desired.
 
 Ex: list all publishers that had a book published before 2013
 
 ```go
-var publishers = make([]*Publisher, 0)
+var publishers []*Publisher
 store.Query(PUBLISHER).
 	All().
 	Distinct().
 	Inner(PUBLISHER_A_BOOKS).
 	On(BOOK_C_PUBLISHED.Lesser(time.Date(2013, time.January, 1, 0, 0, 0, 0, time.UTC))).
 	Join().
-	List(func(publisher *Publisher) {
-	publishers = append(publishers, publisher)
-})
+	List(&publishers)
 ```
 
 The section [Where Subquery](#where-subquery) also shows the use of `Include`.
 
-The next example executes an (left) outer join and includes **ALL** columns of the participating tables in the join. The result is a collection of `*Publisher` structs with its childs in tree.
+The next example executes a (left) outer join and includes **ALL** columns of the participating tables in the join. The result is a collection of `*Publisher` structs with its childs in tree.
 
 ```go
 store.Query(PUBLISHER).
@@ -834,24 +836,22 @@ store.Query(PUBLISHER).
 For this example I will use the struct defined in [Column Subquery](#column-subquery).
 
 ```go
-var dtos = make([]*Dto, 0)
+var dtos []*Dto
 store.Query(PUBLISHER).
 	Column(PUBLISHER_C_NAME).
 	Outer(PUBLISHER_A_BOOKS).
 	IncludeToken(Sum(BOOK_C_PRICE)).As("Value").
 	Join().
-	GroupByPos(1).
-	List(func(dto *Dto) {
-	dtos = append(dtos, dto)
-})
+	GroupByPos(1). // result column position
+	List(&dtos)
 ```
 
 
 
 #### Having
 
-The criteria used in the `Having` clause must refer to columns of the `Query`. This reference is achieved using the columns alias.
-To demonstrate this I will use the following struct which will hold the result for each row.
+The criteria used in the `Having` clause must refer to columns of the `Query`. This reference is achieved using columns alias.  
+To demonstrate this I will use the following struct which will hold the result for each row. 
 
 ```go
 type PublisherSales struct {
@@ -861,8 +861,10 @@ type PublisherSales struct {
 }
 ```
 
+> Struct fields can also be non pointers
+
 ```go
-sales := make([]*PublisherSales, 0)
+var sales []*PublisherSales
 store.Query(PUBLISHER).
 	Column(PUBLISHER_C_NAME).
 	Outer(PUBLISHER_A_BOOKS).
@@ -870,9 +872,7 @@ store.Query(PUBLISHER).
 	Join().
 	GroupByPos(1).
 	Having(Alias("ThisYear").Greater(30)).
-	List(func(sale *PublisherSales) {
-	sales = append(sales, sale)
-})
+	List(&sales)
 ```
 
 
@@ -882,14 +882,12 @@ store.Query(PUBLISHER).
 List all publishers, ordering ascending by name.
 
 ```go
-var publishers = make([]*Publisher, 0)
+var publishers []*Publisher
 store.Query(PUBLISHER).
 	All().
 	OrderBy(PUBLISHER_C_NAME).
 	Asc(true).
-	List(func(publisher *Publisher) {
-	publishers = append(publishers, publisher)
-})
+	List(&publishers)
 ```
 
 It is possible to add more orders, and even to order by columns belonging to other tables if joins were present.
@@ -960,17 +958,15 @@ store.Query(PUBLISHER).
 To paginate the results of a query we use the windowing functions `Skip` and `Limit`.
 
 ```go
-var publishers = make([]*Publisher, 0)
+var publishers []*Publisher
 store.Query(PUBLISHER).
 	All().
 	Outer(PUBLISHER_A_BOOKS, BOOK_A_AUTHORS).
 	Fetch().
 	Order(PUBLISHER_C_NAME).Asc(true).
 	Skip(2).  // skip the first 2 records
-	Limit(3). // returns next 3 records
-	ListFlatTree(func(publisher *Publisher) {
-	publishers = append(publishers, publisher)
-})
+	Limit(3). // limit to 3 records
+	ListFlatTree(&publishers)
 ```
 
 
@@ -1043,20 +1039,18 @@ store.Query(PROJECT).
 
 ### Table Discriminator
 
-When mapping a table it is possible to declare that the domain of that table only refers to a subset of values of the physical table. This is done by defining a restriction (Discriminator) at the table definition.
-With this we avoid of having to write a **where** condition every time we want to refer to a specific domain.
+When mapping a table it is possible to declare that the domain of that table only refers to a subset of values of the physical table. This is done by defining a restriction (Discriminator) at the table definition.  
+With this we avoid of having to write a **where** condition every time we want to refer to a specific domain.  
 Inserts will automatically apply the discriminator.
 
-To demonstrate this I will use a physical table named CATALOG that can hold unrelated information, like gender, eye color, etc.
+To demonstrate this I will use a physical table named `CATALOG` that can hold unrelated information, like gender, eye color, etc.  
 The creation script and table definitions for the next example are at [test/tables_mysql.sql](test/tables_mysql.sql) and [test/entities.go](test/entities.go) respectively.
 
 ```go
-statuses := make([]*Status, 0)
+var statuses []*Status
 store.Query(STATUS).
 	All().
-	List(func(status *Status) {
-	statuses = append(statuses, status)
-})
+	List(&statuses)
 ```
 
 
@@ -1065,8 +1059,8 @@ store.Query(STATUS).
 
 **Virtual columns are only used by queries**.
 
-Virtual columns are columns declared in a table but in reality they belong to another table. These tables are expected to be related by a one-to-one association, with constraints guaranteeing the one-to-one relationship.
-The columns are intended to resolve the case where the column value depends on the environment. For example, internationalization, were the value of the column would depend on the language. Another application is the case where we would like to have different descriptions depending on the business client that accesses the data, for example, mobile or web.
+Virtual columns are columns declared in a table but in reality they belong to another table. These tables are expected to be related by a one-to-one association, with constraints guaranteeing the one-to-one relationship.  
+The columns are intended to resolve the case where the column value depends on the environment. For example, internationalization, were the value of the column would depend on the language. Another application is the case where we would like to have different descriptions depending on the business client that accesses the data, for example, mobile or web.  
 
 Let’s use the internationalization cenario.
 
@@ -1110,9 +1104,9 @@ store.Query(BOOK).
 
 ### Custom Functions
 
-The supplyied Translators do not have all possible functions of all the databases, but one can register quite easily any missing function or even a custom function.
+The supplied Translators do not have all possible functions of all the databases, but one can register quite easily any missing standard SQL function or even a custom function.
 
-The following steps demonstrates how to add to the MySQL Translator, and use a function that computes the difference in seconds between two dates.
+The following steps demonstrates how to add to the _Translator_, in this case MySQL, and use a function that computes the difference in seconds between two dates.
 
 1. Define the token name
 
@@ -1147,7 +1141,7 @@ The following steps demonstrates how to add to the MySQL Translator, and use a f
 Now we are ready to use the new created function, `SecondsDiff`.
 
 ```go
-books := make([]*Book, 0)
+var books []*Book
 store.Query(BOOK).
 	All().
 	Where(
@@ -1157,9 +1151,7 @@ store.Query(BOOK).
 	).
 		Greater(1000),
 ).
-	List(func(book *Book) {
-	books = append(books, book)
-})
+	List(&books)
 ```
 
 
@@ -1182,7 +1174,7 @@ dba.QueryClosure("select `name` from `book` where `name` like ?", func(rows *sql
 }, "%book")
 ```
 
-There are other methods...
+Please see the source code for other methods...
 
 
 # Credits
