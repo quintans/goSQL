@@ -8,6 +8,7 @@ type PathElement struct {
 	Inner    bool
 	Criteria *Criteria
 	Columns  []Tokener
+	Orders   []*Order
 }
 
 type Join struct {
@@ -59,7 +60,7 @@ func DeepestCommonPath(cachedAssociation [][]*PathElement, associations []*PathE
 				if depth < len(associations) {
 					pe2 := associations[depth]
 					if pe2.Inner == pe.Inner && pe2.Base != nil && pe2.Base.Equals(pe.Base) {
-						temp = append(temp, pe2)
+						temp = append(temp, pe)
 					} else {
 						break
 					}

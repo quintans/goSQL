@@ -45,12 +45,14 @@ func SecondsDiff(left, right interface{}) *Token {
 }
 
 func init() {
-	log.Register("/", log.INFO, log.NewConsoleAppender(false))
+	log.Register("/", log.DEBUG, log.NewConsoleAppender(false), log.NewFileAppender("db_test.log", 0, true, true))
 }
 
 var RAW_SQL string
 
 func InitMySQL5() (ITransactionManager, *sql.DB) {
+	logger.Infof("******* Using MySQL5 *******\n")
+
 	RAW_SQL = "SELECT `name` FROM `book` WHERE `name` LIKE ?"
 
 	translator := trx.NewMySQL5Translator()
@@ -70,10 +72,12 @@ func InitMySQL5() (ITransactionManager, *sql.DB) {
 		},
 	)
 
-	return InitDB("mysql", "root:root@/ezsql?parseTime=true", translator)
+	return InitDB("mysql", "root:root@/gosql?parseTime=true", translator)
 }
 
 func InitPostgreSQL() (ITransactionManager, *sql.DB) {
+	logger.Infof("******* Using PostgreSQL *******\n")
+
 	RAW_SQL = "SELECT name FROM book WHERE name LIKE $1"
 
 	translator := trx.NewPostgreSQLTranslator()
@@ -89,10 +93,12 @@ func InitPostgreSQL() (ITransactionManager, *sql.DB) {
 		},
 	)
 
-	return InitDB("postgres", "dbname=postgres user=postgres password=postgres sslmode=disable", translator)
+	return InitDB("postgres", "dbname=gosql user=postgres password=postgres sslmode=disable", translator)
 }
 
 func InitFirebirdSQL() (ITransactionManager, *sql.DB) {
+	logger.Infof("******* Using FirebirdSQL *******\n")
+
 	RAW_SQL = "SELECT name FROM book WHERE name LIKE ?"
 
 	translator := trx.NewFirebirdSQLTranslator()
@@ -108,7 +114,7 @@ func InitFirebirdSQL() (ITransactionManager, *sql.DB) {
 		},
 	)
 
-	return InitDB("mgodbc", "dsn=FirebirdEZSQL;uid=SYSDBA;pwd=masterkey", translator)
+	return InitDB("mgodbc", "dsn=FbGoSQL;uid=SYSDBA;pwd=masterkey", translator)
 }
 
 func InitDB(driverName, dataSourceName string, translator Translator) (ITransactionManager, *sql.DB) {
@@ -177,7 +183,7 @@ func RunAll(TM ITransactionManager, t *testing.T) {
 	RunWhereSubquery(TM, t)
 	RunInnerOn(TM, t)
 	RunInnerOn2(TM, t)
-	RunOuterFetch(TM, t)
+	RunOuterFetchOrder(TM, t)
 	RunGroupBy(TM, t)
 	RunOrderBy(TM, t)
 	RunPagination(TM, t)
@@ -1171,13 +1177,17 @@ func RunInnerOn2(TM ITransactionManager, t *testing.T) {
 	}
 }
 
-func RunOuterFetch(TM ITransactionManager, t *testing.T) {
+func RunOuterFetchOrder(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
+
+	logger.Debugf("Running RunOuterFetch")
 
 	store := TM.Store()
 	result, err := store.Query(PUBLISHER).
 		All().
-		Outer(PUBLISHER_A_BOOKS, BOOK_A_AUTHORS).
+		Order(PUBLISHER_C_ID).Asc(true).
+		Outer(PUBLISHER_A_BOOKS).OrderBy(BOOK_C_ID).Asc(true).
+		Outer(BOOK_A_AUTHORS).OrderBy(AUTHOR_C_ID).Asc(true).
 		Fetch().
 		ListTreeOf((*Publisher)(nil))
 
@@ -1193,27 +1203,27 @@ func RunOuterFetch(TM ITransactionManager, t *testing.T) {
 
 	pub := publishers[0]
 	if len(pub.Books) != 1 {
-		t.Fatalf("Expected 1 Book for Publishers %s, but got %v", pub.Name, len(pub.Books))
+		t.Fatalf("Expected 1 Book for Publishers %s, but got %v", *pub.Name, len(pub.Books))
 	}
 
 	book := pub.Books[0]
 	if len(book.Authors) != 1 {
-		t.Fatalf("Expected 1 Author for Book %s, but got %v", book.Name, len(book.Authors))
+		t.Fatalf("Expected 1 Author for Book %s, but got %v", *book.Name, len(book.Authors))
 	}
 
 	pub = publishers[1]
 	if len(pub.Books) != 2 {
-		t.Fatalf("Expected 2 Book for Publishers %s, but got %v", pub.Name, len(pub.Books))
+		t.Fatalf("Expected 2 Book for Publishers %s, but got %v", *pub.Name, len(pub.Books))
 	}
 
 	book = pub.Books[0]
 	if len(book.Authors) != 2 {
-		t.Fatalf("Expected 2 Author for Book %s, but got %v", book.Name, len(book.Authors))
+		t.Fatalf("Expected 2 Author for Book %s, but got %v", *book.Name, len(book.Authors))
 	}
 
 	book = pub.Books[1]
 	if len(book.Authors) != 2 {
-		t.Fatalf("Expected 2 Author for Book %s, but got %v", book.Name, len(book.Authors))
+		t.Fatalf("Expected 2 Author for Book %s, but got %v", *book.Name, len(book.Authors))
 	}
 
 	for k, v := range publishers {

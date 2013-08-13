@@ -1,7 +1,7 @@
 # goSQL
 ***
 
-a ORM like library in Go's (golang) that makes it easy to use SQL.
+a ORM like library in Go (golang) that makes SQL easier to use.
 
 ## Index
 

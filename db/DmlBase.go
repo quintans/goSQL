@@ -194,7 +194,7 @@ This
 */
 func (this *DmlBase) joinTo(endAlias string, path []*PathElement) {
 	if len(path) > 0 {
-		this.addJoin(endAlias, path, false)
+		this.addJoin(endAlias, path, nil, false)
 
 		// the first position refers to constraints applied to the table, due to a association discriminator
 		pathCriterias := this.buildPathCriterias(path)
@@ -305,10 +305,12 @@ func (this *DmlBase) buildPathCriterias(paths []*PathElement) []*PathCriteria {
 	return pathCriterias
 }
 
-func (this *DmlBase) addJoin(lastAlias string, associations []*PathElement, fetch bool) []*PathElement {
+func (this *DmlBase) addJoin(lastAlias string, associations []*PathElement, common []*PathElement, fetch bool) []*PathElement {
 	var local []*PathElement
 
-	common := DeepestCommonPath(this.cachedAssociation, associations)
+	if common == nil {
+		common = DeepestCommonPath(this.cachedAssociation, associations)
+	}
 
 	// creates a copy, since the table alias are going to be defined
 	fks := make([]*Association, len(associations))

@@ -289,7 +289,13 @@ func (this *Query) OrderFor(column *Column, pathElements ...*PathElement) *Query
 
 	common := DeepestCommonPath(this.cachedAssociation, pes)
 	if len(common) == len(pes) {
-		orderAlias := common[len(common)-1].Derived.GetAliasTo()
+		var orderAlias string
+		derived := common[len(common)-1].Derived
+		if derived.IsMany2Many() {
+			orderAlias = derived.ToM2M.GetAliasTo()
+		} else {
+			orderAlias = derived.GetAliasTo()
+		}
 		return this.OrderAs(column, orderAlias)
 	}
 
@@ -302,10 +308,17 @@ The column belongs to the table targeted by the last defined association.
 If there is no last association, the column belongs to the driving table
 */
 func (this *Query) OrderBy(column *Column) *Query {
-	if this.lastJoin != nil {
+	if this.path != nil {
+		// delay adding order
+		last := this.path[len(this.path)-1]
+		this.lastOrder = NewOrder(NewColumnHolder(column))
+		last.Orders = append(last.Orders, this.lastOrder)
+		return this
+	} else if this.lastJoin != nil {
 		return this.OrderFor(column, this.lastJoin.GetPathElements()...)
+	} else {
+		return this.OrderAs(column, this.lastFkAlias)
 	}
-	return this.OrderAs(column, this.lastFkAlias)
 }
 
 /*
@@ -399,6 +412,15 @@ func (this *Query) FetchTo(endAlias string) *Query {
 				}
 			}
 		}
+
+		// apply orders
+		for k, p := range this.path {
+			if len(p.Orders) > 0 {
+				for _, o := range p.Orders {
+					this.OrderFor(o.column.GetColumn(), this.path[:k+1]...)
+				}
+			}
+		}
 	}
 	this.path = nil
 
@@ -417,6 +439,16 @@ func (this *Query) Join() *Query {
 //return
 func (this *Query) JoinTo(endAlias string) *Query {
 	this.DmlBase.joinTo(endAlias, this.path)
+	if len(this.path) > 0 {
+		// apply orders
+		for k, p := range this.path {
+			if len(p.Orders) > 0 {
+				for _, o := range p.Orders {
+					this.OrderFor(o.column.GetColumn(), this.path[:k+1]...)
+				}
+			}
+		}
+	}
 	this.path = nil
 	this.rawSQL = nil
 	return this
@@ -437,7 +469,7 @@ func (this *Query) Include(columns ...interface{}) *Query {
 			}
 			tokens[k] = this.lastToken
 		}
-		// append the tokens to prevously added tokens
+		// append the tokens to previously added tokens
 		toks := this.path[len(this.path)-1].Columns
 		if toks == nil {
 			toks = make([]Tokener, 0)
@@ -475,7 +507,7 @@ func (this *Query) fetch(endAlias string, pathElements ...*PathElement) *Query {
 	}
 
 	// returns a list with the old ones (currentPath) + the new ones (with the alias already defined)
-	local := this.addJoin(endAlias, pathElements, true)
+	local := this.addJoin(endAlias, pathElements, common, true)
 	// remove old ones, keeping the new ones
 	local = local[pos:]
 
