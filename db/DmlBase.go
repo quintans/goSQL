@@ -12,10 +12,11 @@ import (
 
 var lgr = log.LoggerFor("github.com/quintans/goSQL/db")
 
-func init() {
-	// activates output of program file line
-	lgr.CallDepth(2)
-}
+// instead of setting globaly the logger with the caller at 1,
+// it is defined locally with method CallerAt()
+//func init() {
+//	lgr.SetCallerAt(1)
+//}
 
 type RawSql struct {
 	// original sql
@@ -564,7 +565,7 @@ func (this *DmlBase) dumpParameters(params map[string]interface{}) string {
 func (this *DmlBase) debugTime(when time.Time) {
 	elapsed := time.Since(when)
 	if lgr.IsActive(log.DEBUG) {
-		lgr.DebugF(func() string {
+		lgr.CallerAt(1).DebugF(func() string {
 			return fmt.Sprintf("executed in: %f secs", elapsed.Seconds())
 		})
 	}
@@ -573,7 +574,7 @@ func (this *DmlBase) debugTime(when time.Time) {
 func (this *DmlBase) debugSQL(sql string) {
 	if lgr.IsActive(log.DEBUG) {
 		dump := this.dumpParameters(this.parameters)
-		lgr.DebugF(func() string {
+		lgr.CallerAt(1).DebugF(func() string {
 			return fmt.Sprintf("\n\t%T SQL: %s\n\tparameters: %s",
 				this, sql, dump)
 		})

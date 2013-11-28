@@ -3,16 +3,10 @@ package test
 import (
 	. "github.com/quintans/goSQL/db"
 	"github.com/quintans/goSQL/dbx"
-	trx "github.com/quintans/goSQL/translators"
 	"github.com/quintans/toolkit/ext"
 	"github.com/quintans/toolkit/log"
 
-	_ "bitbucket.org/miquella/mgodbc" // float64 was fixed acording to issue #5
-	_ "github.com/go-sql-driver/mysql"
-	_ "github.com/lib/pq"
-
 	"database/sql"
-	"fmt"
 	"testing"
 	"time"
 )
@@ -50,73 +44,6 @@ func init() {
 
 var RAW_SQL string
 
-func InitMySQL5() (ITransactionManager, *sql.DB) {
-	logger.Infof("******* Using MySQL5 *******\n")
-
-	RAW_SQL = "SELECT `name` FROM `book` WHERE `name` LIKE ?"
-
-	translator := trx.NewMySQL5Translator()
-	/*
-		registering custom function.
-		A custom translator could be created instead.
-	*/
-	translator.RegisterTranslation(
-		TOKEN_SECONDSDIFF,
-		func(dmlType DmlType, token Tokener, tx Translator) string {
-			m := token.GetMembers()
-			return fmt.Sprintf(
-				"TIME_TO_SEC(TIMEDIFF(%s, %s))",
-				tx.Translate(dmlType, m[0]),
-				tx.Translate(dmlType, m[1]),
-			)
-		},
-	)
-
-	return InitDB("mysql", "root:root@/gosql?parseTime=true", translator)
-}
-
-func InitPostgreSQL() (ITransactionManager, *sql.DB) {
-	logger.Infof("******* Using PostgreSQL *******\n")
-
-	RAW_SQL = "SELECT name FROM book WHERE name LIKE $1"
-
-	translator := trx.NewPostgreSQLTranslator()
-	translator.RegisterTranslation(
-		TOKEN_SECONDSDIFF,
-		func(dmlType DmlType, token Tokener, tx Translator) string {
-			m := token.GetMembers()
-			return fmt.Sprintf(
-				"EXTRACT(EPOCH FROM (%s - %s))",
-				tx.Translate(dmlType, m[0]),
-				tx.Translate(dmlType, m[1]),
-			)
-		},
-	)
-
-	return InitDB("postgres", "dbname=gosql user=postgres password=postgres sslmode=disable", translator)
-}
-
-func InitFirebirdSQL() (ITransactionManager, *sql.DB) {
-	logger.Infof("******* Using FirebirdSQL *******\n")
-
-	RAW_SQL = "SELECT name FROM book WHERE name LIKE ?"
-
-	translator := trx.NewFirebirdSQLTranslator()
-	translator.RegisterTranslation(
-		TOKEN_SECONDSDIFF,
-		func(dmlType DmlType, token Tokener, tx Translator) string {
-			m := token.GetMembers()
-			return fmt.Sprintf(
-				"DATEDIFF(SECOND, %s, %s)",
-				tx.Translate(dmlType, m[1]),
-				tx.Translate(dmlType, m[0]),
-			)
-		},
-	)
-
-	return InitDB("mgodbc", "dsn=FbGoSQL;uid=SYSDBA;pwd=masterkey", translator)
-}
-
 func InitDB(driverName, dataSourceName string, translator Translator) (ITransactionManager, *sql.DB) {
 	mydb, err := sql.Open(driverName, dataSourceName)
 	if err != nil {
@@ -146,20 +73,6 @@ const (
 	LANG                = "pt"
 	BOOK_LANG_TITLE     = "Era uma vez..."
 )
-
-func TestAll(t *testing.T) {
-	tm, theDB := InitFirebirdSQL()
-	RunAll(tm, t)
-	theDB.Close()
-
-	tm, theDB = InitPostgreSQL()
-	RunAll(tm, t)
-	theDB.Close()
-
-	tm, theDB = InitMySQL5()
-	RunAll(tm, t)
-	theDB.Close()
-}
 
 func RunAll(TM ITransactionManager, t *testing.T) {
 	RunSelectUTF8(TM, t)

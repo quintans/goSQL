@@ -296,7 +296,7 @@ func (this *EntityTreeTransformer) LoadInstanceKeys(
 	for _, bp := range properties {
 		if bp.Position != 0 && bp.Key == onlyKeys {
 			invalid = false
-			position := bp.Position + this.PaginationColumnOffset
+			position := bp.Position
 			value := row[position-1]
 
 			v := reflect.ValueOf(value)

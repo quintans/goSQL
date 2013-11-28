@@ -20,13 +20,12 @@ type EntityTransformerOverrider interface {
 }
 
 type EntityTransformer struct {
-	Overrider              EntityTransformerOverrider
-	Query                  *Query
-	Factory                func() reflect.Value
-	Returner               func(val reflect.Value)
-	PaginationColumnOffset int
-	Properties             map[string]*EntityProperty
-	TemplateData           []interface{}
+	Overrider    EntityTransformerOverrider
+	Query        *Query
+	Factory      func() reflect.Value
+	Returner     func(val reflect.Value)
+	Properties   map[string]*EntityProperty
+	TemplateData []interface{}
 }
 
 // ensures IRowTransformer interface
@@ -65,8 +64,6 @@ func (this *EntityTransformer) Super(query *Query, factory func() reflect.Value,
 	this.Query = query
 	this.Factory = factory
 	this.Returner = returner
-
-	this.PaginationColumnOffset = query.GetDb().GetTranslator().PaginationColumnOffset(query)
 }
 
 func (this *EntityTransformer) BeforeAll() coll.Collection {
@@ -189,7 +186,7 @@ func (this *EntityTransformer) InitRowData(
 	// instanciate
 	for _, bp := range properties {
 		if bp.Position > 0 {
-			position := bp.Position + this.PaginationColumnOffset
+			position := bp.Position
 			ptr := bp.New().Interface()
 			row[position-1] = ptr
 		}
@@ -204,7 +201,7 @@ func (this *EntityTransformer) ToEntity(
 ) (bool, error) {
 	for _, bp := range properties {
 		if bp.Position > 0 {
-			position := bp.Position + this.PaginationColumnOffset
+			position := bp.Position
 			value := row[position-1]
 			if value != nil {
 				v := reflect.ValueOf(value)

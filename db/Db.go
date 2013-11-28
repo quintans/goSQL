@@ -12,11 +12,6 @@ import (
 
 var logger = log.LoggerFor("github.com/quintans/goSQL/db")
 
-func init() {
-	// activates output of program file line
-	logger.CallDepth(1)
-}
-
 var OPTIMISTIC_LOCK_MSG = "No update was possible for this version of the data. Data may have changed."
 var VERSION_SET_MSG = "Unable to set Version data."
 

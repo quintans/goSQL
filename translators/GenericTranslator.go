@@ -745,10 +745,6 @@ func (this *GenericTranslator) GetPlaceholder(index int, name string) string {
 	return "?"
 }
 
-func (this *GenericTranslator) PaginationColumnOffset(query *db.Query) int {
-	return 0
-}
-
 //	@Override
 //	func (this *GenericTranslator) String getAutoNumberQuery(Column column) {
 //		return getAutoNumberQuery(column, false);

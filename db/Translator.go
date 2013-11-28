@@ -27,7 +27,6 @@ type Translator interface {
 	// GetSqlForSequence(sequence *Sequence, nextValue bool) string
 	GetAutoNumberQuery(column *Column) string
 	//	GetMaxTableChars() int
-	PaginationColumnOffset(query *Query) int
 	PaginateSQL(query *Query, sql string) string
 	Translate(dmlType DmlType, token Tokener) string
 	TableName(table *Table) string
