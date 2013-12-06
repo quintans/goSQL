@@ -109,6 +109,8 @@ func (this *Update) Submit(instance interface{}) (int64, error) {
 							return 0, errors.New(fmt.Sprintf("Value for key property '%s' cannot be nil.", alias))
 						}
 						val = val.Elem()
+					} else if !val.IsValid() {
+						return 0, errors.New(fmt.Sprintf("Value for key property '%s' cannot be nil.", alias))
 					}
 					id = val.Interface()
 
@@ -184,7 +186,7 @@ func (this *Update) Submit(instance interface{}) (int64, error) {
 
 	if verColumn != nil {
 		if affectedRows == 0 {
-			return 0, dbx.NewOptimisticLockFail("", fmt.Sprintf("Optimistic Lock Error: Unable to UPDATE record with id=%v and version=%v for table %s",
+			return 0, dbx.NewOptimisticLockFail(fmt.Sprintf("Optimistic Lock Error: Unable to UPDATE record with id=%v and version=%v for table %s",
 				id, ver, this.GetTable().GetName()))
 		}
 
@@ -203,11 +205,11 @@ func (this *Update) Submit(instance interface{}) (int64, error) {
 
 func (this *Update) Execute() (int64, error) {
 	rsql := this.getCachedSql()
-	this.debugSQL(rsql.OriSql)
+	this.debugSQL(rsql.OriSql, 1)
 
 	now := time.Now()
 	affectedRows, e := this.DmlBase.dba.Update(rsql.Sql, rsql.BuildValues(this.DmlBase.parameters)...)
-	this.debugTime(now)
+	this.debugTime(now, 1)
 	if e != nil {
 		return 0, e
 	}

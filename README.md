@@ -892,6 +892,9 @@ store.Query(PUBLISHER).
 
 It is possible to add more orders, and even to order by columns belonging to other tables if joins were present.
 
+The column that the `OrderBy` refers to, belongs to the table targeted by the last defined association. If there is no last association, the column belongs to the driving table, as is this case.
+
+There is also `Order` if we want to order by a column belonging to the driving table.
 
 
 #### Union

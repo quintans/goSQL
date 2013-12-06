@@ -30,10 +30,10 @@ type OptimisticLockFail struct {
 	*tk.Fail
 }
 
-func NewOptimisticLockFail(code string, message string) *OptimisticLockFail {
+func NewOptimisticLockFail(message string) *OptimisticLockFail {
 	fail := new(OptimisticLockFail)
 	fail.Fail = new(tk.Fail)
-	fail.Fail.Code = code
+	fail.Fail.Code = FAULT_OPTIMISTIC_LOCK
 	fail.Fail.Message = message
 	return fail
 }

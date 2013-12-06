@@ -122,7 +122,7 @@ func (this *Delete) Submit(value interface{}) (int64, error) {
 		return 0, err
 	}
 	if affectedRows == 0 && mustSucceed {
-		return 0, dbx.NewOptimisticLockFail("", fmt.Sprintf("goSQL: Optimistic Lock Fail when deleting record for %+v", value))
+		return 0, dbx.NewOptimisticLockFail(fmt.Sprintf("goSQL: Optimistic Lock Fail when deleting record for %+v", value))
 	}
 
 	// post trigger
@@ -134,11 +134,11 @@ func (this *Delete) Submit(value interface{}) (int64, error) {
 
 func (this *Delete) Execute() (int64, error) {
 	rsql := this.getCachedSql()
-	this.debugSQL(rsql.OriSql)
+	this.debugSQL(rsql.OriSql, 1)
 
 	now := time.Now()
 	affectedRows, e := this.DmlBase.dba.Delete(rsql.Sql, rsql.BuildValues(this.DmlBase.parameters)...)
-	this.debugTime(now)
+	this.debugTime(now, 1)
 	if e != nil {
 		return 0, e
 	}

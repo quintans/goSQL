@@ -51,11 +51,11 @@ func (this *MySQL5Translator) GetAutoNumberQuery(column *db.Column) string {
 }
 
 func (this *MySQL5Translator) TableName(table *db.Table) string {
-	return "`" + strings.ToLower(table.GetName()) + "`"
+	return "`" + strings.ToUpper(table.GetName()) + "`"
 }
 
 func (this *MySQL5Translator) ColumnName(column *db.Column) string {
-	return "`" + strings.ToLower(column.GetName()) + "`"
+	return "`" + strings.ToUpper(column.GetName()) + "`"
 }
 
 func (this *MySQL5Translator) PaginateSQL(query *db.Query, sql string) string {

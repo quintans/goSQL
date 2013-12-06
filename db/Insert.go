@@ -226,13 +226,13 @@ func (this *Insert) Execute() (int64, error) {
 			this.Set(singleKeyColumn, lastId)
 		}
 		rsql := this.getCachedSql()
-		this.debugSQL(rsql.OriSql)
+		this.debugSQL(rsql.OriSql, 1)
 		now = time.Now()
 		_, err = this.dba.Insert(rsql.Sql, rsql.BuildValues(this.parameters)...)
-		this.debugTime(now)
+		this.debugTime(now, 1)
 	case AUTOKEY_RETURNING:
 		rsql := this.getCachedSql()
-		this.debugSQL(rsql.OriSql)
+		this.debugSQL(rsql.OriSql, 1)
 		now = time.Now()
 		if this.HasKeyValue || singleKeyColumn == nil {
 			_, err = this.dba.Insert(rsql.Sql, rsql.BuildValues(this.parameters)...)
@@ -240,13 +240,16 @@ func (this *Insert) Execute() (int64, error) {
 			params := rsql.BuildValues(this.parameters)
 			lastId, err = this.dba.InsertReturning(rsql.Sql, params...)
 		}
-		this.debugTime(now)
+		this.debugTime(now, 1)
 	case AUTOKEY_AFTER:
 		rsql := this.getCachedSql()
-		this.debugSQL(rsql.OriSql)
+		this.debugSQL(rsql.OriSql, 1)
 		now = time.Now()
 		_, err = this.dba.Insert(rsql.Sql, rsql.BuildValues(this.parameters)...)
-		this.debugTime(now)
+		if err != nil {
+			return 0, err
+		}
+		this.debugTime(now, 1)
 		if this.returnId && !this.HasKeyValue && singleKeyColumn != nil {
 			if lastId, err = this.getAutoNumber(singleKeyColumn); err != nil {
 				return 0, err
@@ -254,6 +257,7 @@ func (this *Insert) Execute() (int64, error) {
 		}
 	}
 
+	logger.Debugf("The inserted Id was: %v", lastId)
 	return lastId, err
 }
 
@@ -263,10 +267,10 @@ func (this *Insert) getAutoNumber(column *Column) (int64, error) {
 		return 0, errors.New("Auto Number Query is undefined")
 	}
 	var id int64
-	this.debugSQL(sql)
+	this.debugSQL(sql, 2)
 	now := time.Now()
 	_, err := this.dba.QueryRow(sql, []interface{}{}, &id)
-	this.debugTime(now)
+	this.debugTime(now, 2)
 	if err != nil {
 		return 0, err
 	}

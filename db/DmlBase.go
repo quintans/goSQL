@@ -562,19 +562,19 @@ func (this *DmlBase) dumpParameters(params map[string]interface{}) string {
 	return str.String()
 }
 
-func (this *DmlBase) debugTime(when time.Time) {
+func (this *DmlBase) debugTime(when time.Time, depth int) {
 	elapsed := time.Since(when)
 	if lgr.IsActive(log.DEBUG) {
-		lgr.CallerAt(1).DebugF(func() string {
+		lgr.CallerAt(depth + 1).DebugF(func() string {
 			return fmt.Sprintf("executed in: %f secs", elapsed.Seconds())
 		})
 	}
 }
 
-func (this *DmlBase) debugSQL(sql string) {
+func (this *DmlBase) debugSQL(sql string, depth int) {
 	if lgr.IsActive(log.DEBUG) {
 		dump := this.dumpParameters(this.parameters)
-		lgr.CallerAt(1).DebugF(func() string {
+		lgr.CallerAt(depth + 1).DebugF(func() string {
 			return fmt.Sprintf("\n\t%T SQL: %s\n\tparameters: %s",
 				this, sql, dump)
 		})

@@ -760,11 +760,11 @@ func (this *Query) listClosure(transformer func(rows *sql.Rows) error) error {
 	}
 
 	rsql := this.getCachedSql()
-	this.debugSQL(rsql.OriSql)
+	this.debugSQL(rsql.OriSql, 2)
 
 	now := time.Now()
 	e := this.DmlBase.dba.QueryClosure(rsql.Sql, transformer, rsql.BuildValues(this.DmlBase.parameters)...)
-	this.debugTime(now)
+	this.debugTime(now, 2)
 	if e != nil {
 		return e
 	}
@@ -778,11 +778,11 @@ func (this *Query) listSimpleTransformer(transformer func(rows *sql.Rows) (inter
 	}
 
 	rsql := this.getCachedSql()
-	this.debugSQL(rsql.OriSql)
+	this.debugSQL(rsql.OriSql, 2)
 
 	now := time.Now()
 	list, e := this.DmlBase.dba.Query(rsql.Sql, transformer, rsql.BuildValues(this.DmlBase.parameters)...)
-	this.debugTime(now)
+	this.debugTime(now, 2)
 	if e != nil {
 		return nil, e
 	}
@@ -801,11 +801,11 @@ func (this *Query) list(rowMapper dbx.IRowTransformer) (coll.Collection, error) 
 	}
 
 	rsql := this.getCachedSql()
-	this.debugSQL(rsql.OriSql)
+	this.debugSQL(rsql.OriSql, 2)
 
 	now := time.Now()
 	list, e := this.DmlBase.dba.QueryCollection(rsql.Sql, rowMapper, rsql.BuildValues(this.DmlBase.parameters)...)
-	this.debugTime(now)
+	this.debugTime(now, 2)
 	if e != nil {
 		return nil, e
 	}
@@ -954,11 +954,11 @@ func (this *Query) SelectInto(dest ...interface{}) (bool, error) {
 	}
 
 	rsql := this.getCachedSql()
-	this.debugSQL(rsql.OriSql)
+	this.debugSQL(rsql.OriSql, 1)
 
 	now := time.Now()
 	found, e := this.dba.QueryRow(rsql.Sql, rsql.BuildValues(this.DmlBase.parameters), dest...)
-	this.debugTime(now)
+	this.debugTime(now, 1)
 	if e != nil {
 		return false, e
 	}
