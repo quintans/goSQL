@@ -299,11 +299,16 @@ func (this *EntityTreeTransformer) LoadInstanceKeys(
 			position := bp.Position
 			value := row[position-1]
 
+			hasValue := true
 			v := reflect.ValueOf(value)
 			if v.Kind() == reflect.Ptr {
 				v = v.Elem()
+				if v.Kind() == reflect.Ptr && v.IsNil() {
+					hasValue = false
+				}
 			}
-			if !v.IsNil() {
+
+			if hasValue {
 				bp.Set(instance, v)
 			} else if onlyKeys && bp.Key {
 				// if any key is nil, the entity is invalid. ex: a entity coming from a outer join

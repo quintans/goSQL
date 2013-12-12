@@ -66,10 +66,11 @@ func (this *Delete) Submit(value interface{}) (int64, error) {
 				}
 
 				if column.IsKey() {
+					if !val.IsValid() || (val.Kind() == reflect.Ptr && val.IsNil()) {
+						return 0, errors.New(fmt.Sprintf("goSQL: Value for key property '%s' cannot be nil.", alias))
+					}
+
 					if val.Kind() == reflect.Ptr {
-						if val.IsNil() {
-							return 0, errors.New(fmt.Sprintf("goSQL: Value for key property '%s' cannot be nil.", alias))
-						}
 						val = val.Elem()
 					}
 					id := val.Interface()
@@ -80,10 +81,11 @@ func (this *Delete) Submit(value interface{}) (int64, error) {
 					this.SetParameter(alias, id)
 					hasId = true
 				} else if column.IsVersion() {
+					if !val.IsValid() || (val.Kind() == reflect.Ptr && val.IsNil()) {
+						panic(fmt.Sprintf("goSQL: Value for version property '%s' cannot be nil.", alias))
+					}
+
 					if val.Kind() == reflect.Ptr {
-						if val.IsNil() {
-							return 0, errors.New(fmt.Sprintf("goSQL: Value for version property '%s' cannot be nil.", alias))
-						}
 						val = val.Elem()
 					}
 

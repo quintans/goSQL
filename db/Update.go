@@ -104,13 +104,12 @@ func (this *Update) Submit(instance interface{}) (int64, error) {
 				}
 
 				if column.IsKey() {
+					if !val.IsValid() || (val.Kind() == reflect.Ptr && val.IsNil()) {
+						return 0, errors.New(fmt.Sprintf("goSQL: Value for key property '%s' cannot be nil.", alias))
+					}
+
 					if val.Kind() == reflect.Ptr {
-						if val.IsNil() {
-							return 0, errors.New(fmt.Sprintf("Value for key property '%s' cannot be nil.", alias))
-						}
 						val = val.Elem()
-					} else if !val.IsValid() {
-						return 0, errors.New(fmt.Sprintf("Value for key property '%s' cannot be nil.", alias))
 					}
 					id = val.Interface()
 
@@ -119,10 +118,10 @@ func (this *Update) Submit(instance interface{}) (int64, error) {
 					}
 					this.SetParameter(alias, id)
 				} else if column.IsVersion() {
+					if !val.IsValid() || (val.Kind() == reflect.Ptr && val.IsNil()) {
+						panic(fmt.Sprintf("goSQL: Value for version property '%s' cannot be nil.", alias))
+					}
 					if val.Kind() == reflect.Ptr {
-						if val.IsNil() {
-							panic(fmt.Sprintf("Value for version property '%s' cannot be nil.", alias))
-						}
 						val = val.Elem()
 					}
 
@@ -139,27 +138,29 @@ func (this *Update) Submit(instance interface{}) (int64, error) {
 						verColumn = column
 					}
 				} else {
-					var isNil bool
-					if val.Kind() == reflect.Ptr {
-						isNil = val.IsNil()
-						if isNil {
-							this.Set(column, nil)
-						} else {
-							val = val.Elem()
-						}
-					}
-
-					if !isNil {
-						v := val.Interface()
-						switch T := v.(type) {
-						case driver.Valuer:
-							value, err := T.Value()
-							if err != nil {
-								return 0, err
+					if val.IsValid() {
+						var isNil bool
+						if val.Kind() == reflect.Ptr {
+							isNil = val.IsNil()
+							if isNil {
+								this.Set(column, nil)
+							} else {
+								val = val.Elem()
 							}
-							this.Set(column, value)
-						default:
-							this.Set(column, v)
+						}
+
+						if !isNil {
+							v := val.Interface()
+							switch T := v.(type) {
+							case driver.Valuer:
+								value, err := T.Value()
+								if err != nil {
+									return 0, err
+								}
+								this.Set(column, value)
+							default:
+								this.Set(column, v)
+							}
 						}
 					}
 				}

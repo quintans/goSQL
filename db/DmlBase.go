@@ -550,7 +550,11 @@ func (this *DmlBase) dumpParameters(params map[string]interface{}) string {
 			if k == reflect.Slice || k == reflect.Array {
 				str.Add(fmt.Sprintf("[%s=<BLOB>]", name))
 			} else if k == reflect.Ptr {
-				str.Add(fmt.Sprintf("[%s=(*)%v]", name, typ.Elem().Interface()))
+				if typ.IsNil() {
+					str.Add(fmt.Sprintf("[%s=NULL]", name))
+				} else {
+					str.Add(fmt.Sprintf("[%s=(*)%v]", name, typ.Elem().Interface()))
+				}
 			} else {
 				str.Add(fmt.Sprintf("[%s=%v]", name, typ.Interface()))
 			}

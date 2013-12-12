@@ -840,7 +840,7 @@ var dtos []*Dto
 store.Query(PUBLISHER).
 	Column(PUBLISHER_C_NAME).
 	Outer(PUBLISHER_A_BOOKS).
-	IncludeToken(Sum(BOOK_C_PRICE)).As("Value").
+	Include(Sum(BOOK_C_PRICE)).As("Value").
 	Join().
 	GroupByPos(1). // result column position
 	List(&dtos)
