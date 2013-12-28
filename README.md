@@ -1,5 +1,5 @@
-# goSQL
-***
+goSQL
+=====
 
 a ORM like library in Go (golang) that makes SQL easier to use.
 
@@ -133,7 +133,7 @@ store.Modify(&publisher)
 
 go 1.1
 
-## Instalation
+## Installation
 
 `go get github.com/quintans/toolkit`
 
