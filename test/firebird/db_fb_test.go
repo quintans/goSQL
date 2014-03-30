@@ -1,8 +1,10 @@
-package test
+package firebird
 
 import (
 	. "github.com/quintans/goSQL/db"
+	"github.com/quintans/goSQL/test/common"
 	trx "github.com/quintans/goSQL/translators"
+	"github.com/quintans/toolkit/log"
 
 	_ "bitbucket.org/miquella/mgodbc" // float64 was fixed acording to issue #5
 
@@ -11,14 +13,16 @@ import (
 	"testing"
 )
 
+var logger = log.LoggerFor("github.com/quintans/goSQL/test")
+
 func InitFirebirdSQL() (ITransactionManager, *sql.DB) {
 	logger.Infof("******* Using FirebirdSQL *******\n")
 
-	RAW_SQL = "SELECT name FROM book WHERE name LIKE ?"
+	common.RAW_SQL = "SELECT name FROM book WHERE name LIKE ?"
 
 	translator := trx.NewFirebirdSQLTranslator()
 	translator.RegisterTranslation(
-		TOKEN_SECONDSDIFF,
+		common.TOKEN_SECONDSDIFF,
 		func(dmlType DmlType, token Tokener, tx Translator) string {
 			m := token.GetMembers()
 			return fmt.Sprintf(
@@ -29,11 +33,11 @@ func InitFirebirdSQL() (ITransactionManager, *sql.DB) {
 		},
 	)
 
-	return InitDB("mgodbc", "dsn=FbGoSQL;uid=SYSDBA;pwd=masterkey", translator)
+	return common.InitDB("mgodbc", "dsn=FbGoSQL;uid=SYSDBA;pwd=masterkey", translator)
 }
 
 func TestFirebirdSQL(t *testing.T) {
 	tm, theDB := InitFirebirdSQL()
-	RunAll(tm, t)
+	common.RunAll(tm, t)
 	theDB.Close()
 }

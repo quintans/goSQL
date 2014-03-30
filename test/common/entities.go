@@ -1,15 +1,12 @@
-package test
+package common
 
 import (
 	. "github.com/quintans/goSQL/db"
 	tk "github.com/quintans/toolkit"
 	. "github.com/quintans/toolkit/ext"
-	"github.com/quintans/toolkit/log"
 
 	"time"
 )
-
-var logger = log.LoggerFor("github.com/quintans/goSQL/test")
 
 type Dto struct {
 	Name      string

@@ -1,4 +1,4 @@
-package test
+package common
 
 import (
 	. "github.com/quintans/goSQL/db"
@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-//var logger = log.LoggerFor("github.com/quintans/goSQL/test")
+var logger = log.LoggerFor("github.com/quintans/goSQL/test")
 
 // custom Db - for setting default parameters
 func NewMyDb(inTx *bool, connection dbx.IConnection, translator Translator, lang string) *MyDb {

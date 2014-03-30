@@ -1,8 +1,10 @@
-package test
+package mysql
 
 import (
 	. "github.com/quintans/goSQL/db"
+	"github.com/quintans/goSQL/test/common"
 	trx "github.com/quintans/goSQL/translators"
+	"github.com/quintans/toolkit/log"
 
 	_ "github.com/go-sql-driver/mysql"
 
@@ -11,10 +13,12 @@ import (
 	"testing"
 )
 
+var logger = log.LoggerFor("github.com/quintans/goSQL/test")
+
 func InitMySQL5() (ITransactionManager, *sql.DB) {
 	logger.Infof("******* Using MySQL5 *******\n")
 
-	RAW_SQL = "SELECT `name` FROM `book` WHERE `name` LIKE ?"
+	common.RAW_SQL = "SELECT `name` FROM `book` WHERE `name` LIKE ?"
 
 	translator := trx.NewMySQL5Translator()
 	/*
@@ -22,7 +26,7 @@ func InitMySQL5() (ITransactionManager, *sql.DB) {
 		A custom translator could be created instead.
 	*/
 	translator.RegisterTranslation(
-		TOKEN_SECONDSDIFF,
+		common.TOKEN_SECONDSDIFF,
 		func(dmlType DmlType, token Tokener, tx Translator) string {
 			m := token.GetMembers()
 			return fmt.Sprintf(
@@ -33,11 +37,11 @@ func InitMySQL5() (ITransactionManager, *sql.DB) {
 		},
 	)
 
-	return InitDB("mysql", "root:root@/gosql?parseTime=true", translator)
+	return common.InitDB("mysql", "root:root@/gosql?parseTime=true", translator)
 }
 
 func TestMySQL5(t *testing.T) {
 	tm, theDB := InitMySQL5()
-	RunAll(tm, t)
+	common.RunAll(tm, t)
 	theDB.Close()
 }

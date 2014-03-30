@@ -1,8 +1,10 @@
-package test
+package postgresql
 
 import (
 	. "github.com/quintans/goSQL/db"
+	"github.com/quintans/goSQL/test/common"
 	trx "github.com/quintans/goSQL/translators"
+	"github.com/quintans/toolkit/log"
 
 	_ "github.com/lib/pq"
 
@@ -11,14 +13,16 @@ import (
 	"testing"
 )
 
+var logger = log.LoggerFor("github.com/quintans/goSQL/test")
+
 func InitPostgreSQL() (ITransactionManager, *sql.DB) {
 	logger.Infof("******* Using PostgreSQL *******\n")
 
-	RAW_SQL = "SELECT name FROM book WHERE name LIKE $1"
+	common.RAW_SQL = "SELECT name FROM book WHERE name LIKE $1"
 
 	translator := trx.NewPostgreSQLTranslator()
 	translator.RegisterTranslation(
-		TOKEN_SECONDSDIFF,
+		common.TOKEN_SECONDSDIFF,
 		func(dmlType DmlType, token Tokener, tx Translator) string {
 			m := token.GetMembers()
 			return fmt.Sprintf(
@@ -29,11 +33,11 @@ func InitPostgreSQL() (ITransactionManager, *sql.DB) {
 		},
 	)
 
-	return InitDB("postgres", "dbname=gosql user=postgres password=postgres sslmode=disable", translator)
+	return common.InitDB("postgres", "dbname=gosql user=postgres password=postgres sslmode=disable", translator)
 }
 
 func TestPostgreSQL(t *testing.T) {
 	tm, theDB := InitPostgreSQL()
-	RunAll(tm, t)
+	common.RunAll(tm, t)
 	theDB.Close()
 }

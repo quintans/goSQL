@@ -57,11 +57,11 @@ a ORM like library in Go (golang) that makes SQL easier to use.
 (English is not my native language so please bear with me)
 
 **goSQL** aims to facilitate the convertion between database tables and structs and make easy
-the use of complex joins.  
-It has no intention of hiding the SQL from the developer and a closer idiom to SQL is also part of the library.  
+the use of complex joins.
+It has no intention of hiding the SQL from the developer and a closer idiom to SQL is also part of the library.
 Structs can be used as a representation of a table record for CRUD operations but there is no direct dependency between a struct and a table. The fields of a struct are matched with the column alias of the SQL statement to build a result.
 
-This library is not locked to any database vendor. This database abstraction is achieved by what I called _Translators_. Translators for MySQL, PostgreSQL and FirebirdSQL are provided.
+This library is not locked to any database vendor. This database abstraction is achieved by what I called _Translators_. Translators for MySQL, PostgreSQL, FirebirdSQL and Oracle are provided.
 These Translators can be extended  by registering functions to implement functionality not covered by the initial Translators or customize to something specific to a project.
 
 This library is supported by a mapping system that enables you to avoid writing any SQL text.
@@ -128,10 +128,11 @@ store.Modify(&publisher)
  - MariaDB 5.5
  - PostgreSQL 9.2
  - FirebirdSQL 2.5
+ - Oracle XE 11g
 
 ## Dependencies
 
-go 1.1
+go 1.1+
 
 ## Installation
 
@@ -382,7 +383,7 @@ insert.SetParameter("name", "Geek Publications")
 insert.Values(1, 1, Param("name")).Execute()
 ```
 
-In this example the value for the `name` parameter is directly supplied in the snippet but it could be an "environment" variable supplied by a custom `store` for every CRUD operation.  
+In this example the value for the `name` parameter is directly supplied in the snippet but it could be an "environment" variable supplied by a custom `store` for every CRUD operation.
 One example, could be `language` (pt, eng, ...) for internationalized text, or `channel` (web, mobile, ...) for descriptions, etc.
 
 
@@ -523,7 +524,7 @@ When deleting with a struct, the presence of a key field is mandatory.
 
 ### Query Examples
 
-The query operation is by far the richest operation of the ones we have seen.  
+The query operation is by far the richest operation of the ones we have seen.
 Query operation that start with `Select*` retrive **one** instance, and those that start with `List*` returns **many** instances.
 
 
@@ -572,7 +573,7 @@ putting the first element in the supplied struct pointer.
 When a new entity is needed, the cache is checked to see if there is one instance for this entity,
 and if found it will use it instead.
 Since the struct instances are going to be reused it is mandatory that all the structs
-participating in the result tree implement the `toolkit.Hasher` interface.  
+participating in the result tree implement the `toolkit.Hasher` interface.
 Returns true if a result was found, false otherwise.
 
 ```go
@@ -589,9 +590,9 @@ store.Query(PUBLISHER).
 
 Executes the query and builds a flat struct tree putting the first element in the supplied struct pointer.
 
-> A flat tree means that one entity will have at most one child, even if related by a one-to-many association.  
+> A flat tree means that one entity will have at most one child, even if related by a one-to-many association.
 Ex: 1 publisher -> 1 book -> 1 author
- 
+
 Each element of the tree is always a new instance even if representing the same entity.
 This is most useful to display results in a table.
 Since the struct instances are not going to be reused it is not mandatory that the structs implement the `toolkit.Hasher` interface.
@@ -719,7 +720,7 @@ There is another query function named `ListFlatTreeOf` with the same behaviour a
 Executes a query and transform the results into a tree with the head with the passed struct type.
 It matches the result column alias with the struct field name, building a struct tree.
 
-When creating the result, previouly fetched entities will be searched and reused if found. A search in a hash collection is faster than search in a slice and that is why a hash that implements the `collection.Collection`interface is returned instead of the classic slice.  
+When creating the result, previouly fetched entities will be searched and reused if found. A search in a hash collection is faster than search in a slice and that is why a hash that implements the `collection.Collection`interface is returned instead of the classic slice.
 For a struct to be used in a  hash, the struct must implement the `toolkit.Hasher` interface, as is the case of `Book`.
 
 ```go
@@ -750,7 +751,7 @@ type Dto struct {
 }
 ```
 
-> The struct does not represent any table. 
+> The struct does not represent any table.
 
 The following query gets the name of the publisher and the sum of the prices of books for each publisher (using a subquery to sum), building the result as a slice of `Dto`.
 
@@ -774,7 +775,7 @@ Notice that when I use the subquery variable an alias `"Value"` is defined. This
 
 #### Where Subquery
 
-In this example I get a list of records with the name of the `Publisher`, the name and price of every `Book`, where the price is lesser or equal than 10. The result is put in a slice of `Dto` instances.  
+In this example I get a list of records with the name of the `Publisher`, the name and price of every `Book`, where the price is lesser or equal than 10. The result is put in a slice of `Dto` instances.
 For this a subquery is used in the where clause.
 
 ```go
@@ -799,8 +800,8 @@ store.Query(PUBLISHER).
 #### Joins
 
 The concepts of joins was already introduced in the section [SelectTree](#selectTree) where we can see the use of an outer join.
-In the context of goSQL, a Join is seen has a path of associations that goes from the main table to the target table. Along the way we can apply constraints and/or include columns from the participating tables. These paths can overlap without problem because they are seen as isolated from one another.  
-When declaring several paths only when a path deviates from previous path it starts contributing to the SQL generation.  
+In the context of goSQL, a Join is seen has a path of associations that goes from the main table to the target table. Along the way we can apply constraints and/or include columns from the participating tables. These paths can overlap without problem because they are seen as isolated from one another.
+When declaring several paths only when a path deviates from previous path it starts contributing to the SQL generation.
 Joins can be `Outer` or `Inner` and can have constraints applyied to the target table of the last added asscoiation through the use of the function `On()`.
 To mark the end of a join definition we use the function `Join()` or `Fetch()`. Both process the join but the later includes in the query all columns from all the tables of the joins. `Fetch()` is used when a struct tree is desired.
 
@@ -850,8 +851,8 @@ store.Query(PUBLISHER).
 
 #### Having
 
-The criteria used in the `Having` clause must refer to columns of the `Query`. This reference is achieved using columns alias.  
-To demonstrate this I will use the following struct which will hold the result for each row. 
+The criteria used in the `Having` clause must refer to columns of the `Query`. This reference is achieved using columns alias.
+To demonstrate this I will use the following struct which will hold the result for each row.
 
 ```go
 type PublisherSales struct {
@@ -1042,11 +1043,11 @@ store.Query(PROJECT).
 
 ### Table Discriminator
 
-When mapping a table it is possible to declare that the domain of that table only refers to a subset of values of the physical table. This is done by defining a restriction (Discriminator) at the table definition.  
-With this we avoid of having to write a **where** condition every time we want to refer to a specific domain.  
+When mapping a table it is possible to declare that the domain of that table only refers to a subset of values of the physical table. This is done by defining a restriction (Discriminator) at the table definition.
+With this we avoid of having to write a **where** condition every time we want to refer to a specific domain.
 Inserts will automatically apply the discriminator.
 
-To demonstrate this I will use a physical table named `CATALOG` that can hold unrelated information, like gender, eye color, etc.  
+To demonstrate this I will use a physical table named `CATALOG` that can hold unrelated information, like gender, eye color, etc.
 The creation script and table definitions for the next example are at [test/tables_mysql.sql](test/tables_mysql.sql) and [test/entities.go](test/entities.go) respectively.
 
 ```go
@@ -1062,8 +1063,8 @@ store.Query(STATUS).
 
 **Virtual columns are only used by queries**.
 
-Virtual columns are columns declared in a table but in reality they belong to another table. These tables are expected to be related by a one-to-one association, with constraints guaranteeing the one-to-one relationship.  
-The columns are intended to resolve the case where the column value depends on the environment. For example, internationalization, were the value of the column would depend on the language. Another application is the case where we would like to have different descriptions depending on the business client that accesses the data, for example, mobile or web.  
+Virtual columns are columns declared in a table but in reality they belong to another table. These tables are expected to be related by a one-to-one association, with constraints guaranteeing the one-to-one relationship.
+The columns are intended to resolve the case where the column value depends on the environment. For example, internationalization, were the value of the column would depend on the language. Another application is the case where we would like to have different descriptions depending on the business client that accesses the data, for example, mobile or web.
 
 Let’s use the internationalization cenario.
 
