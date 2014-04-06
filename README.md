@@ -237,7 +237,7 @@ func main() {
 }
 ```
 
-Something like this is what you will find in [db_test.go](test/mysql/db_test.go).
+Something like this is what you will find in [common.go](test/common/common.go).
 
 
 
@@ -360,7 +360,7 @@ TM.Transaction(func(store IDb) error {
 
 If an error is returned or panic occurs, the transaction is rolled back, otherwise is commited.
 
-[db_test.go](test/mysql/db_test.go) has several examples of transactions.
+[common.go](test/common/common.go) has several examples of transactions.
 
 
 
