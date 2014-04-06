@@ -1076,7 +1076,7 @@ Putting that in place we have the following ER
 
 > `BOOK_I18N` has all the columns of `BOOK` that are subject to internationalization, in this case `TITLE`.
 
-Besides the normal mapping of the table `BOOK_I18N`, as seen in [entities.go](#test/common/entities.go), we have the association from `BOOK` to `BOOK_I18N`
+Besides the normal mapping of the table `BOOK_I18N`, as seen in [entities.go](test/common/entities.go), we have the association from `BOOK` to `BOOK_I18N`
 
 ```go
 BOOK_A_BOOK_I18N = BOOK.
