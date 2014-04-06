@@ -237,13 +237,13 @@ func main() {
 }
 ```
 
-Something like this is what you will find in [test/db_test.go](test/db_test.go).
+Something like this is what you will find in [db_test.go](test/mysql/db_test.go).
 
 
 
 ## Usage
 In this chapter I will try to explain the several aspects of the library using a set of examples.
-These examples are supported by tables defined in [test/tables_mysql.sql](test/tables_mysql.sql), a MySQL database sql script.
+These examples are supported by tables defined in [tables_mysql.sql](test/mysql/tables_mysql.sql), a MySQL database sql script.
 
 Before diving in to the examples I first describe the table model and how to map the entities.
 
@@ -345,7 +345,7 @@ var AUTHOR_A_BOOKS = NewM2MAssociation(
 
 The order of the parameters is very important, because they indicate the direction of the association.
 
-The full definition of the tables and the struct entities used in this document are in [test/entities.go](test/entities.go), covering all aspects of table mapping.
+The full definition of the tables and the struct entities used in this document are in [entities.go](test/common/entities.go), covering all aspects of table mapping.
 
 
 ### Transactions
@@ -360,7 +360,7 @@ TM.Transaction(func(store IDb) error {
 
 If an error is returned or panic occurs, the transaction is rolled back, otherwise is commited.
 
-[db_test.go](test/db_test.go) has several examples of transactions.
+[db_test.go](test/mysql/db_test.go) has several examples of transactions.
 
 
 
@@ -1016,7 +1016,7 @@ For the example I will use the following database schema:
 ![ER Diagram](test/er2.png)
 
 
-As seen in [test/entities.go](test/entities.go) associations of this type are described as:
+As seen in [entities.go](test/common/entities.go) associations of this type are described as:
 
 ```go
 PROJECT_A_CONSULTANT = PROJECT.
@@ -1048,7 +1048,7 @@ With this we avoid of having to write a **where** condition every time we want t
 Inserts will automatically apply the discriminator.
 
 To demonstrate this I will use a physical table named `CATALOG` that can hold unrelated information, like gender, eye color, etc.
-The creation script and table definitions for the next example are at [test/tables_mysql.sql](test/tables_mysql.sql) and [test/entities.go](test/entities.go) respectively.
+The creation script and table definitions for the next example are at [tables_mysql.sql](test/mysql/tables_mysql.sql) and [entities.go](test/common/entities.go) respectively.
 
 ```go
 var statuses []*Status
@@ -1076,7 +1076,7 @@ Putting that in place we have the following ER
 
 > `BOOK_I18N` has all the columns of `BOOK` that are subject to internationalization, in this case `TITLE`.
 
-Besides the normal mapping of the table `BOOK_I18N`, as seen in [test/entities.go](#test/entities.go), we have the association from `BOOK` to `BOOK_I18N`
+Besides the normal mapping of the table `BOOK_I18N`, as seen in [entities.go](#test/common/entities.go), we have the association from `BOOK` to `BOOK_I18N`
 
 ```go
 BOOK_A_BOOK_I18N = BOOK.
