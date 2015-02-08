@@ -20,6 +20,10 @@ type Table struct {
 	version        *Column         // column version
 	deletion       *Column         // logic deletion column
 	discriminators []Discriminator //
+
+	PreInsertTrigger func(*Insert)
+	PreUpdateTrigger func(*Update)
+	PreDeleteTrigger func(*Delete)
 }
 
 func TABLE(name string) *Table {

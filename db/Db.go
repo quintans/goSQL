@@ -30,6 +30,9 @@ type IDb interface {
 	Modify(instance interface{}) (bool, error)
 	Remove(instance interface{}) (bool, error)
 	Save(instance interface{}) (bool, error) // Create or Modify
+
+	GetAttribute(string) (interface{}, bool)
+	SetAttribute(string, interface{}) // general attribute. ex: user in session
 }
 
 var _ IDb = &Db{}
@@ -53,6 +56,8 @@ type Db struct {
 	lastUpdate *Update
 	lastDelete *Delete
 	lastQuery  *Query
+
+	attributes map[string]interface{}
 }
 
 func (this *Db) InTransaction() bool {
@@ -244,4 +249,19 @@ func (this *Db) Save(instance interface{}) (bool, error) {
 		k, err := this.getLastUpdate(table).Submit(instance)
 		return k != 0, err
 	}
+}
+
+func (this *Db) GetAttribute(key string) (interface{}, bool) {
+	if this.attributes == nil {
+		return nil, false
+	}
+	v, ok := this.attributes[key]
+	return v, ok
+}
+
+func (this *Db) SetAttribute(key string, value interface{}) {
+	if this.attributes == nil {
+		this.attributes = make(map[string]interface{})
+	}
+	this.attributes[key] = value
 }

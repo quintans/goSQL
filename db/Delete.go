@@ -135,6 +135,11 @@ func (this *Delete) Submit(value interface{}) (int64, error) {
 }
 
 func (this *Delete) Execute() (int64, error) {
+	table := this.GetTable()
+	if table.PreDeleteTrigger != nil {
+		table.PreDeleteTrigger(this)
+	}
+
 	rsql := this.getCachedSql()
 	this.debugSQL(rsql.OriSql, 1)
 

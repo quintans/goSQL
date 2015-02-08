@@ -205,6 +205,11 @@ func (this *Update) Submit(instance interface{}) (int64, error) {
 }
 
 func (this *Update) Execute() (int64, error) {
+	table := this.GetTable()
+	if table.PreUpdateTrigger != nil {
+		table.PreUpdateTrigger(this)
+	}
+
 	rsql := this.getCachedSql()
 	this.debugSQL(rsql.OriSql, 1)
 

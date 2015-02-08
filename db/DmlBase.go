@@ -7,6 +7,7 @@ import (
 	"github.com/quintans/toolkit/log"
 	"reflect"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -544,7 +545,10 @@ func (this *DmlBase) applyWhere(restriction *Criteria) {
 func (this *DmlBase) dumpParameters(params map[string]interface{}) string {
 	str := tk.NewStrBuffer()
 	for name, v := range params {
-		if v != nil {
+		if strings.HasSuffix(name, "$") {
+			// secret
+			str.Add(fmt.Sprintf("[%s=****]", name))
+		} else if v != nil {
 			typ := reflect.ValueOf(v)
 			k := typ.Kind()
 			if k == reflect.Slice || k == reflect.Array {

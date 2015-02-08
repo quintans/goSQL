@@ -56,3 +56,11 @@ func (this *Criteria) Clone() interface{} {
 	}
 	return c
 }
+
+func (this *Criteria) And(criteria *Criteria) *Criteria {
+	return And(this, criteria)
+}
+
+func (this *Criteria) Or(criteria *Criteria) *Criteria {
+	return Or(this, criteria)
+}

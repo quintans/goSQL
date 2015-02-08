@@ -214,6 +214,11 @@ func (this *Insert) getCachedSql() *RawSql {
 
 // returns the last inserted id
 func (this *Insert) Execute() (int64, error) {
+	table := this.GetTable()
+	if table.PreInsertTrigger != nil {
+		table.PreInsertTrigger(this)
+	}
+
 	var err error
 	var lastId int64
 	var now time.Time
