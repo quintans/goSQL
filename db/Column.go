@@ -5,23 +5,6 @@ import (
 	"strings"
 )
 
-/*
-Holds a information about a virtual column.
-A virtual column is a column declared in a table, but exists in a adjacent table.
-This is useful for columns that are internationalized. ex: BOOK [1]--[*] BOOK_I18N
-*/
-type VirtualColumn struct {
-	Association *Association // navigation to the table holding the REAL column
-	Column      *Column
-}
-
-func newVirtualColumn(column *Column, association *Association) *VirtualColumn {
-	vc := new(VirtualColumn)
-	vc.Association = association
-	vc.Column = column
-	return vc
-}
-
 type Column struct {
 	table     *Table // the table that this column belongs
 	name      string // column name
@@ -30,7 +13,6 @@ type Column struct {
 	mandatory bool
 	version   bool
 	deletion  bool
-	virtual   *VirtualColumn
 	hash      int
 }
 
@@ -156,14 +138,6 @@ func (this *Column) HashCode() int {
 
 func (this *Column) Clone() interface{} {
 	panic("Clone for Column is not implemented")
-}
-
-func (this *Column) IsVirtual() bool {
-	return this.virtual != nil
-}
-
-func (this *Column) GetVirtual() *VirtualColumn {
-	return this.virtual
 }
 
 // CONDITION ===========================

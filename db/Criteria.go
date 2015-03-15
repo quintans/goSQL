@@ -37,13 +37,13 @@ func (this *Criteria) GetRight() Tokener {
 
 func (this *Criteria) SetLeft(left interface{}) {
 	if len(this.Members) > 0 {
-		this.Members[0], _ = tokenizeOne(left)
+		this.Members[0] = tokenizeOne(left)
 	}
 }
 
 func (this *Criteria) SetRight(right interface{}) {
 	if len(this.Members) > 1 {
-		this.Members[1], _ = tokenizeOne(right)
+		this.Members[1] = tokenizeOne(right)
 	}
 }
 

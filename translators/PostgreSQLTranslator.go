@@ -77,12 +77,10 @@ func (this *PgUpdateBuilder) Column(update *db.Update) {
 		entry := it.Next()
 		column := entry.Key.(*db.Column)
 		// use only not virtual columns
-		if !column.IsVirtual() {
-			token := entry.Value.(db.Tokener)
-			this.columnPart.AddAsOne(
-				this.translator.ColumnName(column),
-				" = ", this.translator.Translate(db.UPDATE, token))
-		}
+		token := entry.Value.(db.Tokener)
+		this.columnPart.AddAsOne(
+			this.translator.ColumnName(column),
+			" = ", this.translator.Translate(db.UPDATE, token))
 	}
 }
 

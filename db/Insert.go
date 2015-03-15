@@ -131,38 +131,36 @@ func (this *Insert) Submit(instance interface{}) (int64, error) {
 	var version int64 = 1
 	for e := this.table.GetColumns().Enumerator(); e.HasNext(); {
 		column := e.Next().(*Column)
-		if !column.IsVirtual() {
-			if column.IsVersion() {
-				this.Set(column, version)
-			} else {
-				bp := mappings[column.GetAlias()]
-				if bp != nil {
-					v := bp.Get(elem)
-					if v.IsValid() {
-						if v.Kind() == reflect.Ptr && v.IsNil() {
-							this.Set(column, nil)
-						} else {
-							v := v.Interface()
-							var value interface{}
-							var err error
-							switch T := v.(type) {
-							case driver.Valuer:
-								value, err = T.Value()
-								if err != nil {
-									return 0, err
-								}
+		if column.IsVersion() {
+			this.Set(column, version)
+		} else {
+			bp := mappings[column.GetAlias()]
+			if bp != nil {
+				v := bp.Get(elem)
+				if v.IsValid() {
+					if v.Kind() == reflect.Ptr && v.IsNil() {
+						this.Set(column, nil)
+					} else {
+						v := v.Interface()
+						var value interface{}
+						var err error
+						switch T := v.(type) {
+						case driver.Valuer:
+							value, err = T.Value()
+							if err != nil {
+								return 0, err
+							}
+							this.Set(column, value)
+						default:
+							value = v
+							// if it is a key column its value
+							// has to be diferent than the zero value
+							// to be included
+							if !column.IsKey() ||
+								value != reflect.Zero(reflect.TypeOf(value)).Interface() {
 								this.Set(column, value)
-							default:
-								value = v
-								// if it is a key column its value
-								// has to be diferent than the zero value
-								// to be included
-								if !column.IsKey() ||
-									value != reflect.Zero(reflect.TypeOf(value)).Interface() {
-									this.Set(column, value)
-								} else {
-									this.Set(column, nil)
-								}
+							} else {
+								this.Set(column, nil)
 							}
 						}
 					}

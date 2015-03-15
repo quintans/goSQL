@@ -20,24 +20,23 @@ func (this *EntityProperty) IsMany() bool {
 	return this.InnerType != nil
 }
 
-func (this *EntityProperty) Set(instance reflect.Value, value reflect.Value) {
+// Do not set nil values.
+// If value is nil it will return false, otherwise returns true
+func (this *EntityProperty) Set(instance reflect.Value, value reflect.Value) bool {
 	// do not set nil values
 	if value.Kind() != reflect.Ptr || !value.IsNil() {
 		if instance.Kind() == reflect.Ptr {
 			instance = instance.Elem()
 		}
 		field := instance.FieldByName(this.FieldName)
-		if field.Kind() == reflect.Ptr {
-			ptr := this.New().Elem()
-			ptr.Set(value)
-			field.Set(ptr)
-		} else {
-			if value.Kind() == reflect.Ptr {
-				value = value.Elem()
-			}
+		if field.Kind() == reflect.Ptr || field.Kind() == reflect.Slice || field.Kind() == reflect.Array {
 			field.Set(value)
+		} else {
+			field.Set(value.Elem())
 		}
+		return true
 	}
+	return false
 }
 
 func (this *EntityProperty) Get(instance reflect.Value) reflect.Value {
@@ -89,13 +88,14 @@ func walkTreeStruct(prefix string, typ reflect.Type, attrs map[string]*EntityPro
 				}
 				attrs[key] = ep
 				ep.FieldName = p.Name
-				//if p.Type.Kind() == reflect.Ptr {
-				//	ep.Type = p.Type.Elem()
-				//} else {
-				//	ep.Type = p.Type
-				//}
+				// we want pointers. only pointer are addressable
+				if p.Type.Kind() == reflect.Ptr || p.Type.Kind() == reflect.Slice || p.Type.Kind() == reflect.Array {
+					ep.Type = p.Type
+				} else {
+					ep.Type = reflect.PtrTo(p.Type)
+				}
 				// we want pointers too
-				ep.Type = p.Type
+				//ep.Type = p.Type
 
 				if p.Type.Kind() == reflect.Slice || p.Type.Kind() == reflect.Array {
 					ep.InnerType = p.Type.Elem()

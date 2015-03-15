@@ -7,32 +7,27 @@ import (
 
 var _ tk.Base = &Token{}
 
-/*
-Converts the interface to a token.
-Returns the token and if the convertion was performed
-*/
-func tokenizeOne(v interface{}) (Tokener, bool) {
+//Converts the interface to a token.
+//Returns the token
+func tokenizeOne(v interface{}) Tokener {
 	var token Tokener
-	var isNew bool
 	switch t := v.(type) {
 	case *Column:
-		token, isNew = NewColumnHolder(t), true
+		token = NewColumnHolder(t)
 	case Tokener:
-		token, isNew = t, false
-	case *Criteria:
-		token, isNew = t, false
+		token = t.Clone().(Tokener)
 	case *Query:
-		token, isNew = SubQuery(t), true
+		token = SubQuery(t)
 	default:
-		token, isNew = Raw(t), true
+		token = Raw(t)
 	}
-	return token, isNew
+	return token
 }
 
 func tokenizeAll(values []interface{}) []Tokener {
 	tokens := make([]Tokener, len(values))
 	for k, v := range values {
-		tokens[k], _ = tokenizeOne(v)
+		tokens[k] = tokenizeOne(v)
 	}
 	return tokens
 }
@@ -45,6 +40,8 @@ type Tokener interface {
 	SetAlias(alias string)
 	SetTableAlias(tableAlias string)
 	GetTableAlias() string
+	SetPseudoTableAlias(tableAlias string)
+	GetPseudoTableAlias() string
 	IsNil() bool
 	GetMembers() []Tokener
 	SetMembers(members ...Tokener)
@@ -61,7 +58,8 @@ type Token struct {
 	Alias    string
 	hash     int
 
-	tableAlias string
+	tableAlias       string
+	pseudoTableAlias string
 }
 
 var _ Tokener = &Token{}
@@ -80,6 +78,17 @@ func NewEndToken(operator string, o interface{}) *Token {
 	this.Operator = operator
 	this.Value = o
 	return this
+}
+
+func (this *Token) GetPseudoTableAlias() string {
+	if this.pseudoTableAlias != "" {
+		return this.pseudoTableAlias
+	}
+	return this.tableAlias
+}
+
+func (this *Token) SetPseudoTableAlias(pseudoTableAlias string) {
+	this.pseudoTableAlias = pseudoTableAlias
 }
 
 func (this *Token) GetOperator() string {

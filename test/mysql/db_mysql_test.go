@@ -18,7 +18,7 @@ var logger = log.LoggerFor("github.com/quintans/goSQL/test")
 func InitMySQL5() (ITransactionManager, *sql.DB) {
 	logger.Infof("******* Using MySQL5 *******\n")
 
-	common.RAW_SQL = "SELECT `name` FROM `book` WHERE `name` LIKE ?"
+	common.RAW_SQL = "SELECT `NAME` FROM `BOOK` WHERE `NAME` LIKE ?"
 
 	translator := trx.NewMySQL5Translator()
 	/*

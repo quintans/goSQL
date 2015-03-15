@@ -50,10 +50,8 @@ func (this *Update) Values(vals ...interface{}) *Update {
 	return this
 }
 
-/*
-Updates all the columns of the table to matching struct fields.
-Returns the number of affected rows
-*/
+//Updates all the columns of the table to matching struct fields.
+//Returns the number of affected rows
 func (this *Update) Submit(instance interface{}) (int64, error) {
 	var invalid bool
 	typ := reflect.TypeOf(instance)
@@ -94,73 +92,71 @@ func (this *Update) Submit(instance interface{}) (int64, error) {
 
 	for e := this.table.GetColumns().Enumerator(); e.HasNext(); {
 		column := e.Next().(*Column)
-		if !column.IsVirtual() {
-			alias := column.GetAlias()
-			bp := mappings[alias]
-			if bp != nil {
-				val := bp.Get(elem)
+		alias := column.GetAlias()
+		bp := mappings[alias]
+		if bp != nil {
+			val := bp.Get(elem)
+			if val.Kind() == reflect.Ptr {
+				val = val.Elem()
+			}
+
+			if column.IsKey() {
+				if !val.IsValid() || (val.Kind() == reflect.Ptr && val.IsNil()) {
+					return 0, errors.New(fmt.Sprintf("goSQL: Value for key property '%s' cannot be nil.", alias))
+				}
+
+				if val.Kind() == reflect.Ptr {
+					val = val.Elem()
+				}
+				id = val.Interface()
+
+				if criterias != nil {
+					criterias = append(criterias, column.Matches(Param(alias)))
+				}
+				this.SetParameter(alias, id)
+			} else if column.IsVersion() {
+				if !val.IsValid() || (val.Kind() == reflect.Ptr && val.IsNil()) {
+					panic(fmt.Sprintf("goSQL: Value for version property '%s' cannot be nil.", alias))
+				}
 				if val.Kind() == reflect.Ptr {
 					val = val.Elem()
 				}
 
-				if column.IsKey() {
-					if !val.IsValid() || (val.Kind() == reflect.Ptr && val.IsNil()) {
-						return 0, errors.New(fmt.Sprintf("goSQL: Value for key property '%s' cannot be nil.", alias))
-					}
-
-					if val.Kind() == reflect.Ptr {
-						val = val.Elem()
-					}
-					id = val.Interface()
-
+				ver = val.Int()
+				// if version is 0 it means an update where optimistic locking is ignored
+				if ver != 0 {
+					alias_old := alias + "_old"
 					if criterias != nil {
-						criterias = append(criterias, column.Matches(Param(alias)))
+						criterias = append(criterias, column.Matches(Param(alias_old)))
 					}
-					this.SetParameter(alias, id)
-				} else if column.IsVersion() {
-					if !val.IsValid() || (val.Kind() == reflect.Ptr && val.IsNil()) {
-						panic(fmt.Sprintf("goSQL: Value for version property '%s' cannot be nil.", alias))
-					}
+					this.SetParameter(alias_old, ver)
+					// increments the version
+					this.Set(column, ver+1)
+					verColumn = column
+				}
+			} else {
+				if val.IsValid() {
+					var isNil bool
 					if val.Kind() == reflect.Ptr {
-						val = val.Elem()
+						isNil = val.IsNil()
+						if isNil {
+							this.Set(column, nil)
+						} else {
+							val = val.Elem()
+						}
 					}
 
-					ver = val.Int()
-					// if version is 0 it means an update where optimistic locking is ignored
-					if ver != 0 {
-						alias_old := alias + "_old"
-						if criterias != nil {
-							criterias = append(criterias, column.Matches(Param(alias_old)))
-						}
-						this.SetParameter(alias_old, ver)
-						// increments the version
-						this.Set(column, ver+1)
-						verColumn = column
-					}
-				} else {
-					if val.IsValid() {
-						var isNil bool
-						if val.Kind() == reflect.Ptr {
-							isNil = val.IsNil()
-							if isNil {
-								this.Set(column, nil)
-							} else {
-								val = val.Elem()
+					if !isNil {
+						v := val.Interface()
+						switch T := v.(type) {
+						case driver.Valuer:
+							value, err := T.Value()
+							if err != nil {
+								return 0, err
 							}
-						}
-
-						if !isNil {
-							v := val.Interface()
-							switch T := v.(type) {
-							case driver.Valuer:
-								value, err := T.Value()
-								if err != nil {
-									return 0, err
-								}
-								this.Set(column, value)
-							default:
-								this.Set(column, v)
-							}
+							this.Set(column, value)
+						default:
+							this.Set(column, v)
 						}
 					}
 				}
@@ -204,6 +200,7 @@ func (this *Update) Submit(instance interface{}) (int64, error) {
 	return affectedRows, nil
 }
 
+// returns the number of affected rows
 func (this *Update) Execute() (int64, error) {
 	table := this.GetTable()
 	if table.PreUpdateTrigger != nil {

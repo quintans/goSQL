@@ -7,10 +7,9 @@ import (
 // can hold a Column, a Token or any constante
 type ColumnHolder struct {
 	Token
-	tableAlias        string
-	column            *Column
-	virtualTableAlias string
-	hash              int
+
+	column *Column
+	hash   int
 }
 
 var _ Tokener = &ColumnHolder{}
@@ -24,11 +23,11 @@ func NewColumnHolder(column *Column) *ColumnHolder {
 }
 
 func (this *ColumnHolder) GetAlias() string {
-	return this.Alias
-}
-
-func (this *ColumnHolder) SetAlias(alias string) {
-	this.As(alias)
+	if this.Alias != "" {
+		return this.Alias
+	} else {
+		return this.column.GetAlias()
+	}
 }
 
 func (this *ColumnHolder) As(alias string) *ColumnHolder {
@@ -49,21 +48,6 @@ func (this *ColumnHolder) SetTableAlias(tableAlias string) {
 
 func (this *ColumnHolder) GetColumn() *Column {
 	return this.column
-}
-
-func (this *ColumnHolder) GetTableAlias() string {
-	return this.tableAlias
-}
-
-func (this *ColumnHolder) GetVirtualTableAlias() string {
-	if this.virtualTableAlias != "" {
-		return this.virtualTableAlias
-	}
-	return this.tableAlias
-}
-
-func (this *ColumnHolder) SetVirtualTableAlias(virtualTableAlias string) {
-	this.virtualTableAlias = virtualTableAlias
 }
 
 /*

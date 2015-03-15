@@ -184,19 +184,14 @@ func (this *DmlBase) inner(associations ...*Association) {
 	this.rawSQL = nil
 }
 
-func (this *DmlBase) join(path []*PathElement) {
-	// resets path
-	this.joinTo("", path)
-}
-
 /*
 Indicates that the current association chain should be used to join only.
 A table end alias can also be supplied.
 This
 */
-func (this *DmlBase) joinTo(endAlias string, path []*PathElement) {
+func (this *DmlBase) joinTo(endAlias string, path []*PathElement, fetch bool) {
 	if len(path) > 0 {
-		this.addJoin(endAlias, path, nil, false)
+		this.addJoin(endAlias, path, nil, fetch)
 
 		// the first position refers to constraints applied to the table, due to a association discriminator
 		pathCriterias := this.buildPathCriterias(path)
@@ -448,7 +443,6 @@ func (this *DmlBase) applyOn(chain []*PathElement, criteria *Criteria) {
 		pe := chain[len(chain)-1]
 		cpy, _ := criteria.Clone().(*Criteria)
 
-		this.joinVirtualColumns(cpy, chain)
 		fk := pe.Derived
 		var fkAlias string
 		if fk.IsMany2Many() {
@@ -476,7 +470,6 @@ func (this *DmlBase) applyInclude(chain []*PathElement, tokens ...Tokener) {
 			fkAlias = this.joinBag.GetAlias(pe.Derived)
 		}
 		for _, token := range tokens {
-			this.joinVirtualColumns(token, chain)
 			token.SetTableAlias(fkAlias)
 		}
 
@@ -484,55 +477,8 @@ func (this *DmlBase) applyInclude(chain []*PathElement, tokens ...Tokener) {
 	}
 }
 
-func (this *DmlBase) joinVirtualColumns(token Tokener, previous []*PathElement) {
-	members := token.GetMembers()
-	if ch, ok := token.(*ColumnHolder); ok {
-		var column = ch.GetColumn()
-		if column.IsVirtual() {
-			var associations []*PathElement
-			// sets the VIRTUAL table alias (it's the alias of the current table)
-			// it is used to match the result column to the struct field
-			if len(previous) > 0 {
-				ch.SetVirtualTableAlias(this.lastFkAlias)
-				associations = append(associations, previous...)
-			} else {
-				ch.SetVirtualTableAlias(this.tableAlias)
-			}
-			// temp
-			join := this.lastJoin
-			fkAlias := this.lastFkAlias
-
-			pe := new(PathElement)
-			pe.Base = column.GetVirtual().Association
-			pe.Inner = false
-			associations = append(associations, pe)
-
-			this.joinTo("", associations)
-			//this.addJoin("", associations, false)
-
-			// this is used to generate the sql join
-			ch.SetTableAlias(this.lastFkAlias)
-
-			// reset
-			this.lastFkAlias = fkAlias
-			this.lastJoin = join
-		}
-	} else {
-		if members != nil {
-			for _, o := range members {
-				if t, ok := o.(*Token); ok {
-					this.joinVirtualColumns(t, previous)
-				}
-			}
-		}
-	}
-}
-
 // WHERE ===
 func (this *DmlBase) applyWhere(restriction *Criteria) {
-	// hunt for the virtual column
-	this.joinVirtualColumns(restriction, nil)
-
 	token, _ := restriction.Clone().(*Criteria)
 	this.replaceRaw(token)
 	token.SetTableAlias(this.tableAlias)

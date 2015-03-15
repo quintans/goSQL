@@ -72,15 +72,6 @@ func (this *Table) COLUMN(name string) *Column {
 	return col
 }
 
-/*
-Virtual Column (references a column in another table)
-*/
-func (this *Table) VCOLUMN(realColumn *Column, association *Association) *Column {
-	col := this.COLUMN(realColumn.name)
-	col.virtual = newVirtualColumn(realColumn, association)
-	return col
-}
-
 func (this *Table) KEY(name string) *Column {
 	return this.COLUMN(name).Key()
 }
@@ -115,7 +106,7 @@ func (this *Table) With(column string, value interface{}) *Table {
 	if this.discriminators == nil {
 		this.discriminators = make([]Discriminator, 0)
 	}
-	token, _ := tokenizeOne(value)
+	token := tokenizeOne(value)
 	discriminator := NewDiscriminator(this.COLUMN(column), token)
 	this.discriminators = append(this.discriminators, discriminator)
 	return this

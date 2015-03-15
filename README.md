@@ -32,6 +32,7 @@ a ORM like library in Go (golang) that makes SQL easier to use.
 	* [SelectTree](#selectTree)
 	* [SelectFlatTree](#selectflattree)
 	* [ListSimple](#listsimple)
+	* [ListInto](#listinto)
 	* [List](#list)
 	* [ListOf](#listof)
 	* [ListFlatTree](#listflattree)
@@ -625,32 +626,48 @@ store.Query(PUBLISHER).
 ```
 
 
+#### ListInto
 
-#### List
-
-Executes a query, putting the result in the slice, passed as an argument.
+This method is very similar to the previous one, but relies on reflection.
+A function is used to build the result list. The types for row scanning are supplied by the function parameters.
+The parameters can be pointers or not.
+The function can be declared with a return value.
+This is useful if a returning struct needs to be preprocessed.
 
 ```go
-var books []*Book // mandatory use pointers
-store.Query(BOOK).
-	All().
-	List(&books)
+names := store.Query(PUBLISHER).
+	Column(PUBLISHER_C_NAME).
+	ListInto(func(name *string) string {
+		return *name;
+})
 ```
 
-If we wish to do some processing when building the result slice we could use the following.
+[Union](#union) has an example of result processing.
+
+We can also use a function accepting a struct, returning or not another struct, to do some processing as shown below.
 
 ```go
-books := make([]*Book, 0) // mandatory use pointers
+books := make([]*Book, 0)
 store.Query(BOOK).
 	All().
-	List(func(book *Book) {
+	ListInto(func(book *Book) {
 	books = append(books, book)
 })
 ```
 
  The target entity is determined by the receiving type of the function.
 
-[Union](#union) has an example of result processing.
+
+#### List
+
+Executes a query, putting the result in the slice, passed as an argument.
+
+```go
+var books []Book  // []*Book is also valid
+store.Query(BOOK).
+	All().
+	List(&books)
+```
 
 
 #### ListOf

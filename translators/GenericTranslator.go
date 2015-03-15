@@ -256,12 +256,10 @@ func (this *UpdateBuilder) Column(update *db.Update) {
 		entry := it.Next()
 		column := entry.Key.(*db.Column)
 		// use only not virtual columns
-		if !column.IsVirtual() {
-			token := entry.Value.(db.Tokener)
-			this.columnPart.AddAsOne(tableAlias, ".",
-				this.translator.ColumnName(column),
-				" = ", this.translator.Translate(db.UPDATE, token))
-		}
+		token := entry.Value.(db.Tokener)
+		this.columnPart.AddAsOne(tableAlias, ".",
+			this.translator.ColumnName(column),
+			" = ", this.translator.Translate(db.UPDATE, token))
 	}
 }
 
@@ -385,28 +383,26 @@ func (this *InsertBuilder) Column(insert *db.Insert) {
 		entry := it.Next()
 		column := entry.Key.(*db.Column)
 		// use only not virtual columns
-		if !column.IsVirtual() {
-			token := entry.Value.(db.Tokener)
-			// only includes null keys if IgnoreNullKeys is false
-			if column.IsKey() && this.translator.IgnoreNullKeys() &&
-				db.TOKEN_PARAM == token.GetOperator() {
-				param := token.GetValue().(string)
-				if parameters[param] != nil {
-					val = this.translator.Translate(db.INSERT, token)
-				}
-			} else {
+		token := entry.Value.(db.Tokener)
+		// only includes null keys if IgnoreNullKeys is false
+		if column.IsKey() && this.translator.IgnoreNullKeys() &&
+			db.TOKEN_PARAM == token.GetOperator() {
+			param := token.GetValue().(string)
+			if parameters[param] != nil {
 				val = this.translator.Translate(db.INSERT, token)
 			}
-
-			col := this.translator.ColumnName(column)
-
-			if val != "" {
-				this.columnPart.Add(col)
-				this.valuePart.Add(val)
-			}
-
-			val = ""
+		} else {
+			val = this.translator.Translate(db.INSERT, token)
 		}
+
+		col := this.translator.ColumnName(column)
+
+		if val != "" {
+			this.columnPart.Add(col)
+			this.valuePart.Add(val)
+		}
+
+		val = ""
 	}
 }
 

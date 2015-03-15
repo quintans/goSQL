@@ -105,7 +105,7 @@ func (this *TransactionManager) Transaction(handler func(db IDb) error) error {
 	defer func() {
 		err := recover()
 		if err != nil {
-			logger.Fatalf("Transaction error: %s\n%s", err, debug.Stack())
+			//logger.Fatalf("Transaction error: %s\n%s", err, debug.Stack())
 			tx.Rollback()
 			panic(err) // up you go
 		}

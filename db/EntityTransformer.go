@@ -2,7 +2,6 @@ package db
 
 import (
 	"github.com/quintans/goSQL/dbx"
-	tk "github.com/quintans/toolkit"
 	coll "github.com/quintans/toolkit/collection"
 	. "github.com/quintans/toolkit/ext"
 
@@ -16,14 +15,14 @@ type EntityTransformerOverrider interface {
 	PopulateMapping(tableAlias string, typ reflect.Type) map[string]*EntityProperty
 	DiscardIfKeyIsNull() bool
 	InitRowData(row []interface{}, properties map[string]*EntityProperty)
-	ToEntity(row []interface{}, instance reflect.Value, properties map[string]*EntityProperty) (bool, error)
+	ToEntity(row []interface{}, instance reflect.Value, properties map[string]*EntityProperty, emptyBean *bool) (bool, error)
 }
 
 type EntityTransformer struct {
 	Overrider    EntityTransformerOverrider
 	Query        *Query
 	Factory      func() reflect.Value
-	Returner     func(val reflect.Value)
+	Returner     func(val reflect.Value) reflect.Value
 	Properties   map[string]*EntityProperty
 	TemplateData []interface{}
 }
@@ -35,7 +34,7 @@ func NewEntityTransformer(query *Query, instance interface{}) *EntityTransformer
 	return NewEntityFactoryTransformer(query, reflect.TypeOf(instance), nil)
 }
 
-func NewEntityFactoryTransformer(query *Query, typ reflect.Type, returner func(val reflect.Value)) *EntityTransformer {
+func NewEntityFactoryTransformer(query *Query, typ reflect.Type, returner func(val reflect.Value) reflect.Value) *EntityTransformer {
 	this := new(EntityTransformer)
 	this.Overrider = this
 
@@ -46,21 +45,19 @@ func NewEntityFactoryTransformer(query *Query, typ reflect.Type, returner func(v
 }
 
 func createFactory(typ reflect.Type) func() reflect.Value {
-	var isPtr bool
 	if typ.Kind() == reflect.Ptr {
-		isPtr = true
 		typ = typ.Elem()
-	}
-
-	return func() reflect.Value {
-		if isPtr {
+		return func() reflect.Value {
 			return reflect.New(typ)
 		}
-		return reflect.Zero(typ)
+	} else {
+		return func() reflect.Value {
+			return reflect.Zero(typ)
+		}
 	}
 }
 
-func (this *EntityTransformer) Super(query *Query, factory func() reflect.Value, returner func(val reflect.Value)) {
+func (this *EntityTransformer) Super(query *Query, factory func() reflect.Value, returner func(val reflect.Value) reflect.Value) {
 	this.Query = query
 	this.Factory = factory
 	this.Returner = returner
@@ -95,7 +92,7 @@ func (this *EntityTransformer) PopulateMapping(tableAlias string, typ reflect.Ty
 			}
 			bp, _ = mappings[ta]
 		} else if ok {
-			if tableAlias == ch.GetVirtualTableAlias() {
+			if tableAlias == token.GetPseudoTableAlias() {
 				bp, _ = mappings[prefix+ch.GetColumn().GetAlias()]
 				if this.Overrider.DiscardIfKeyIsNull() && bp != nil {
 					bp.Key = ch.GetColumn().IsKey()
@@ -127,7 +124,6 @@ func (this *EntityTransformer) AfterAll(result coll.Collection) {
 
 func (this *EntityTransformer) Transform(rows *sql.Rows) (interface{}, error) {
 	val := this.Factory()
-	instance := val.Interface()
 
 	if this.Properties == nil {
 		this.Properties = this.Overrider.PopulateMapping("", val.Type())
@@ -159,21 +155,28 @@ func (this *EntityTransformer) Transform(rows *sql.Rows) (interface{}, error) {
 		return nil, err
 	}
 
-	if _, err := this.Overrider.ToEntity(rowData, val, this.Properties); err != nil {
+	if _, err := this.Overrider.ToEntity(rowData, val, this.Properties, nil); err != nil {
 		return nil, err
 	}
 
+	instance := val.Interface()
 	// post trigger
 	if t, isT := instance.(PostRetriver); isT {
 		t.PostRetrive(this.Query.GetDb())
 	}
 
 	if this.Returner == nil {
-		if H, isH := instance.(tk.Hasher); isH {
-			return H, nil
-		}
+		return instance, nil
+		/*
+			if H, isH := instance.(tk.Hasher); isH {
+				return H, nil
+			}
+		*/
 	} else {
-		this.Returner(val)
+		v := this.Returner(val)
+		if v.IsValid() {
+			return v.Interface(), nil
+		}
 	}
 
 	return nil, nil
@@ -198,18 +201,21 @@ func (this *EntityTransformer) ToEntity(
 	row []interface{},
 	instance reflect.Value,
 	properties map[string]*EntityProperty,
+	emptyBean *bool,
 ) (bool, error) {
 	for _, bp := range properties {
 		if bp.Position > 0 {
 			position := bp.Position
 			value := row[position-1]
-			if value != nil {
-				v := reflect.ValueOf(value)
-				if v.Kind() == reflect.Ptr {
-					v = v.Elem()
-				}
-				bp.Set(instance, v)
-			} else if bp.Key { // if property is a key, check if it is nil
+			v := reflect.ValueOf(value)
+			if v.Kind() == reflect.Ptr {
+				v = v.Elem()
+			}
+			ok := bp.Set(instance, v)
+			if ok && emptyBean != nil {
+				*emptyBean = false
+			}
+			if !ok && bp.Key { // if property is a key, check if it is nil
 				// if any key is nil, the bean is nil. ex: a bean coming from a outer join
 				return false, nil
 			}

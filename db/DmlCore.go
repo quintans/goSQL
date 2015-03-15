@@ -23,10 +23,7 @@ type DmlCore struct {
 // param value: The value to set
 // return this
 func (this *DmlCore) set(col *Column, value interface{}) interface{} {
-	token, isNew := tokenizeOne(value)
-	if !isNew {
-		token = token.Clone().(Tokener)
-	}
+	token := tokenizeOne(value)
 	this.replaceRaw(token)
 	token.SetTableAlias(this.tableAlias)
 	// if the column was not yet defined, the sql changed

@@ -104,7 +104,6 @@ func RunAll(TM ITransactionManager, t *testing.T) {
 	RunAssociationDiscriminatorReverse(TM, t)
 	RunTableDiscriminator(TM, t)
 	RunJoinTableDiscriminator(TM, t)
-	RunVirtualColumns(TM, t)
 	RunCustomFunction(TM, t)
 	RunRawSQL(TM, t)
 	RunHaving(TM, t)
@@ -794,9 +793,9 @@ func RunList(TM ITransactionManager, t *testing.T) {
 
 	store := TM.Store()
 	books := make([]*Book, 0) // mandatory use pointers
-	err := store.Query(BOOK).
+	_, err := store.Query(BOOK).
 		All().
-		List(func(book *Book) {
+		ListInto(func(book *Book) {
 		books = append(books, book)
 	})
 	if err != nil {
@@ -1033,13 +1032,13 @@ func RunInnerOn(TM ITransactionManager, t *testing.T) {
 	// gets all publishers that had a book published before 2013
 	store := TM.Store()
 	var publishers = make([]*Publisher, 0)
-	err := store.Query(PUBLISHER).
+	_, err := store.Query(PUBLISHER).
 		All().
 		Distinct().
 		Inner(PUBLISHER_A_BOOKS).
 		On(BOOK_C_PUBLISHED.Lesser(time.Date(2013, time.January, 1, 0, 0, 0, 0, time.UTC))).
 		Join().
-		List(func(publisher *Publisher) {
+		ListInto(func(publisher *Publisher) {
 		publishers = append(publishers, publisher)
 	})
 
@@ -1178,11 +1177,11 @@ func RunOrderBy(TM ITransactionManager, t *testing.T) {
 
 	store := TM.Store()
 	var publishers = make([]*Publisher, 0)
-	err := store.Query(PUBLISHER).
+	_, err := store.Query(PUBLISHER).
 		All().
 		OrderBy(PUBLISHER_C_NAME).
 		Asc(true).
-		List(func(publisher *Publisher) {
+		ListInto(func(publisher *Publisher) {
 		publishers = append(publishers, publisher)
 	})
 
@@ -1388,24 +1387,6 @@ func RunJoinTableDiscriminator(TM ITransactionManager, t *testing.T) {
 	}
 }
 
-func RunVirtualColumns(TM ITransactionManager, t *testing.T) {
-	ResetDB(TM)
-
-	// get the database context
-	store := TM.Store()
-	// the target entity
-	var book = Book{}
-	ok, err := store.Query(BOOK).
-		All().
-		Where(BOOK_C_ID.Matches(1)).
-		SelectTo(&book)
-	if err != nil {
-		t.Fatalf("Failed TestVirtualColumns: %s", err)
-	} else if !ok || *book.Id != 1 || *book.Version != 1 || *book.Title != BOOK_LANG_TITLE {
-		t.Fatalf("The record for book with id 1, was not properly retrived. Retrived %s", (&book).String())
-	}
-}
-
 func RunCustomFunction(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
@@ -1472,14 +1453,14 @@ func RunHaving(TM ITransactionManager, t *testing.T) {
 	// get the database context
 	store := TM.Store()
 	sales := make([]*PublisherSales, 0)
-	err := store.Query(PUBLISHER).
+	_, err := store.Query(PUBLISHER).
 		Column(PUBLISHER_C_NAME).
 		Outer(PUBLISHER_A_BOOKS).
 		Include(Sum(BOOK_C_PRICE)).As("ThisYear").
 		Join().
 		GroupByPos(1).
 		Having(Alias("ThisYear").Greater(30)).
-		List(func(sale *PublisherSales) {
+		ListInto(func(sale *PublisherSales) {
 		sales = append(sales, sale)
 	})
 
@@ -1502,7 +1483,7 @@ func RunUnion(TM ITransactionManager, t *testing.T) {
 	// get the database context
 	store := TM.Store()
 	sales := make([]*PublisherSales, 0)
-	err := store.Query(PUBLISHER).
+	_, err := store.Query(PUBLISHER).
 		Column(PUBLISHER_C_ID).
 		Column(PUBLISHER_C_NAME).
 		Outer(PUBLISHER_A_BOOKS).
@@ -1534,7 +1515,7 @@ func RunUnion(TM ITransactionManager, t *testing.T) {
 			Join().
 			GroupByPos(1, 2),
 	).
-		List(func(sale *PublisherSales) {
+		ListInto(func(sale *PublisherSales) {
 		logger.Debugf("sales = %s", sale.String())
 		found := false
 		for _, v := range sales {

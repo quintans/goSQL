@@ -33,7 +33,7 @@ func NewEntityTreeTransformer(query *Query, reuse bool, instance interface{}) *E
 }
 
 // since the creation of the list is managed outside the reue flag is set to false
-func NewEntityTreeFactoryTransformer(query *Query, typ reflect.Type, returner func(val reflect.Value)) *EntityTreeTransformer {
+func NewEntityTreeFactoryTransformer(query *Query, typ reflect.Type, returner func(val reflect.Value) reflect.Value) *EntityTreeTransformer {
 	this := new(EntityTreeTransformer)
 	this.Overrider = this
 
@@ -158,6 +158,7 @@ func (this *EntityTreeTransformer) transformEntity(
 	entity := parent.Interface()
 	hasher, isHasher := entity.(tk.Hasher)
 	var err error
+	emptyBean := true
 	if isHasher && this.reuse {
 		// for performance, loads only key, because it's sufficient for searching the cache
 		valid, err = this.LoadInstanceKeys(row, parent, lastProps, true)
@@ -204,17 +205,20 @@ func (this *EntityTreeTransformer) transformEntity(
 				)
 			}
 		}
+		emptyBean = false
 	} else {
-		valid, err = this.Overrider.ToEntity(row, parent, lastProps)
+		valid, err = this.Overrider.ToEntity(row, parent, lastProps, &emptyBean)
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	if !valid {
+		this.ignoreRemaningBranch()
 		return nil, nil
 	}
 
+	emptyAssoc := true
 	fks := this.ForwardBranches()
 	if fks != nil {
 		var subType reflect.Type
@@ -260,12 +264,21 @@ func (this *EntityTreeTransformer) transformEntity(
 						// passing pointer
 						bp.Set(parent, childVal)
 					}
+					emptyAssoc = false
 				}
 			}
 		}
 	}
 
-	return entity, nil
+	/*
+	 * if the bean and all of its associations are null then we can safely ignore this bean.
+	 * No include() columns were found.
+	 */
+	if emptyBean && emptyAssoc {
+		return nil, nil
+	} else {
+		return entity, nil
+	}
 }
 
 func (this *EntityTreeTransformer) DiscardIfKeyIsNull() bool {
@@ -299,18 +312,13 @@ func (this *EntityTreeTransformer) LoadInstanceKeys(
 			position := bp.Position
 			value := row[position-1]
 
-			hasValue := true
 			v := reflect.ValueOf(value)
 			if v.Kind() == reflect.Ptr {
 				v = v.Elem()
-				if v.Kind() == reflect.Ptr && v.IsNil() {
-					hasValue = false
-				}
 			}
 
-			if hasValue {
-				bp.Set(instance, v)
-			} else if onlyKeys && bp.Key {
+			ok := bp.Set(instance, v)
+			if !ok && onlyKeys && bp.Key {
 				// if any key is nil, the entity is invalid. ex: a entity coming from a outer join
 				return false, nil
 			}
@@ -342,4 +350,12 @@ func (this *EntityTreeTransformer) ForwardBranches() []*Association {
 	}
 	this.crawler.Forward() // move to next branches
 	return list
+}
+
+func (this *EntityTreeTransformer) ignoreRemaningBranch() {
+	assocs := this.crawler.GetBranches()
+	this.crawler.Forward() // move to next branches
+	if assocs != nil {
+		this.ignoreRemaningBranch()
+	}
 }

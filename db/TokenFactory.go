@@ -149,11 +149,12 @@ func Lower(token interface{}) *Token {
 }
 
 // pass nil to ignore column
-func Count(column *Column) *Token {
+func Count(column interface{}) *Token {
 	if column == nil {
 		return NewEndToken(TOKEN_COUNT, nil)
 	}
-	return NewToken(TOKEN_COUNT_COLUMN, NewColumnHolder(column))
+	token := tokenizeOne(column)
+	return NewToken(TOKEN_COUNT_COLUMN, token)
 }
 
 func Rtrim(token interface{}) *Token {

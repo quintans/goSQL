@@ -56,47 +56,45 @@ func (this *Delete) Submit(value interface{}) (int64, error) {
 	var ver int64
 	for e := this.table.GetColumns().Enumerator(); e.HasNext(); {
 		column := e.Next().(*Column)
-		if !column.IsVirtual() {
-			alias := column.GetAlias()
-			bp := mappings[alias]
-			if bp != nil {
-				val := bp.Get(reflect.ValueOf(value))
+		alias := column.GetAlias()
+		bp := mappings[alias]
+		if bp != nil {
+			val := bp.Get(reflect.ValueOf(value))
+			if val.Kind() == reflect.Ptr {
+				val = val.Elem()
+			}
+
+			if column.IsKey() {
+				if !val.IsValid() || (val.Kind() == reflect.Ptr && val.IsNil()) {
+					return 0, errors.New(fmt.Sprintf("goSQL: Value for key property '%s' cannot be nil.", alias))
+				}
+
+				if val.Kind() == reflect.Ptr {
+					val = val.Elem()
+				}
+				id := val.Interface()
+
+				if criterias != nil {
+					criterias = append(criterias, column.Matches(Param(alias)))
+				}
+				this.SetParameter(alias, id)
+				hasId = true
+			} else if column.IsVersion() {
+				if !val.IsValid() || (val.Kind() == reflect.Ptr && val.IsNil()) {
+					panic(fmt.Sprintf("goSQL: Value for version property '%s' cannot be nil.", alias))
+				}
+
 				if val.Kind() == reflect.Ptr {
 					val = val.Elem()
 				}
 
-				if column.IsKey() {
-					if !val.IsValid() || (val.Kind() == reflect.Ptr && val.IsNil()) {
-						return 0, errors.New(fmt.Sprintf("goSQL: Value for key property '%s' cannot be nil.", alias))
-					}
-
-					if val.Kind() == reflect.Ptr {
-						val = val.Elem()
-					}
-					id := val.Interface()
-
+				ver = val.Int()
+				if ver != 0 {
 					if criterias != nil {
 						criterias = append(criterias, column.Matches(Param(alias)))
 					}
-					this.SetParameter(alias, id)
-					hasId = true
-				} else if column.IsVersion() {
-					if !val.IsValid() || (val.Kind() == reflect.Ptr && val.IsNil()) {
-						panic(fmt.Sprintf("goSQL: Value for version property '%s' cannot be nil.", alias))
-					}
-
-					if val.Kind() == reflect.Ptr {
-						val = val.Elem()
-					}
-
-					ver = val.Int()
-					if ver != 0 {
-						if criterias != nil {
-							criterias = append(criterias, column.Matches(Param(alias)))
-						}
-						this.SetParameter(alias, ver)
-						mustSucceed = true
-					}
+					this.SetParameter(alias, ver)
+					mustSucceed = true
 				}
 			}
 		}

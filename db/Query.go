@@ -178,12 +178,18 @@ func (this *Query) ColumnsReset() {
 	this.Columns = nil
 }
 
+func (this *Query) CountAll() *Query {
+	return this.Column(Count(nil))
+}
+
+func (this *Query) Count(column interface{}) *Query {
+	return this.Column(Count(column))
+}
+
 func (this *Query) Column(column interface{}) *Query {
-	this.lastToken, _ = tokenizeOne(column)
+	this.lastToken = tokenizeOne(column)
 	this.replaceRaw(this.lastToken)
 
-	// TODO: implement virtual columns
-	this.joinVirtualColumns(this.lastToken, nil)
 	this.lastToken.SetTableAlias(this.tableAlias)
 	this.Columns = append(this.Columns, this.lastToken)
 
@@ -244,10 +250,6 @@ func (this *Query) OrderAs(column *Column, alias string) *Query {
 	ch := NewColumnHolder(column)
 	if alias != "" {
 		ch.SetTableAlias(alias)
-	} else if column.IsVirtual() {
-		// the tableAlias is set to nil to allow joinVirtualColumns
-		// to the define the alias
-		this.joinVirtualColumns(ch, nil)
 	} else {
 		ch.SetTableAlias(this.tableAlias)
 	}
@@ -275,17 +277,7 @@ Defines the column, belonging to the table targeted by the association, to order
 */
 func (this *Query) OrderFor(column *Column, pathElements ...*PathElement) *Query {
 	var pes []*PathElement
-	if column.IsVirtual() {
-		// appending the path of the virtual column
-		ch := NewColumnHolder(column)
-		discriminator := ch.GetColumn().GetVirtual().Association
-		pe := new(PathElement)
-		pe.Base = discriminator
-		pe.Inner = false
-		pes = append(pes, pe)
-	} else {
-		pes = pathElements
-	}
+	pes = pathElements
 
 	common := DeepestCommonPath(this.cachedAssociation, pes)
 	if len(common) == len(pes) {
@@ -375,56 +367,24 @@ func (this *Query) Outer(associations ...*Association) *Query {
 	return this
 }
 
+//This will trigger a result that can be dumped in a tree object
+//using current association path to build the tree result.
+//
+//It will includes all the columns of all the tables referred by the association path,
+// except where columns were explicitly included.
 func (this *Query) Fetch() *Query {
 	return this.FetchTo("")
 }
 
-/*
-Include in the select ALL columns of the tables paticipating in the current association chain.
-A table end alias can also be supplied.
-*/
+//The as Fetch() but using an end alias.
 func (this *Query) FetchTo(endAlias string) *Query {
-	if len(this.path) > 0 {
-		this.fetch(endAlias, this.path...)
-
-		pathCriterias := this.buildPathCriterias(this.path)
-		// process the acumulated conditions
-		var firstCriterias []*Criteria
-		for index, pathCriteria := range pathCriterias {
-			if pathCriteria != nil {
-				conds := pathCriteria.Criterias
-				if conds != nil {
-					// index == 0 applies to the starting table
-					if index == 0 {
-						// already with the alias applied
-						firstCriterias = conds
-					} else {
-						if firstCriterias != nil {
-							// add the criterias restriction refering to the table,
-							// due to association discriminator
-							tmp := make([]*Criteria, len(conds))
-							copy(tmp, conds)
-							conds = append(tmp, firstCriterias...)
-							firstCriterias = nil
-						}
-						this.applyOn(this.path[:index], And(conds...))
-					}
-				}
-			}
-		}
-
-		// apply orders
-		for k, p := range this.path {
-			if len(p.Orders) > 0 {
-				for _, o := range p.Orders {
-					this.OrderFor(o.column.GetColumn(), this.path[:k+1]...)
-				}
-			}
+	if this.path != nil {
+		for _, pe := range this.path {
+			this.includeInPath(pe) // includes all columns
 		}
 	}
-	this.path = nil
 
-	this.rawSQL = nil
+	this.joinTo(endAlias, true)
 
 	return this
 }
@@ -438,44 +398,40 @@ func (this *Query) Join() *Query {
 //param endAlias:
 //return
 func (this *Query) JoinTo(endAlias string) *Query {
-	this.DmlBase.joinTo(endAlias, this.path)
-	if len(this.path) > 0 {
-		// apply orders
-		for k, p := range this.path {
-			if len(p.Orders) > 0 {
-				for _, o := range p.Orders {
-					this.OrderFor(o.column.GetColumn(), this.path[:k+1]...)
-				}
-			}
-		}
-	}
-	this.path = nil
-	this.rawSQL = nil
+	this.joinTo(endAlias, false)
 	return this
 }
 
-/*
- adds tokens refering the last defined association
-*/
-func (this *Query) Include(columns ...interface{}) *Query {
-	if len(this.path) > 0 {
-		var isNew bool
-		// create tokens from the columns
-		tokens := make([]Tokener, len(columns), len(columns))
-		for k, c := range columns {
-			this.lastToken, isNew = tokenizeOne(c)
-			if !isNew {
-				this.lastToken = this.lastToken.Clone().(Tokener)
+func (this *Query) joinTo(endAlias string, fetch bool) {
+	if this.path != nil {
+		tokens := make([]Tokener, 0)
+		for _, pe := range this.path {
+			funs := pe.Columns
+			if funs != nil {
+				for _, fun := range funs {
+					tokens = append(tokens, fun)
+					if !fetch {
+						fun.SetPseudoTableAlias(this.tableAlias)
+					}
+				}
 			}
-			tokens[k] = this.lastToken
 		}
-		// append the tokens to previously added tokens
-		toks := this.path[len(this.path)-1].Columns
-		if toks == nil {
-			toks = make([]Tokener, 0)
-		}
-		this.path[len(this.path)-1].Columns = append(toks, tokens...)
+
 		this.Columns = append(this.Columns, tokens...)
+	}
+
+	this.DmlBase.joinTo(endAlias, this.path, fetch)
+
+	this.path = nil
+	this.rawSQL = nil
+}
+
+//adds tokens refering the last defined association
+func (this *Query) Include(columns ...interface{}) *Query {
+	lenPath := len(this.path)
+	if lenPath > 0 {
+		lastPath := this.path[lenPath-1]
+		this.includeInPath(lastPath, columns...)
 
 		this.rawSQL = nil
 	} else {
@@ -484,57 +440,20 @@ func (this *Query) Include(columns ...interface{}) *Query {
 	return this
 }
 
-func (this *Query) fetch(endAlias string, pathElements ...*PathElement) *Query {
-	//the current path
-	var currentPath []*PathElement
-
-	common := DeepestCommonPath(this.cachedAssociation, pathElements)
-
-	var pos int
-	// finds the ForeignKey's that are not present in any join
-	for f, pe := range pathElements {
-		if f < len(common) {
-			if !common[f].Base.Equals(pe.Base) {
-				pos = f
-				break
-			}
-		} else {
-			pos = f
-			break
+func (this *Query) includeInPath(lastPath *PathElement, columns ...interface{}) {
+	if len(columns) > 0 || len(lastPath.Columns) == 0 {
+		if len(columns) == 0 {
+			// use all columns of the targeted table
+			columns = lastPath.Base.GetTableTo().GetColumns().Elements()
 		}
-
-		currentPath = append(currentPath, common[f])
-	}
-
-	// returns a list with the old ones (currentPath) + the new ones (with the alias already defined)
-	local := this.addJoin(endAlias, pathElements, common, true)
-	// remove old ones, keeping the new ones
-	local = local[pos:]
-
-	// adds all columns of all joins
-	for _, pe := range local {
-		// find fk with the alias
-		fkNew := pe.Derived
-		var fk *Association
-		if fkNew.IsMany2Many() {
-			fk = fkNew.ToM2M
-		} else {
-			fk = fkNew
+		if lastPath.Columns == nil {
+			lastPath.Columns = make([]Tokener, 0)
 		}
-		ta := this.joinBag.GetAlias(fk)
-
-		currentPath = append(currentPath, pe)
-		// adds all columns for the target table of the association
-		for it := fkNew.GetTableTo().GetColumns().Enumerator(); it.HasNext(); {
-			column := it.Next().(*Column)
-			ch := NewColumnHolder(column)
-			this.joinVirtualColumns(ch, currentPath)
-			ch.SetTableAlias(ta)
-			this.Columns = append(this.Columns, ch)
+		for _, c := range columns {
+			this.lastToken = tokenizeOne(c)
+			lastPath.Columns = append(lastPath.Columns, this.lastToken)
 		}
 	}
-
-	return this
 }
 
 /*
@@ -752,6 +671,94 @@ func (this *Query) ListSimple(closure func(), instances ...interface{}) error {
 	})
 }
 
+//List using the closure arguments.
+//A function is used to build the result list.
+//The types for scanning are supplied by the function arguments. Arguments can be pointers or not.
+//Reflection is used to determine the arguments types.
+//The argument can also be a function with the signature func(*struct).
+//The results will not be assembled in as a tree.
+//
+//ex:
+//  roles = make([]string, 0)
+//  var role string
+//  q.ListInto(func(role *string) {
+//	  roles = append(roles, *role)
+//  })
+func (this *Query) ListInto(closure interface{}) ([]interface{}, error) {
+	// determine types and instanciate them
+	ftype := reflect.TypeOf(closure)
+	if ftype.Kind() != reflect.Func {
+		return nil, fmt.Errorf("goSQL: Expected a function with the signature func(*struct) [*struct] or func(primitive1, ..., primitiveN) [primitive]. Got %s.", ftype.String())
+	}
+
+	caller, typ, ok := checkCollector(closure)
+	if ok {
+		coll, err := this.list(NewEntityFactoryTransformer(this, typ, caller))
+		if err != nil {
+			return nil, err
+		}
+		return coll.Elements(), nil
+	} else {
+		size := ftype.NumIn() // number of input variables
+		instances := make([]interface{}, size)
+		targets := make([]reflect.Type, size)
+		for i := 0; i < size; i++ {
+			arg := ftype.In(i) // type of input variable i
+			targets[i] = arg   // collects the target types
+			// the scan elements must be all pointers
+			if arg.Kind() == reflect.Ptr {
+				// Instanciates a pointer. Interface() returns the pointer instance.
+				instances[i] = reflect.New(arg).Interface()
+			} else {
+				// creates a pointer of the type of the zero type
+				instances[i] = reflect.New(reflect.PtrTo(arg)).Interface()
+			}
+		}
+
+		var results []interface{}
+		// output must be at most 1
+		if ftype.NumOut() > 1 {
+			return nil, fmt.Errorf("goSQL: A function must be have at most one output. Got %s outputs.", ftype.NumOut())
+		} else if ftype.NumOut() == 1 {
+			results = make([]interface{}, 0)
+		}
+
+		err := this.listClosure(func(rows *sql.Rows) error {
+			err := rows.Scan(instances...)
+			if err != nil {
+				return err
+			}
+			values := make([]reflect.Value, size)
+			for k, v := range instances {
+				// Elem() gets the underlying object of the interface{}
+				e := reflect.ValueOf(v).Elem()
+				if targets[k].Kind() == reflect.Ptr {
+					// if pointer type use directly
+					values[k] = e
+				} else {
+					if e.IsNil() {
+						// was nil, so we must create its zero value
+						values[k] = reflect.Zero(targets[k])
+					} else {
+						// use underlying value of the pointer
+						values[k] = e.Elem()
+					}
+				}
+			}
+			res := reflect.ValueOf(closure).Call(values)
+			if results != nil { // expects result. ftype.NumOut() == 1
+				results = append(results, res[0].Interface())
+			}
+			return nil
+		})
+
+		if err != nil {
+			return nil, err
+		}
+		return results, nil
+	}
+}
+
 // the transformer will be responsible for creating  the result list
 func (this *Query) listClosure(transformer func(rows *sql.Rows) error) error {
 	// if no columns were added, add all columns of the driving table
@@ -812,37 +819,28 @@ func (this *Query) list(rowMapper dbx.IRowTransformer) (coll.Collection, error) 
 	return list, nil
 }
 
-/*
-Executes a query and transform the results to the struct type passed as parameter,
-matching the alias with struct property name. If no alias is supplied, it is used the default column alias.
-
-Accepts as parameter the struct type and returns a collection of structs (needs cast)
-*/
+//Executes a query and transform the results to the struct type passed as parameter,
+//matching the alias with struct property name. If no alias is supplied, it is used the default column alias.
+//
+//Accepts as parameter the struct type and returns a collection of structs (needs cast)
 func (this *Query) ListOf(template interface{}) (coll.Collection, error) {
 	return this.list(NewEntityTransformer(this, template))
 }
 
-/*
-Executes a query, putting the result in a slice, passed as an argument or
-delegating the responsability of building the result to a processor function.
-The argument must be a function with the signature func(*struct) or a slice like *[]*struct.
-
-This method does not create a tree of related instances.
-*/
+//Executes a query, putting the result in a slice, passed as an argument
+//
+//This method does not create a tree of related instances.
 func (this *Query) List(target interface{}) error {
 	caller, typ, ok := checkSlice(target)
 	if !ok {
-		caller, typ, ok = checkCollector(target)
-		if !ok {
-			return errors.New(fmt.Sprintf("goSQL: Expected an slice of type *[]*struct or a function with the signature func(<*struct>). got %s", typ.String()))
-		}
+		return errors.New(fmt.Sprintf("goSQL: Expected a slice of type *[]*struct. Got %s", typ.String()))
 	}
 
 	_, err := this.list(NewEntityFactoryTransformer(this, typ, caller))
 	return err
 }
 
-func checkSlice(i interface{}) (func(val reflect.Value), reflect.Type, bool) {
+func checkSlice(i interface{}) (func(val reflect.Value) reflect.Value, reflect.Type, bool) {
 	arr := reflect.ValueOf(i)
 	// pointer to the slice
 	if arr.Kind() == reflect.Ptr {
@@ -860,41 +858,84 @@ func checkSlice(i interface{}) (func(val reflect.Value), reflect.Type, bool) {
 	}
 
 	// element element
-	if typ.Kind() != reflect.Ptr {
-		return nil, nil, false
+	/*
+		if typ.Kind() != reflect.Ptr {
+			return nil, nil, false
+		}
+	*/
+
+	ptrElem := (typ.Kind() == reflect.Ptr)
+	if !ptrElem {
+		typ = reflect.PtrTo(typ) // get the pointer
 	}
 
 	slice := reflect.New(arr.Type()).Elem()
-	slicer := func(val reflect.Value) {
-		slice = reflect.Append(slice, val)
+	slicer := func(val reflect.Value) reflect.Value {
+		var v reflect.Value
+		// slice elements are pointers
+		if ptrElem {
+			// if pointer type use directly
+			v = val
+		} else {
+			// use underlying value of the pointer
+			v = val.Elem()
+		}
+
+		slice = reflect.Append(slice, v)
 		arr.Set(slice)
+		return reflect.Value{}
 	}
 
 	return slicer, typ, true
 }
 
-func checkCollector(collector interface{}) (func(val reflect.Value), reflect.Type, bool) {
+func checkCollector(collector interface{}) (func(val reflect.Value) reflect.Value, reflect.Type, bool) {
 	var typ reflect.Type
 	funcValue := reflect.ValueOf(collector)
 	functype := funcValue.Type()
 	bad := true
+	var isPtr bool
 	if functype.NumIn() == 1 {
 		typ = functype.In(0)
-		if typ.Kind() == reflect.Struct || typ.Kind() == reflect.Ptr && typ.Elem().Kind() == reflect.Struct {
+		if typ.Kind() == reflect.Struct {
+			typ = reflect.PtrTo(typ) // get the pointer
+			bad = false
+		} else if typ.Kind() == reflect.Ptr && typ.Elem().Kind() == reflect.Struct {
+			isPtr = true
 			bad = false
 		}
 	}
 
-	if functype.NumOut() != 0 {
+	if functype.NumOut() > 1 {
 		bad = true
+	} else if functype.NumOut() == 1 {
+		typOut := functype.Out(0)
+		if !(typOut.Kind() == reflect.Struct || typOut.Kind() == reflect.Ptr && typOut.Elem().Kind() == reflect.Struct) {
+			bad = true
+		}
 	}
 
 	if bad {
 		return nil, nil, false
 	}
 
-	caller := func(val reflect.Value) {
-		funcValue.Call([]reflect.Value{val})
+	caller := func(val reflect.Value) reflect.Value {
+		var v reflect.Value
+		// slice elements are pointers
+		if isPtr {
+			// if pointer type use directly
+			v = val
+		} else {
+			// use underlying value of the pointer
+			v = val.Elem()
+		}
+
+		results := funcValue.Call([]reflect.Value{v})
+		if len(results) > 0 {
+			return results[0]
+		} else {
+			return reflect.Value{}
+		}
 	}
 
 	return caller, typ, true
@@ -914,7 +955,7 @@ func (this *Query) ListTreeOf(template tk.Hasher) (coll.Collection, error) {
 /*
 Executes a query and transform the results into a flat tree with the passed struct type as the head.
 It matches the alias with struct property name, building a struct tree.
-If the transformed data matches a previous converted entity the previous one is reused.
+There is no reuse of previous converted entites.
 
 Receives a template instance and returns a collection of structs.
 */
@@ -933,7 +974,7 @@ func (this *Query) ListFlatTree(target interface{}) error {
 	if !ok {
 		caller, typ, ok = checkCollector(target)
 		if !ok {
-			return errors.New(fmt.Sprintf("goSQL: Expected an slice of type *[]*struct or a function with the signature func(<*struct>). got %s", typ.String()))
+			return errors.New(fmt.Sprintf("goSQL: Expected a slice of type *[]*struct or a function with the signature func(<*struct>). got %s", typ.String()))
 		}
 	}
 
