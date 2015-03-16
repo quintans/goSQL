@@ -48,7 +48,6 @@ a ORM like library in Go (golang) that makes SQL easier to use.
 * [Struct Triggers](#struct-triggers)
 * [Association Discriminator](#association-discriminator)
 * [Table Discriminator](#table-discriminator)
-* [Virtual Columns](#virtual-columns)
 * [Custom Functions](#custom-functions)
 * [Raw SQL](#raw-sql)
 
@@ -1072,53 +1071,6 @@ var statuses []*Status
 store.Query(STATUS).
 	All().
 	List(&statuses)
-```
-
-
-
-### Virtual Columns
-
-**Virtual columns are only used by queries**.
-
-Virtual columns are columns declared in a table but in reality they belong to another table. These tables are expected to be related by a one-to-one association, with constraints guaranteeing the one-to-one relationship.
-The columns are intended to resolve the case where the column value depends on the environment. For example, internationalization, were the value of the column would depend on the language. Another application is the case where we would like to have different descriptions depending on the business client that accesses the data, for example, mobile or web.
-
-Let’s use the internationalization cenario.
-
-We must have a table to hold the internationalized columns, an association from the parent table to the new internationalized table, and a virtual column declaration.
-
-Putting that in place we have the following ER
-
-![ER Diagram for i18n](test/er3.png)
-
-> `BOOK_I18N` has all the columns of `BOOK` that are subject to internationalization, in this case `TITLE`.
-
-Besides the normal mapping of the table `BOOK_I18N`, as seen in [entities.go](test/common/entities.go), we have the association from `BOOK` to `BOOK_I18N`
-
-```go
-BOOK_A_BOOK_I18N = BOOK.
-			ASSOCIATE(BOOK_C_ID).
-			TO(BOOK_I18N_C_BOOK_ID).
-			As("I18n").
-			With(BOOK_I18N_C_LANG, Param("lang"))
-```
-
-> The `Param("lang")` defines a parameter set by the `store` implementation
-
-and the virtual column declaration in `BOOK`
-
-```go
-BOOK_C_TITLE = BOOK.VCOLUMN(BOOK_I18N_C_TITLE, BOOK_A_BOOK_I18N)
-```
-
-After all this is declared, all queries remain the same. When flushing the result of a query to a struct we only need a field that matches the alias, in this case a field with the name `Title`.
-
-```go
-var book = Book{} // the target entity that has the field 'Title'
-store.Query(BOOK).
-	All().
-	Where(BOOK_C_ID.Matches(1)).
-	SelectTo(&book)
 ```
 
 
