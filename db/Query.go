@@ -227,7 +227,6 @@ func (this *Query) OrdersReset() {
 }
 
 func (this *Query) order(columnHolder *ColumnHolder) *Query {
-
 	this.lastOrder = NewOrder(columnHolder).Asc(true)
 	this.orders = append(this.orders, this.lastOrder)
 
@@ -236,16 +235,12 @@ func (this *Query) order(columnHolder *ColumnHolder) *Query {
 	return this
 }
 
-/*
-Order by a column belonging to the driving table.
-*/
+// Order by a column belonging to the driving table.
 func (this *Query) Order(column *Column) *Query {
 	return this.OrderAs(column, this.tableAlias)
 }
 
-/*
-Order by a column for a specific table alias.
-*/
+// Order by a column for a specific table alias.
 func (this *Query) OrderAs(column *Column, alias string) *Query {
 	ch := NewColumnHolder(column)
 	if alias != "" {
@@ -257,9 +252,7 @@ func (this *Query) OrderAs(column *Column, alias string) *Query {
 	return this.order(ch)
 }
 
-/*
-Order by a column belonging to the table targeted by the supplyied association list.
-*/
+// Order by a column belonging to the table targeted by the supplyied association list.
 func (this *Query) OrderOn(column *Column, associations ...*Association) *Query {
 	pathElements := make([]*PathElement, len(associations))
 	for k, association := range associations {
@@ -272,37 +265,37 @@ func (this *Query) OrderOn(column *Column, associations ...*Association) *Query 
 	return this.OrderFor(column, pathElements...)
 }
 
-/*
-Defines the column, belonging to the table targeted by the association, to order by.
-*/
+// Defines the column, belonging to the table targeted by the association, to order by.
 func (this *Query) OrderFor(column *Column, pathElements ...*PathElement) *Query {
 	var pes []*PathElement
 	pes = pathElements
 
 	common := DeepestCommonPath(this.cachedAssociation, pes)
 	if len(common) == len(pes) {
-		var orderAlias string
-		derived := common[len(common)-1].Derived
-		if derived.IsMany2Many() {
-			orderAlias = derived.ToM2M.GetAliasTo()
-		} else {
-			orderAlias = derived.GetAliasTo()
-		}
-		return this.OrderAs(column, orderAlias)
+		return this.OrderAs(column, pathElementAlias(common[len(common)-1]))
 	}
 
 	panic("The path specified in the order is not valid")
 }
 
-/*
-Defines the column to order by.
-The column belongs to the table targeted by the last defined association.
-If there is no last association, the column belongs to the driving table
-*/
+func (this *Query) AscBy(column *Column) *Query {
+	return this.OrderBy(column).Asc(true)
+}
+
+func (this *Query) DescBy(column *Column) *Query {
+	return this.OrderBy(column).Asc(false)
+}
+
+//Defines the column to order by.
+//The column belongs to the table targeted by the last defined association.
+//If there is no last association, the column belongs to the driving table
 func (this *Query) OrderBy(column *Column) *Query {
 	if this.path != nil {
-		// delay adding order
 		last := this.path[len(this.path)-1]
+		if last.Orders == nil {
+			last.Orders = make([]*Order, 0)
+		}
+		// delay adding order
 		this.lastOrder = NewOrder(NewColumnHolder(column))
 		last.Orders = append(last.Orders, this.lastOrder)
 		return this
@@ -313,9 +306,7 @@ func (this *Query) OrderBy(column *Column) *Query {
 	}
 }
 
-/*
-Defines the column alias to order by.
-*/
+//Defines the column alias to order by.
 func (this *Query) OrderByAs(column string) *Query {
 	this.lastOrder = NewOrderAs(column).Asc(true)
 	this.orders = append(this.orders, this.lastOrder)
@@ -420,10 +411,32 @@ func (this *Query) joinTo(endAlias string, fetch bool) {
 		this.Columns = append(this.Columns, tokens...)
 	}
 
+	// only after this the joins will have the proper jpin table alias
 	this.DmlBase.joinTo(endAlias, this.path, fetch)
+
+	// process pending orders
+	if this.path != nil {
+		for _, pe := range this.path {
+			if pe.Orders != nil {
+				for _, o := range pe.Orders {
+					o.column.SetTableAlias(pathElementAlias(pe))
+					this.orders = append(this.orders, o)
+				}
+			}
+		}
+	}
 
 	this.path = nil
 	this.rawSQL = nil
+}
+
+func pathElementAlias(pe *PathElement) string {
+	derived := pe.Derived
+	if derived.IsMany2Many() {
+		return derived.ToM2M.GetAliasTo()
+	} else {
+		return derived.GetAliasTo()
+	}
 }
 
 //adds tokens refering the last defined association
@@ -456,9 +469,7 @@ func (this *Query) includeInPath(lastPath *PathElement, columns ...interface{}) 
 	}
 }
 
-/*
-Restriction to apply to the previous association
-*/
+//Restriction to apply to the previous association
 func (this *Query) On(criteria ...*Criteria) *Query {
 	if len(this.path) > 0 {
 		var retriction *Criteria
@@ -600,10 +611,8 @@ func (this *Query) GroupByAs(aliases ...string) *Query {
 	return this
 }
 
-/*
-Adds a Having clause to the query.
-The tokens are not processed. You will have to explicitly set all table alias.
-*/
+//Adds a Having clause to the query.
+//The tokens are not processed. You will have to explicitly set all table alias.
 func (this *Query) Having(having ...*Criteria) *Query {
 	if len(having) > 0 {
 		this.having = And(having...)
@@ -647,19 +656,17 @@ func (this *Query) replaceAlias(token Tokener) {
 
 // ======== RETRIVE ==============
 
-/*
-List simple variables.
-A closure is used to build the result list.
-The types for scanning are supplied by the instances parameter.
-No reflection is used.
-
-ex:
-roles = make([]string, 0)
-var role string
-q.ListSimple(func() {
-	roles = append(roles, role)
-}, &role)
-*/
+//List simple variables.
+//A closure is used to build the result list.
+//The types for scanning are supplied by the instances parameter.
+//No reflection is used.
+//
+//ex:
+//  roles = make([]string, 0)
+//  var role string
+//  q.ListSimple(func() {
+//  	roles = append(roles, role)
+//  }, &role)
 func (this *Query) ListSimple(closure func(), instances ...interface{}) error {
 	return this.listClosure(func(rows *sql.Rows) error {
 		err := rows.Scan(instances...)
@@ -796,11 +803,8 @@ func (this *Query) listSimpleTransformer(transformer func(rows *sql.Rows) (inter
 	return list, nil
 }
 
-/*
-Executes a query and transform the results according to the transformer
-
-Accepts a row transformer and returns a collection of transformed results
-*/
+//Executes a query and transform the results according to the transformer
+//Accepts a row transformer and returns a collection of transformed results
 func (this *Query) list(rowMapper dbx.IRowTransformer) (coll.Collection, error) {
 	// if no columns were added, add all columns of the driving table
 	if len(this.Columns) == 0 {
@@ -825,6 +829,15 @@ func (this *Query) list(rowMapper dbx.IRowTransformer) (coll.Collection, error) 
 //Accepts as parameter the struct type and returns a collection of structs (needs cast)
 func (this *Query) ListOf(template interface{}) (coll.Collection, error) {
 	return this.list(NewEntityTransformer(this, template))
+}
+
+// Executes a query and transform the results into a tree with the passed struct type as the head.
+// It matches the alias with struct property name, building a struct tree.
+// If the transformed data matches a previous converted entity the previous one is reused.
+//
+// Receives a template instance and returns a collection of structs.
+func (this *Query) ListTreeOf(template tk.Hasher) (coll.Collection, error) {
+	return this.list(NewEntityTreeTransformer(this, true, template))
 }
 
 //Executes a query, putting the result in a slice, passed as an argument
@@ -856,13 +869,6 @@ func checkSlice(i interface{}) (func(val reflect.Value) reflect.Value, reflect.T
 	} else {
 		return nil, nil, false
 	}
-
-	// element element
-	/*
-		if typ.Kind() != reflect.Ptr {
-			return nil, nil, false
-		}
-	*/
 
 	ptrElem := (typ.Kind() == reflect.Ptr)
 	if !ptrElem {
@@ -941,50 +947,31 @@ func checkCollector(collector interface{}) (func(val reflect.Value) reflect.Valu
 	return caller, typ, true
 }
 
-/*
-Executes a query and transform the results into a tree with the passed struct type as the head.
-It matches the alias with struct property name, building a struct tree.
-If the transformed data matches a previous converted entity the previous one is reused.
-
-Receives a template instance and returns a collection of structs.
-*/
-func (this *Query) ListTreeOf(template tk.Hasher) (coll.Collection, error) {
-	return this.list(NewEntityTreeTransformer(this, true, template))
-}
-
-/*
-Executes a query and transform the results into a flat tree with the passed struct type as the head.
-It matches the alias with struct property name, building a struct tree.
-There is no reuse of previous converted entites.
-
-Receives a template instance and returns a collection of structs.
-*/
+//Executes a query and transform the results into a flat tree with the passed struct type as the head.
+//It matches the alias with struct property name, building a struct tree.
+//There is no reuse of previous converted entites.
+//
+//Receives a template instance and returns a collection of structs.
 func (this *Query) ListFlatTreeOf(template interface{}) (coll.Collection, error) {
 	return this.list(NewEntityTreeTransformer(this, false, template))
 }
 
-/*
-Executes a query, putting the result in a slice, passed as an argument or
-delegating the responsability of building the result to a processor function.
-The argument must be a function with the signature func(*struct) or a slice like *[]*struct.
-See also List.
-*/
+//Executes a query, putting the result in a slice, passed as an argument or
+//delegating the responsability of building the result to a processor function.
+//The argument must be a function with the signature func(<<*>struct>) or a slice like *[]<*>struct.
+//See also List.
 func (this *Query) ListFlatTree(target interface{}) error {
 	caller, typ, ok := checkSlice(target)
 	if !ok {
 		caller, typ, ok = checkCollector(target)
 		if !ok {
-			return errors.New(fmt.Sprintf("goSQL: Expected a slice of type *[]*struct or a function with the signature func(<*struct>). got %s", typ.String()))
+			return errors.New(fmt.Sprintf("goSQL: Expected a slice of type *[]<*>struct or a function with the signature func(<<*>struct>). got %s", typ.String()))
 		}
 	}
 
 	_, err := this.list(NewEntityTreeFactoryTransformer(this, typ, caller))
 	return err
 }
-
-//	func (this *Query) <T> T selectSingle(Class<T> klass) {
-//		return selectSingle(new BeanTransformer<T>(this, klass));
-//	}
 
 // the result of the query is put in the passed interface array.
 // returns true if a result was found, false if no result
@@ -1006,12 +993,10 @@ func (this *Query) SelectInto(dest ...interface{}) (bool, error) {
 	return found, nil
 }
 
-/*
-Returns a struct tree. When reuse is true the supplied template instance must implement
-the toolkit.Hasher interface.
-
-This is pretty much the same as SelectTreeTo.
-*/
+//Returns a struct tree. When reuse is true the supplied template instance must implement
+//the toolkit.Hasher interface.
+//
+//This is pretty much the same as SelectTreeTo.
 func (this *Query) selectTree(typ interface{}, reuse bool) (interface{}, error) {
 	if reuse {
 		_, ok := typ.(tk.Hasher)
@@ -1034,10 +1019,8 @@ func (this *Query) selectTree(typ interface{}, reuse bool) (interface{}, error) 
 	return this.selectTransformer(NewEntityTreeTransformer(this, false, typ))
 }
 
-/*
-The first result of the query is put in the passed struct.
-Returns true if a result was found, false if no result
-*/
+//The first result of the query is put in the passed struct.
+//Returns true if a result was found, false if no result
 func (this *Query) SelectTo(typ interface{}) (bool, error) {
 	res, err := this.selectTransformer(NewEntityTransformer(this, typ))
 	if err != nil {
@@ -1050,44 +1033,38 @@ func (this *Query) SelectTo(typ interface{}) (bool, error) {
 	return false, nil
 }
 
-/*
-Executes the query and builds a struct tree, reusing previously obtained entities,
-putting the first element in the supplied struct pointer.
-Since the struct instances are going to be reused it is mandatory that all the structs
-participating in the result tree implement the toolkit.Hasher interface.
-Returns true if a result was found, false if no result.
-See also SelectFlatTree.
-*/
+//Executes the query and builds a struct tree, reusing previously obtained entities,
+//putting the first element in the supplied struct pointer.
+//Since the struct instances are going to be reused it is mandatory that all the structs
+//participating in the result tree implement the toolkit.Hasher interface.
+//Returns true if a result was found, false if no result.
+//See also SelectFlatTree.
 func (this *Query) SelectTree(instance tk.Hasher) (bool, error) {
 	return this.selectTreeTo(instance, true)
 }
 
-/*
-Executes the query and builds a flat struct tree putting the first element in the supplied struct pointer.
-Since the struct instances are not going to be reused it is not mandatory that the structs implement the toolkit.Hasher interface.
-Returns true if a result was found, false if no result.
-See also SelectTree.
-*/
+//Executes the query and builds a flat struct tree putting the first element in the supplied struct pointer.
+//Since the struct instances are not going to be reused it is not mandatory that the structs implement the toolkit.Hasher interface.
+//Returns true if a result was found, false if no result.
+//See also SelectTree.
 func (this *Query) SelectFlatTree(instance interface{}) (bool, error) {
 	return this.selectTreeTo(instance, false)
 }
 
-/*
-Executes the query and builds a struct tree putting the first element in the supplied struct pointer.
-
-If the reuse parameter is true, when a
-new entity is needed, the cache is checked to see if there is one instance for this entity,
-and if found it will use it to build the tree. Because of this the supplied instance
-must implement the toolkit.Hasher interface.
-
-If the reuse parameter is false, each element of the tree is always a new instance
-even if representing the same entity. This is most useful for tabular results.
-Since there is no need for caching the entities it is not mandatory to implement
-the toolkit.Hasher interface.
-
-The first result of the query is put in the passed struct.
-Returns true if a result was found, false if no result
-*/
+//Executes the query and builds a struct tree putting the first element in the supplied struct pointer.
+//
+//If the reuse parameter is true, when a
+//new entity is needed, the cache is checked to see if there is one instance for this entity,
+//and if found it will use it to build the tree. Because of this the supplied instance
+//must implement the toolkit.Hasher interface.
+//
+//If the reuse parameter is false, each element of the tree is always a new instance
+//even if representing the same entity. This is most useful for tabular results.
+//Since there is no need for caching the entities it is not mandatory to implement
+//the toolkit.Hasher interface.
+//
+//The first result of the query is put in the passed struct.
+//Returns true if a result was found, false if no result
 func (this *Query) selectTreeTo(instance interface{}, reuse bool) (bool, error) {
 	res, err := this.selectTree(instance, reuse)
 	if err != nil {
