@@ -227,7 +227,7 @@ func (this *Query) OrdersReset() {
 }
 
 func (this *Query) order(columnHolder *ColumnHolder) *Query {
-	this.lastOrder = NewOrder(columnHolder).Asc(true)
+	this.lastOrder = NewOrder(columnHolder)
 	this.orders = append(this.orders, this.lastOrder)
 
 	this.rawSQL = nil
@@ -262,11 +262,11 @@ func (this *Query) OrderOn(column *Column, associations ...*Association) *Query 
 		pathElements[k] = pe
 	}
 
-	return this.OrderFor(column, pathElements...)
+	return this.orderFor(column, pathElements...)
 }
 
 // Defines the column, belonging to the table targeted by the association, to order by.
-func (this *Query) OrderFor(column *Column, pathElements ...*PathElement) *Query {
+func (this *Query) orderFor(column *Column, pathElements ...*PathElement) *Query {
 	var pes []*PathElement
 	pes = pathElements
 
@@ -276,14 +276,6 @@ func (this *Query) OrderFor(column *Column, pathElements ...*PathElement) *Query
 	}
 
 	panic("The path specified in the order is not valid")
-}
-
-func (this *Query) AscBy(column *Column) *Query {
-	return this.OrderBy(column).Asc(true)
-}
-
-func (this *Query) DescBy(column *Column) *Query {
-	return this.OrderBy(column).Asc(false)
 }
 
 //Defines the column to order by.
@@ -300,7 +292,7 @@ func (this *Query) OrderBy(column *Column) *Query {
 		last.Orders = append(last.Orders, this.lastOrder)
 		return this
 	} else if this.lastJoin != nil {
-		return this.OrderFor(column, this.lastJoin.GetPathElements()...)
+		return this.orderFor(column, this.lastJoin.GetPathElements()...)
 	} else {
 		return this.OrderAs(column, this.lastFkAlias)
 	}
@@ -316,10 +308,18 @@ func (this *Query) OrderByAs(column string) *Query {
 	return this
 }
 
-// Sets the order direction for the last order by command
-func (this *Query) Asc(dir bool) *Query {
+func (this *Query) Asc() *Query {
+	return this.Dir(true)
+}
+
+func (this *Query) Desc() *Query {
+	return this.Dir(false)
+}
+
+// Sets the order direction for the last order by command. true=asc, false=desc
+func (this *Query) Dir(asc bool) *Query {
 	if this.lastOrder != nil {
-		this.lastOrder.Asc(dir)
+		this.lastOrder.Asc(asc)
 
 		this.rawSQL = nil
 	}
@@ -411,7 +411,7 @@ func (this *Query) joinTo(endAlias string, fetch bool) {
 		this.Columns = append(this.Columns, tokens...)
 	}
 
-	// only after this the joins will have the proper jpin table alias
+	// only after this the joins will have the proper join table alias
 	this.DmlBase.joinTo(endAlias, this.path, fetch)
 
 	// process pending orders

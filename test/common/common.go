@@ -1097,9 +1097,9 @@ func RunOuterFetchOrder(TM ITransactionManager, t *testing.T) {
 	store := TM.Store()
 	result, err := store.Query(PUBLISHER).
 		All().
-		Order(PUBLISHER_C_ID).Asc(true).
-		Outer(PUBLISHER_A_BOOKS).OrderBy(BOOK_C_ID).Asc(true).
-		Outer(BOOK_A_AUTHORS).OrderBy(AUTHOR_C_ID).Asc(true).
+		Order(PUBLISHER_C_ID).
+		Outer(PUBLISHER_A_BOOKS).OrderBy(BOOK_C_ID).
+		Outer(BOOK_A_AUTHORS).OrderBy(AUTHOR_C_ID).Desc().
 		Fetch().
 		ListTreeOf((*Publisher)(nil))
 
@@ -1116,6 +1116,10 @@ func RunOuterFetchOrder(TM ITransactionManager, t *testing.T) {
 	pub := publishers[0]
 	if len(pub.Books) != 1 {
 		t.Fatalf("Expected 1 Book for Publishers %s, but got %v", *pub.Name, len(pub.Books))
+	}
+
+	if *publishers[0].Id != 1 {
+		t.Fatalf("The result order for publisher is not correct. Expected record with id 1 in the first position, but got %v", *publishers[0].Id)
 	}
 
 	book := pub.Books[0]
@@ -1136,6 +1140,10 @@ func RunOuterFetchOrder(TM ITransactionManager, t *testing.T) {
 	book = pub.Books[1]
 	if len(book.Authors) != 2 {
 		t.Fatalf("Expected 2 Author for Book %s, but got %v", *book.Name, len(book.Authors))
+	}
+
+	if *book.Authors[0].Id != 2 {
+		t.Fatalf("The result order of authors is not correct. Expected record with id 2 in the first position, but got %v", *publishers[0].Id)
 	}
 
 	for k, v := range publishers {
@@ -1180,7 +1188,6 @@ func RunOrderBy(TM ITransactionManager, t *testing.T) {
 	_, err := store.Query(PUBLISHER).
 		All().
 		OrderBy(PUBLISHER_C_NAME).
-		Asc(true).
 		ListInto(func(publisher *Publisher) {
 		publishers = append(publishers, publisher)
 	})
@@ -1191,6 +1198,10 @@ func RunOrderBy(TM ITransactionManager, t *testing.T) {
 
 	if len(publishers) != 2 {
 		t.Fatalf("Expected 2 Publisher names, but got %v", len(publishers))
+	}
+
+	if *publishers[0].Id != 2 {
+		t.Fatalf("The result order is not correct. Expected record with id 2 in the first position, but got %v", *publishers[0].Id)
 	}
 
 	for k, v := range publishers {
@@ -1210,7 +1221,7 @@ func RunPagination(TM ITransactionManager, t *testing.T) {
 		All().
 		Outer(PUBLISHER_A_BOOKS, BOOK_A_AUTHORS).
 		Fetch().
-		Order(PUBLISHER_C_NAME).Asc(true).
+		Order(PUBLISHER_C_NAME).
 		Skip(2).  // skip the first 2 records
 		Limit(3). // limit to 3 records
 		ListFlatTree(&publishers)
@@ -1239,7 +1250,7 @@ func RunAssociationDiscriminator(TM ITransactionManager, t *testing.T) {
 		All().
 		Inner(PROJECT_A_EMPLOYEE).
 		Fetch().
-		Order(PROJECT_C_NAME).Asc(true).
+		Order(PROJECT_C_NAME).
 		ListTreeOf((*Project)(nil))
 
 	if err != nil {
@@ -1274,7 +1285,7 @@ func RunAssociationDiscriminatorReverse(TM ITransactionManager, t *testing.T) {
 		All().
 		Inner(EMPLOYEE_A_PROJECT).
 		Fetch().
-		Order(EMPLOYEE_C_NAME).Asc(true).
+		Order(EMPLOYEE_C_NAME).
 		ListTreeOf((*Employee)(nil))
 
 	if err != nil {

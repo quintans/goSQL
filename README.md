@@ -46,6 +46,7 @@ a ORM like library in Go (golang) that makes SQL easier to use.
 	* [Union](#union)
 	* [Pagination](#pagination)
 * [Struct Triggers](#struct-triggers)
+* [Table Triggers](#table-triggers)
 * [Association Discriminator](#association-discriminator)
 * [Table Discriminator](#table-discriminator)
 * [Custom Functions](#custom-functions)
@@ -902,14 +903,25 @@ List all publishers, ordering ascending by name.
 var publishers []*Publisher
 store.Query(PUBLISHER).
 	All().
-	OrderBy(PUBLISHER_C_NAME).
-	Asc(true).
+	OrderBy(PUBLISHER_C_NAME). // implicit ascending
 	List(&publishers)
 ```
 
-It is possible to add more orders, and even to order by columns belonging to other tables if joins were present.
+It is possible to add more orders, and even to order by columns belonging to other tables if joins were present, as seen below.
 
-The column that the `OrderBy` refers to, belongs to the table targeted by the last defined association. If there is no last association, the column belongs to the driving table, as is this case.
+```go
+store.Query(PUBLISHER).
+		All().
+		Order(PUBLISHER_C_ID).
+		Outer(PUBLISHER_A_BOOKS).OrderBy(BOOK_C_ID). // order a column belonging to BOOK
+		Outer(BOOK_A_AUTHORS).OrderBy(AUTHOR_C_ID).Desc(). // order a column belonging to AUTHOR
+		Fetch(). // this marks the end of the branch and that the results should populate a struct tree
+		ListTreeOf((*Publisher)(nil))
+```
+
+The column that the `OrderBy` refers to, belongs to the table targeted by the last defined association.
+
+If there is no declared association, the column belongs to the driving table, as seen in the first example.
 
 There is also `Order` if we want to order by a column belonging to the driving table.
 
@@ -983,7 +995,7 @@ store.Query(PUBLISHER).
 	All().
 	Outer(PUBLISHER_A_BOOKS, BOOK_A_AUTHORS).
 	Fetch().
-	Order(PUBLISHER_C_NAME).Asc(true).
+	Order(PUBLISHER_C_NAME).  // implicit ascending
 	Skip(2).  // skip the first 2 records
 	Limit(3). // limit to 3 records
 	ListFlatTree(&publishers)
@@ -1023,6 +1035,40 @@ To know if a trigger is called inside a transaction use `store.InTransaction()`.
 
 
 
+### Table Triggers
+
+It is also possible to declare triggers/hooks in the table declaration.
+
+Auditing example:
+
+```go
+func init() {
+	// pre insert trigger
+	BOOK.PreInsertTrigger = func(ins *db.Insert) {
+		ins.Set(BOOK_C_VERSION, 1)
+		ins.Set(BOOK_C_CREATION, ext.NOW())
+		uid, ok := ins.GetDb().GetAttribute(ATTR_USERID)
+		if ok {
+			ins.Set(BOOK_C_USER_CREATION, uid.(int64))
+		}
+	}
+	// pre update trigger
+	BOOK.PreUpdateTrigger = func(upd *db.Update) {
+		upd.Set(BOOK_C_MODIFICATION, ext.NOW())
+		uid, ok := upd.GetDb().GetAttribute(ATTR_USERID)
+		if ok {
+			upd.Set(BOOK_C_USER_MODIFICATION, uid.(int64))
+		}
+	}
+}
+```
+
+upd.GetDb() gets a reference to the IDb instance that is unique by transaction.
+
+TODO: explain in more detail
+
+
+
 ### Association Discriminator
 
 An exclusive OR relationship indicates that entity A is related to either entity B or entity C but not both B and C. This is implemented by defining associations with a constraint.
@@ -1051,7 +1097,7 @@ store.Query(PROJECT).
 	All().
 	Inner(PROJECT_A_EMPLOYEE).
 	Fetch().
-	Order(PROJECT_C_NAME).Asc(true).
+	Order(PROJECT_C_NAME).  // implicit ascending
 	ListTreeOf((*Project)(nil))
 ```
 
