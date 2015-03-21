@@ -1156,18 +1156,21 @@ store.Query(BOOK).
 
 ### Native SQL
 
-It is possible to execute native SQL, as the next example demonstrates.
+It is possible to execute native SQL. The the next example demonstrates the execution of a MariaDB query.
 
 ```go
 	// get the database connection
 	dba := dbx.NewSimpleDBA(TM.Store().GetConnection())
 	var result []string
-	_, err := dba.QueryInto(RAW_SQL, func(name string) {
+	_, err := dba.QueryInto("select `name` from `book` where `name` like ?", func(name string) {
 		result = append(result, name)
 	}, "%book")
 ```
 
-In the previous example we could have used pointers in the receiving function: `func(name *string)`
+In the previous example we could have used pointers in the receiving function: `func(name *string)`.
+The receiving function must have the same number of arguments as the number of columns in the query, in the same order and type.
+Using native SQL has the drawback of your query not being portable nor easy refactored.
+For example the prepared statement placeholder for MariaDB is '?' while for PostgreSQL is '$1'.
 
 If for some reason you want more control you can use the following.
 
