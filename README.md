@@ -108,18 +108,18 @@ store.Modify(&publisher)
 ## Features
 
  - SQL DSL
+ - Simple join declaration
  - Populate struct tree with query results containing joins
- - Support for primitive pointer types like `*string`, `*int64`, `*float64`, `*bool`, etc
- - Support for types implementing `driver.Valuer` and `sql.Scanner` interface, like NullString, etc
  - Automatic setting of primary keys for inserts
  - Automatic version increment
- - Pre/Post insert/update/delete Struct triggers
- - Quick CRUD actions
  - Database Abstraction
  - Transactions
  - Optimistic Locking
- - Joins
  - Result Pagination
+ - Quick CRUD actions
+ - Pre/Post insert/update/delete Struct triggers
+ - Support for primitive pointer types like `*string`, `*int64`, `*float64`, `*bool`, etc
+ - Support for types implementing `driver.Valuer` and `sql.Scanner` interface, like NullString, etc
  - Extensible
 
 ## Tested Databases
@@ -1197,4 +1197,4 @@ Please see the source code for other methods...
 - Add more tests
 - Include more RDBMS
 - Fix code documentation
-- Wrtite idiomatic go
+- Write idiomatic go
