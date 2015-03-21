@@ -108,7 +108,7 @@ store.Modify(&publisher)
 ## Features
 
  - SQL DSL
- - Flush query results with joins to an arbitrary tree Struct
+ - Populate struct tree with query results containing joins
  - Support for primitive pointer types like `*string`, `*int64`, `*float64`, `*bool`, etc
  - Support for types implementing `driver.Valuer` and `sql.Scanner` interface, like NullString, etc
  - Automatic setting of primary keys for inserts
@@ -1197,3 +1197,4 @@ Please see the source code for other methods...
 - Add more tests
 - Include more RDBMS
 - Fix code documentation
+- Wrtite idiomatic go
