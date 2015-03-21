@@ -50,8 +50,7 @@ a ORM like library in Go (golang) that makes SQL easier to use.
 * [Association Discriminator](#association-discriminator)
 * [Table Discriminator](#table-discriminator)
 * [Custom Functions](#custom-functions)
-* [Raw SQL](#raw-sql)
-
+* [Native SQL](#native-sql)
 
 ## Introduction
 
@@ -123,8 +122,6 @@ store.Modify(&publisher)
  - Result Pagination
  - Extensible
 
-
-
 ## Tested Databases
  - MariaDB 5.5
  - PostgreSQL 9.2
@@ -132,19 +129,15 @@ store.Modify(&publisher)
  - Oracle XE 11g
 
 ## Dependencies
-
 go 1.1+
 
 ## Installation
-
 `go get github.com/quintans/toolkit`
 
 `go get github.com/quintans/goSQL`
 
 
-
 ## Startup Guide
-
 This guide is based on a MySQL database, so we need to get a database driver.
 I used the one in https://github.com/go-sql-driver/mysql
 
@@ -240,15 +233,11 @@ func main() {
 
 Something like this is what you will find in [common.go](test/common/common.go).
 
-
-
 ## Usage
 In this chapter I will try to explain the several aspects of the library using a set of examples.
 These examples are supported by tables defined in [tables_mysql.sql](test/mysql/tables_mysql.sql), a MySQL database sql script.
 
 Before diving in to the examples I first describe the table model and how to map the entities.
-
-
 
 ### Entity Relation Diagram
 ![ER Diagram](test/er.png)
@@ -257,7 +246,6 @@ Relationships explained:
 - **One-to-Many**: One Publisher can have many Books and one Book has one Publisher.
 - **One-to-One**: One Book has one Book_Bin (Hardcover) - binary data is stored in a separated table - and one Book_Bin has one Book.
 - **Many-to-Many**: One Author can have many Books and one Book can have many Authors
-
 
 
 ### Table definition
@@ -983,8 +971,6 @@ store.Query(PUBLISHER).
 
 > The alias in the second query is necessary to avoid overlaping replaced parameters between the two queries
 
-
-
 #### Pagination
 
 To paginate the results of a query we use the windowing functions `Skip` and `Limit`.
@@ -1000,8 +986,6 @@ store.Query(PUBLISHER).
 	Limit(3). // limit to 3 records
 	ListFlatTree(&publishers)
 ```
-
-
 
 ### Struct Triggers
 
@@ -1032,7 +1016,6 @@ PostRetrive(store IDb)
 If an error is returned in a Pre trigger the action is not performed.
 
 To know if a trigger is called inside a transaction use `store.InTransaction()`.
-
 
 
 ### Table Triggers
@@ -1068,7 +1051,6 @@ upd.GetDb() gets a reference to the IDb instance that is unique by transaction.
 TODO: explain in more detail
 
 
-
 ### Association Discriminator
 
 An exclusive OR relationship indicates that entity A is related to either entity B or entity C but not both B and C. This is implemented by defining associations with a constraint.
@@ -1102,7 +1084,6 @@ store.Query(PROJECT).
 ```
 
 
-
 ### Table Discriminator
 
 When mapping a table it is possible to declare that the domain of that table only refers to a subset of values of the physical table. This is done by defining a restriction (Discriminator) at the table definition.
@@ -1118,7 +1099,6 @@ store.Query(STATUS).
 	All().
 	List(&statuses)
 ```
-
 
 
 ### Custom Functions
@@ -1174,10 +1154,22 @@ store.Query(BOOK).
 ```
 
 
-
-### Raw SQL
+### Native SQL
 
 It is possible to execute native SQL, as the next example demonstrates.
+
+```go
+	// get the database connection
+	dba := dbx.NewSimpleDBA(TM.Store().GetConnection())
+	var result []string
+	_, err := dba.QueryInto(RAW_SQL, func(name string) {
+		result = append(result, name)
+	}, "%book")
+```
+
+In the previous example we could have used pointers in the receiving function: `func(name *string)`
+
+If for some reason you want more control you can use the following.
 
 ```go
 // get the database connection
