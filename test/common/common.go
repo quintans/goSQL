@@ -105,7 +105,8 @@ func RunAll(TM ITransactionManager, t *testing.T) {
 	RunTableDiscriminator(TM, t)
 	RunJoinTableDiscriminator(TM, t)
 	RunCustomFunction(TM, t)
-	RunRawSQL(TM, t)
+	RunRawSQL1(TM, t)
+	RunRawSQL2(TM, t)
 	RunHaving(TM, t)
 	RunUnion(TM, t)
 }
@@ -1431,12 +1432,36 @@ func RunCustomFunction(TM ITransactionManager, t *testing.T) {
 	}
 }
 
-func RunRawSQL(TM ITransactionManager, t *testing.T) {
+func RunRawSQL1(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	// get the database connection
 	dba := dbx.NewSimpleDBA(TM.Store().GetConnection())
-	result := make([]string, 0)
+	var result []string
+
+	_, err := dba.QueryInto(RAW_SQL, func(name string) { // we calso use pointers: func(name *string)
+		result = append(result, name)
+	}, "%book")
+
+	if err != nil {
+		t.Fatalf("Failed TestRawSQL1: %s", err)
+	}
+
+	for k, v := range result {
+		logger.Debugf("books[%v] = %s", k, v)
+		if v == "" {
+			t.Fatal("Expected a valid Name, but got empty")
+		}
+	}
+}
+
+func RunRawSQL2(TM ITransactionManager, t *testing.T) {
+	ResetDB(TM)
+
+	// get the database connection
+	dba := dbx.NewSimpleDBA(TM.Store().GetConnection())
+	var result []string
+
 	err := dba.QueryClosure(RAW_SQL, func(rows *sql.Rows) error {
 		var name string
 		if err := rows.Scan(&name); err != nil {
@@ -1447,7 +1472,7 @@ func RunRawSQL(TM ITransactionManager, t *testing.T) {
 	}, "%book")
 
 	if err != nil {
-		t.Fatalf("Failed TestRawSQL: %s", err)
+		t.Fatalf("Failed TestRawSQL2: %s", err)
 	}
 
 	for k, v := range result {

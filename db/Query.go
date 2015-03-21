@@ -695,7 +695,7 @@ func (this *Query) ListInto(closure interface{}) ([]interface{}, error) {
 	// determine types and instanciate them
 	ftype := reflect.TypeOf(closure)
 	if ftype.Kind() != reflect.Func {
-		return nil, fmt.Errorf("goSQL: Expected a function with the signature func(*struct) [*struct] or func(primitive1, ..., primitiveN) [primitive]. Got %s.", ftype.String())
+		return nil, fmt.Errorf("goSQL: Expected a function with the signature func(*struct) [*struct] or func(primitive1, ..., primitiveN) [anything]. Got %s.", ftype.String())
 	}
 
 	caller, typ, ok := checkCollector(closure)
@@ -706,64 +706,27 @@ func (this *Query) ListInto(closure interface{}) ([]interface{}, error) {
 		}
 		return coll.Elements(), nil
 	} else {
-		size := ftype.NumIn() // number of input variables
-		instances := make([]interface{}, size)
-		targets := make([]reflect.Type, size)
-		for i := 0; i < size; i++ {
-			arg := ftype.In(i) // type of input variable i
-			targets[i] = arg   // collects the target types
-			// the scan elements must be all pointers
-			if arg.Kind() == reflect.Ptr {
-				// Instanciates a pointer. Interface() returns the pointer instance.
-				instances[i] = reflect.New(arg).Interface()
-			} else {
-				// creates a pointer of the type of the zero type
-				instances[i] = reflect.New(reflect.PtrTo(arg)).Interface()
-			}
-		}
-
-		var results []interface{}
-		// output must be at most 1
-		if ftype.NumOut() > 1 {
-			return nil, fmt.Errorf("goSQL: A function must be have at most one output. Got %s outputs.", ftype.NumOut())
-		} else if ftype.NumOut() == 1 {
-			results = make([]interface{}, 0)
-		}
-
-		err := this.listClosure(func(rows *sql.Rows) error {
-			err := rows.Scan(instances...)
-			if err != nil {
-				return err
-			}
-			values := make([]reflect.Value, size)
-			for k, v := range instances {
-				// Elem() gets the underlying object of the interface{}
-				e := reflect.ValueOf(v).Elem()
-				if targets[k].Kind() == reflect.Ptr {
-					// if pointer type use directly
-					values[k] = e
-				} else {
-					if e.IsNil() {
-						// was nil, so we must create its zero value
-						values[k] = reflect.Zero(targets[k])
-					} else {
-						// use underlying value of the pointer
-						values[k] = e.Elem()
-					}
-				}
-			}
-			res := reflect.ValueOf(closure).Call(values)
-			if results != nil { // expects result. ftype.NumOut() == 1
-				results = append(results, res[0].Interface())
-			}
-			return nil
-		})
-
-		if err != nil {
-			return nil, err
-		}
-		return results, nil
+		return this.listIntoClosure(closure)
 	}
+}
+
+// the transformer will be responsible for creating  the result list
+func (this *Query) listIntoClosure(transformer interface{}) ([]interface{}, error) {
+	// if no columns were added, add all columns of the driving table
+	if len(this.Columns) == 0 {
+		this.All()
+	}
+
+	rsql := this.getCachedSql()
+	this.debugSQL(rsql.OriSql, 2)
+
+	now := time.Now()
+	r, e := this.DmlBase.dba.QueryInto(rsql.Sql, transformer, rsql.BuildValues(this.DmlBase.parameters)...)
+	this.debugTime(now, 2)
+	if e != nil {
+		return nil, e
+	}
+	return r, nil
 }
 
 // the transformer will be responsible for creating  the result list

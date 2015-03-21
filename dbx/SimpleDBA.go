@@ -3,6 +3,8 @@ package dbx
 import (
 	"database/sql"
 	"fmt"
+	"reflect"
+
 	tk "github.com/quintans/toolkit"
 	coll "github.com/quintans/toolkit/collection"
 	"github.com/quintans/toolkit/log"
@@ -115,11 +117,11 @@ func (this *SimpleDBA) Query(
 
 // the transformer will be responsible for creating  the result list
 func (this *SimpleDBA) QueryClosure(
-	sql string,
+	query string,
 	transformer func(rows *sql.Rows) error,
 	params ...interface{},
 ) error {
-	rows, stmt, fail := this.fetchRows(sql, params...)
+	rows, stmt, fail := this.fetchRows(query, params...)
 	if fail != nil {
 		return fail
 	}
@@ -128,45 +130,94 @@ func (this *SimpleDBA) QueryClosure(
 	for rows.Next() {
 		err := transformer(rows)
 		if err != nil {
-			return rethrow(FAULT_PARSE_STATEMENT, err, sql, params...)
+			return rethrow(FAULT_PARSE_STATEMENT, err, query, params...)
 		}
 	}
 
 	return nil
 }
 
-// Execute an SQL SELECT query with named parameters.
+//List using the closure arguments.
+//A function is used to build the result list.
+//The types for scanning are supplied by the function arguments. Arguments can be pointers or not.
+//Reflection is used to determine the arguments types.
 //
-// param conn: The connection to execute the query in.
-// param sql: The query to execute.
-// param params: The named parameters.
-// return: list with array of objects representing each result row
-/*
-func (this *SimpleDBA) QueryRaw(sql string, params map[string]interface{}) (coll.Collection, error) {
-	rt := &transformers.SimpleAbstractRowTransformer{
-		Transform: func(rows *sql.Rows) (interface{}, error) {
-			cols, err := rows.Columns()
-			if err != null {
-				return nill, error
-			}
-			lenght := len(cols)
-			dest := make(*[]interface{}, lenght)
-			err := rows.Scan(dest)
-			if err != nil {
-				return nil, err
-			}
-			return dest, nil
-		},
+//ex:
+//  roles = make([]string, 0)
+//  var role string
+//  q.QueryInto(func(role *string) {
+//	  roles = append(roles, *role)
+//  })
+func (this *SimpleDBA) QueryInto(
+	query string,
+	closure interface{},
+	params ...interface{},
+) ([]interface{}, error) {
+	// determine types and instanciate them
+	ftype := reflect.TypeOf(closure)
+	if ftype.Kind() != reflect.Func {
+		return nil, fmt.Errorf("goSQL: Expected a function with the signature func(primitive1, ..., primitiveN) [anything]. Got %s.", ftype.String())
 	}
 
-	if rawSql, fail := toRawSql(sql, params); fail != nil {
-		return nil, fail
+	size := ftype.NumIn() // number of input variables
+	instances := make([]interface{}, size)
+	targets := make([]reflect.Type, size)
+	for i := 0; i < size; i++ {
+		arg := ftype.In(i) // type of input variable i
+		targets[i] = arg   // collects the target types
+		// the scan elements must be all pointers
+		if arg.Kind() == reflect.Ptr {
+			// Instanciates a pointer. Interface() returns the pointer instance.
+			instances[i] = reflect.New(arg).Interface()
+		} else {
+			// creates a pointer of the type of the zero type
+			instances[i] = reflect.New(reflect.PtrTo(arg)).Interface()
+		}
 	}
-	return this.Query(rawSql.Sql, rt, rawSql.Values)
+
+	var results []interface{}
+	// output must be at most 1
+	if ftype.NumOut() > 1 {
+		return nil, fmt.Errorf("goSQL: A function must have at most one output. Got %s outputs.", ftype.NumOut())
+	} else if ftype.NumOut() == 1 {
+		results = make([]interface{}, 0)
+	}
+
+	err := this.QueryClosure(query, func(rows *sql.Rows) error {
+		err := rows.Scan(instances...)
+		if err != nil {
+			return err
+		}
+		values := make([]reflect.Value, size)
+		for k, v := range instances {
+			// Elem() gets the underlying object of the interface{}
+			e := reflect.ValueOf(v).Elem()
+			if targets[k].Kind() == reflect.Ptr {
+				// if pointer type use directly
+				values[k] = e
+			} else {
+				if e.IsNil() {
+					// was nil, so we must create its zero value
+					values[k] = reflect.Zero(targets[k])
+				} else {
+					// use underlying value of the pointer
+					values[k] = e.Elem()
+				}
+			}
+		}
+		res := reflect.ValueOf(closure).Call(values)
+		if results != nil { // expects result. ftype.NumOut() == 1
+			results = append(results, res[0].Interface())
+		}
+		return nil
+	}, params...)
+
+	if err != nil {
+		return nil, err
+	}
+	return results, nil
 }
-*/
 
-///**
 // Execute an SQL SELECT query with named parameters returning the first result.
 //
 // param <T>
@@ -180,7 +231,6 @@ func (this *SimpleDBA) QueryRaw(sql string, params map[string]interface{}) (coll
 // param params
 //            The named parameters.
 // @return The transformed result
-// */
 func (this *SimpleDBA) QueryFirst(
 	sql string,
 	params map[string]interface{},
@@ -197,7 +247,6 @@ func (this *SimpleDBA) QueryFirst(
 	return nil, nil
 }
 
-///**
 // Execute an SQL SELECT query with named parameters returning the first result.
 //
 // param conn
@@ -207,7 +256,6 @@ func (this *SimpleDBA) QueryFirst(
 // param params
 //            The named parameters.
 // @return if there was a row scan and error
-// */
 func (this *SimpleDBA) QueryRow(
 	sql string,
 	params []interface{},
@@ -233,7 +281,6 @@ func (this *SimpleDBA) QueryRow(
 
 ////////////////////////////////////////////////////////////////////////
 
-///**
 // Execute an SQL INSERT, UPDATE, or DELETE query.
 //
 // param conn
@@ -243,7 +290,6 @@ func (this *SimpleDBA) QueryRow(
 // param params
 //            The query replacement parameters.
 // @return The number of rows affected.
-// */
 func (this *SimpleDBA) execute(sql string, params ...interface{}) (sql.Result, *sql.Stmt, error) {
 	stmt, err := this.connection.Prepare(sql)
 	if err != nil {
