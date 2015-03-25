@@ -1,6 +1,8 @@
 package common
 
 import (
+	"io/ioutil"
+
 	. "github.com/quintans/goSQL/db"
 	"github.com/quintans/goSQL/dbx"
 	"github.com/quintans/toolkit/ext"
@@ -86,6 +88,7 @@ func RunAll(TM ITransactionManager, t *testing.T) {
 	RunStructDelete(TM, t)
 	RunSelectInto(TM, t)
 	RunSelectTree(TM, t)
+	RunSelectTreeTwoBranches(TM, t)
 	RunSelectFlatTree(TM, t)
 	RunList(TM, t)
 	RunListOf(TM, t)
@@ -127,6 +130,11 @@ func ResetDB(TM ITransactionManager) {
 
 		// clear books_i18n
 		if _, err = DB.Delete(BOOK_I18N).Execute(); err != nil {
+			return err
+		}
+
+		// clear books_bin
+		if _, err = DB.Delete(BOOK_BIN).Execute(); err != nil {
 			return err
 		}
 
@@ -172,6 +180,44 @@ func ResetDB(TM ITransactionManager) {
 		}
 
 		insert.Values(3, 1, "Scrapbook", 6.5, time.Date(2012, time.April, 01, 0, 0, 0, 0, time.UTC), 2)
+		_, err = insert.Execute()
+		if err != nil {
+			return err
+		}
+
+		// insert book_bin
+		var cover []byte
+		cover, err = ioutil.ReadFile("../apple.jpg")
+		if err != nil {
+			return err
+		}
+		insert = DB.Insert(BOOK_BIN).
+			Columns(BOOK_BIN_C_ID, BOOK_BIN_C_VERSION, BOOK_BIN_C_HARDCOVER).
+			Values(1, 1, cover)
+		_, err = insert.Execute()
+		if err != nil {
+			return err
+		}
+
+		cover, err = ioutil.ReadFile("../cook-owl.png")
+		if err != nil {
+			return err
+		}
+		insert = DB.Insert(BOOK_BIN).
+			Columns(BOOK_BIN_C_ID, BOOK_BIN_C_VERSION, BOOK_BIN_C_HARDCOVER).
+			Values(2, 1, cover)
+		_, err = insert.Execute()
+		if err != nil {
+			return err
+		}
+
+		cover, err = ioutil.ReadFile("../scrapbook.png")
+		if err != nil {
+			return err
+		}
+		insert = DB.Insert(BOOK_BIN).
+			Columns(BOOK_BIN_C_ID, BOOK_BIN_C_VERSION, BOOK_BIN_C_HARDCOVER).
+			Values(3, 1, cover)
 		_, err = insert.Execute()
 		if err != nil {
 			return err
@@ -675,6 +721,7 @@ func RunSimpleDelete(TM ITransactionManager, t *testing.T) {
 	if err := TM.Transaction(func(store IDb) error {
 		// clears any relation with book id = 2
 		store.Delete(AUTHOR_BOOK).Where(AUTHOR_BOOK_C_BOOK_ID.Matches(2)).Execute()
+		store.Delete(BOOK_BIN).Where(BOOK_BIN_C_ID.Matches(2)).Execute()
 
 		affectedRows, err := store.Delete(BOOK).Where(BOOK_C_ID.Matches(2)).Execute()
 		if err != nil {
@@ -696,13 +743,14 @@ func RunStructDelete(TM ITransactionManager, t *testing.T) {
 	if err := TM.Transaction(func(store IDb) error {
 		// clears any relation with book id = 2
 		store.Delete(AUTHOR_BOOK).Where(AUTHOR_BOOK_C_BOOK_ID.Matches(2)).Execute()
+		store.Delete(BOOK_BIN).Where(BOOK_BIN_C_ID.Matches(2)).Execute()
 
 		var book Book
 		book.Id = ext.Int64Ptr(2)
 		book.Version = ext.Int64Ptr(1)
 		affectedRows, err := store.Delete(BOOK).Submit(book)
 		if err != nil {
-			t.Fatalf("Failed RunStructDelete: %s", err)
+			t.Fatalf("Failed RunStructDelete (id=2): %s", err)
 		}
 		if affectedRows != 1 {
 			t.Fatal("The record was not deleted")
@@ -711,11 +759,13 @@ func RunStructDelete(TM ITransactionManager, t *testing.T) {
 		// short version
 		// clears any relation with book id = 3
 		store.Delete(AUTHOR_BOOK).Where(AUTHOR_BOOK_C_BOOK_ID.Matches(3)).Execute()
+		store.Delete(BOOK_BIN).Where(BOOK_BIN_C_ID.Matches(3)).Execute()
+
 		*book.Id = 3
 		var ok bool
 		ok, err = store.Remove(book)
 		if err != nil {
-			t.Fatalf("Failed RunStructDelete: %s", err)
+			t.Fatalf("Failed RunStructDelete (id=3): %s", err)
 		}
 		if !ok {
 			t.Fatal("The record was not deleted")
@@ -762,6 +812,36 @@ func RunSelectTree(TM ITransactionManager, t *testing.T) {
 		// check list size of books
 		if len(publisher.Books) != 2 {
 			t.Fatalf("The list of books for the publisher with id 2 was incorrectly retrived. Expected 2 got %v", len(publisher.Books))
+		}
+	}
+}
+
+func RunSelectTreeTwoBranches(TM ITransactionManager, t *testing.T) {
+	ResetDB(TM)
+
+	store := TM.Store()
+	var book Book
+	ok, err := store.Query(BOOK).
+		All().
+		Outer(BOOK_A_PUBLISHER).Fetch().
+		Outer(BOOK_A_BOOK_BIN).Fetch().
+		Where(BOOK_C_ID.Matches(1)).
+		SelectTree(&book)
+
+	if err != nil {
+		t.Fatalf("%s", err)
+	} else if !ok || book.Id == nil {
+		t.Fatal("The record for publisher id 1, was not retrived")
+	} else {
+		// check list size of books
+		if book.Publisher == nil {
+			t.Fatalf("The publisher for book 1 was not retrived")
+		}
+		if book.BookBin == nil {
+			t.Fatalf("The binary for book 1 was not retrived")
+		}
+		if len(book.BookBin.Hardcover) == 0 {
+			t.Fatalf("The hardcover for book 1 was not retrived")
 		}
 	}
 }
