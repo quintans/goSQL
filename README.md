@@ -110,6 +110,7 @@ store.Modify(&publisher)
  - SQL DSL
  - Simple join declaration
  - Populate struct tree with query results containing joins
+ - Subqueries
  - Automatic setting of primary keys for inserts
  - Automatic version increment
  - Database Abstraction
@@ -352,7 +353,6 @@ If an error is returned or panic occurs, the transaction is rolled back, otherwi
 [common.go](test/common/common.go) has several examples of transactions.
 
 
-
 ### Insert Examples
 
 #### Simple Insert
@@ -376,7 +376,6 @@ In this example the value for the `name` parameter is directly supplied in the s
 One example, could be `language` (pt, eng, ...) for internationalized text, or `channel` (web, mobile, ...) for descriptions, etc.
 
 
-
 #### Insert With a Struct
 
 When inserting with a struct, the struct fields are matched with the respective columns.
@@ -398,7 +397,6 @@ but this implies that the table was registered with the same alias as the struct
 In both cases the values of the Id and Version fields of the struct are also set if present.
 
 
-
 #### Insert Returning Generated Key
 Any of the above snippets, if the Id field/column is undefined (0 or nil) it returns the generated key by the database.
 
@@ -410,7 +408,6 @@ key, _ := store.Insert(PUBLISHER).
 ```
 
 > **Key fields can be as many as we want. If a key field is of the type (*)int64 and single, it is considered to be a auto generated key.**
-
 
 
 ### Update Examples
@@ -426,7 +423,6 @@ store.Update(PUBLISHER).
 	PUBLISHER_C_VERSION.Matches(version),     // old version
 ).Execute()
 ```
-
 
 
 #### Update with struct
@@ -510,12 +506,10 @@ store.Remove(book)
 When deleting with a struct, the presence of a key field is mandatory.
 
 
-
 ### Query Examples
 
 The query operation is by far the richest operation of the ones we have seen.
 Query operation that start with `Select*` retrive **one** instance, and those that start with `List*` returns **many** instances.
-
 
 
 #### SelectInto
@@ -529,7 +523,6 @@ store.Query(PUBLISHER).
 	Where(PUBLISHER_C_ID.Matches(2)).
 	SelectInto(&name)
 ```
-
 
 
 #### SelectTo
@@ -680,7 +673,6 @@ for e := books.Enumerator(); e.HasNext(); {
 ```
 
 
-
 #### ListFlatTree
 
 Executes a query, putting the result in the slice, passed as an argument.
@@ -743,7 +735,6 @@ for e := publishers.Enumerator(); e.HasNext(); {
 ```
 
 
-
 #### Column Subquery
 
 For this example we will use the following struct which will hold the result for each row.
@@ -777,7 +768,6 @@ store.Query(PUBLISHER).Alias("p").
 Notice that when I use the subquery variable an alias `"Value"` is defined. This alias matches with a struct field in `Dto`. In this query the `PUBLISHER_C_NAME` column as no associated alias, so the default column alias is used.
 
 
-
 #### Where Subquery
 
 In this example I get a list of records with the name of the `Publisher`, the name and price of every `Book`, where the price is lesser or equal than 10. The result is put in a slice of `Dto` instances.
@@ -804,11 +794,11 @@ store.Query(PUBLISHER).
 
 #### Joins
 
-The concepts of joins was already introduced in the section [SelectTree](#selectTree) where we can see the use of an outer join.
+The concepts of joins was already introduced in the section [SelectTree](#selecttree) where we can see the use of an outer join.
 In the context of goSQL, a Join is seen has a path of associations that goes from the main table to the target table. Along the way we can apply constraints and/or include columns from the participating tables. These paths can overlap without problem because they are seen as isolated from one another.
 When declaring several paths only when a path deviates from previous path it starts contributing to the SQL generation.
 Joins can be `Outer` or `Inner` and can have constraints applyied to the target table of the last added asscoiation through the use of the function `On()`.
-To mark the end of a join definition we use the function `Join()` or `Fetch()`. Both process the join but the later includes in the query all columns from all the tables of the joins. `Fetch()` is used when a struct tree is desired.
+To mark the end of a join definition we use the function `Join()` or `Fetch()`. Both process the join but the latter includes in the query all columns from all the tables of the joins. `Fetch()` is used when a struct tree is desired.
 
 Ex: list all publishers that had a book published before 2013
 
@@ -835,6 +825,21 @@ store.Query(PUBLISHER).
 	ListTreeOf((*Publisher)(nil))
 ```
 
+`Fetch()` and `Join()` also reset the path back to the main table, allowing us to declare completly distinct paths.
+
+If we want to retrive data to populate the tree struct `Publisher <- Book -> BookBin`, we would have to use two `Fetch()`, one for each branch, as demonstrated below.
+
+```go
+var book Book
+store.Query(BOOK).
+    All().
+    Outer(BOOK_A_PUBLISHER).
+    Fetch(). // also resets the path. The next Outer starts at BOOK
+    Outer(BOOK_A_BOOK_BIN).
+    Fetch().
+    Where(BOOK_C_ID.Matches(1)).
+    SelectTree(&book)
+```
 
 
 #### Group By
@@ -851,7 +856,6 @@ store.Query(PUBLISHER).
 	GroupByPos(1). // result column position
 	List(&dtos)
 ```
-
 
 
 #### Having
@@ -880,7 +884,6 @@ store.Query(PUBLISHER).
 	Having(Alias("ThisYear").Greater(30)).
 	List(&sales)
 ```
-
 
 
 #### Order By
