@@ -834,7 +834,7 @@ var book Book
 store.Query(BOOK).
     All().
     Outer(BOOK_A_PUBLISHER).
-    Fetch(). // also resets the path. The next Outer starts at BOOK
+    Fetch(). // also resets the path. The next Outer starts AGAIN at BOOK
     Outer(BOOK_A_BOOK_BIN).
     Fetch().
     Where(BOOK_C_ID.Matches(1)).
