@@ -283,7 +283,7 @@ var PUBLISHER_C_VERSION  = PUBLISHER.VERSION("VERSION")  // implicit map to fiel
 var PUBLISHER_C_DELETION = PUBLISHER.DELETION("DELETION") // map to field 'Deletion'
 ```
 
-- `KEY` identifies the column or columns as primary key of a table.
+- `KEY` identifies the column(s) as primary key(s) of a table.
 - `VERSION` identifies the column used for optimistic locking.
 - `DELETION` identifies the column used for logic record deletion.
 
@@ -463,7 +463,7 @@ This example shows the use of a subquery to do an update, and also the use of `E
 sub := store.Query(BOOK).Alias("b").
 	Column(AsIs(nil)).
 	Where(
-	BOOK_C_PUBLISHER_ID.Matches(Col(BOOK_C_ID).For("a")),
+	BOOK_C_PUBLISHER_ID.Matches(BOOK_C_ID.For("a")),
 	BOOK_C_PRICE.Greater(10),
 )
 
@@ -755,7 +755,7 @@ The following query gets the name of the publisher and the sum of the prices of 
 subquery := store.Query(BOOK).Alias("b").
 	Column(Sum(BOOK_C_PRICE)).
 	Where(
-	BOOK_C_PUBLISHER_ID.Matches(Col(PUBLISHER_C_ID).For("p")),
+	BOOK_C_PUBLISHER_ID.Matches(PUBLISHER_C_ID.For("p")),
 )
 
 var dtos []*Dto
@@ -915,6 +915,21 @@ The column that the `OrderBy` refers to, belongs to the table targeted by the la
 If there is no declared association, the column belongs to the driving table, as seen in the first example.
 
 There is also `Order` if we want to order by a column belonging to the driving table.
+
+Not always we have a well behaved query. We might want a different order without touching the `Outer` declarations. For that we must use table alias.
+Below is the same query but using alias.
+
+```go
+store.Query(PUBLISHER).
+		All().
+		Outer(PUBLISHER_A_BOOKS).As("book"). // declares the table alias to use for BOOK
+		Outer(BOOK_A_AUTHORS).As("auth"). // declares the table alias to use for AUTHOR
+		Fetch().
+		Order(PUBLISHER_C_ID). // main table
+		OrderAs(BOOK_C_ID.For("book")). // declares the table alias to use
+		OrderAs(AUTHOR_C_ID.For("auth")).Desc(). // declares the table alias to use
+		ListTreeOf((*Publisher)(nil))
+```
 
 
 #### Union

@@ -204,6 +204,8 @@ func (this *Query) Column(column interface{}) *Query {
 func (this *Query) As(alias string) *Query {
 	if this.lastToken != nil {
 		this.lastToken.SetAlias(alias)
+	} else if this.path != nil {
+		this.path[len(this.path)-1].PreferredAlias = alias
 	}
 
 	this.rawSQL = nil
@@ -226,7 +228,10 @@ func (this *Query) OrdersReset() {
 	this.orders = nil
 }
 
-func (this *Query) order(columnHolder *ColumnHolder) *Query {
+// Order by a column for a specific table alias.
+//
+// use: query.OrderAs(Column.For("x"))
+func (this *Query) OrderAs(columnHolder *ColumnHolder) *Query {
 	this.lastOrder = NewOrder(columnHolder)
 	this.orders = append(this.orders, this.lastOrder)
 
@@ -237,19 +242,7 @@ func (this *Query) order(columnHolder *ColumnHolder) *Query {
 
 // Order by a column belonging to the driving table.
 func (this *Query) Order(column *Column) *Query {
-	return this.OrderAs(column, this.tableAlias)
-}
-
-// Order by a column for a specific table alias.
-func (this *Query) OrderAs(column *Column, alias string) *Query {
-	ch := NewColumnHolder(column)
-	if alias != "" {
-		ch.SetTableAlias(alias)
-	} else {
-		ch.SetTableAlias(this.tableAlias)
-	}
-
-	return this.order(ch)
+	return this.OrderAs(column.For(this.tableAlias))
 }
 
 // Order by a column belonging to the table targeted by the supplyied association list.
@@ -272,7 +265,7 @@ func (this *Query) orderFor(column *Column, pathElements ...*PathElement) *Query
 
 	common := DeepestCommonPath(this.cachedAssociation, pes)
 	if len(common) == len(pes) {
-		return this.OrderAs(column, pathElementAlias(common[len(common)-1]))
+		return this.OrderAs(column.For(pathElementAlias(common[len(common)-1])))
 	}
 
 	panic("The path specified in the order is not valid")
@@ -292,9 +285,10 @@ func (this *Query) OrderBy(column *Column) *Query {
 		last.Orders = append(last.Orders, this.lastOrder)
 		return this
 	} else if this.lastJoin != nil {
-		return this.orderFor(column, this.lastJoin.GetPathElements()...)
+		//return this.orderFor(column, this.lastJoin.GetPathElements()...)
+		return this.OrderAs(column.For(this.lastFkAlias))
 	} else {
-		return this.OrderAs(column, this.lastFkAlias)
+		return this.OrderAs(column.For(this.tableAlias))
 	}
 }
 
@@ -337,7 +331,9 @@ func (this *Query) GetOrders() []*Order {
 // param: associations
 // return this query
 func (this *Query) Inner(associations ...*Association) *Query {
-	this.DmlBase.inner(associations...)
+	this.DmlBase.inner(true, associations...)
+	this.lastToken = nil
+
 	return this
 }
 
@@ -346,14 +342,8 @@ func (this *Query) Inner(associations ...*Association) *Query {
 // param associations
 // return
 func (this *Query) Outer(associations ...*Association) *Query {
-	for _, association := range associations {
-		pe := new(PathElement)
-		pe.Base = association
-		pe.Inner = false
-		this.path = append(this.path, pe)
-	}
-
-	this.rawSQL = nil
+	this.DmlBase.inner(false, associations...)
+	this.lastToken = nil
 
 	return this
 }
@@ -364,36 +354,24 @@ func (this *Query) Outer(associations ...*Association) *Query {
 //It will includes all the columns of all the tables referred by the association path,
 // except where columns were explicitly included.
 func (this *Query) Fetch() *Query {
-	return this.FetchTo("")
-}
-
-//The as Fetch() but using an end alias.
-func (this *Query) FetchTo(endAlias string) *Query {
 	if this.path != nil {
 		for _, pe := range this.path {
 			this.includeInPath(pe) // includes all columns
 		}
 	}
 
-	this.joinTo(endAlias, true)
+	this.join(true)
 
 	return this
-}
-
-func (this *Query) Join() *Query {
-	return this.JoinTo("")
 }
 
 //indicates that the path should be used to join only
-//
-//param endAlias:
-//return
-func (this *Query) JoinTo(endAlias string) *Query {
-	this.joinTo(endAlias, false)
+func (this *Query) Join() *Query {
+	this.join(false)
 	return this
 }
 
-func (this *Query) joinTo(endAlias string, fetch bool) {
+func (this *Query) join(fetch bool) {
 	if this.path != nil {
 		tokens := make([]Tokener, 0)
 		for _, pe := range this.path {
@@ -412,7 +390,7 @@ func (this *Query) joinTo(endAlias string, fetch bool) {
 	}
 
 	// only after this the joins will have the proper join table alias
-	this.DmlBase.joinTo(endAlias, this.path, fetch)
+	this.DmlBase.joinTo(this.path, fetch)
 
 	// process pending orders
 	if this.path != nil {

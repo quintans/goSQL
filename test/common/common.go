@@ -100,6 +100,7 @@ func RunAll(TM ITransactionManager, t *testing.T) {
 	RunInnerOn(TM, t)
 	RunInnerOn2(TM, t)
 	RunOuterFetchOrder(TM, t)
+	RunOuterFetchOrderAs(TM, t)
 	RunGroupBy(TM, t)
 	RunOrderBy(TM, t)
 	RunPagination(TM, t)
@@ -823,8 +824,8 @@ func RunSelectTreeTwoBranches(TM ITransactionManager, t *testing.T) {
 	var book Book
 	ok, err := store.Query(BOOK).
 		All().
-		Outer(BOOK_A_PUBLISHER).Fetch().
-		Outer(BOOK_A_BOOK_BIN).Fetch().
+		Inner(BOOK_A_PUBLISHER).Fetch().
+		Inner(BOOK_A_BOOK_BIN).Fetch().
 		Where(BOOK_C_ID.Matches(1)).
 		SelectTree(&book)
 
@@ -1173,19 +1174,86 @@ func RunInnerOn2(TM ITransactionManager, t *testing.T) {
 func RunOuterFetchOrder(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
-	logger.Debugf("Running RunOuterFetch")
+	logger.Debugf("Running RunOuterFetchOrder")
 
 	store := TM.Store()
 	result, err := store.Query(PUBLISHER).
 		All().
 		Order(PUBLISHER_C_ID).
-		Outer(PUBLISHER_A_BOOKS).OrderBy(BOOK_C_ID).
-		Outer(BOOK_A_AUTHORS).OrderBy(AUTHOR_C_ID).Desc().
-		Fetch().
+		Outer(PUBLISHER_A_BOOKS).OrderBy(BOOK_C_ID).       // order a column belonging to BOOK
+		Outer(BOOK_A_AUTHORS).OrderBy(AUTHOR_C_ID).Desc(). // order a column belonging to AUTHOR
+		Fetch().                                           // this marks the end of the branch and that the results should populate a struct tree
 		ListTreeOf((*Publisher)(nil))
 
 	if err != nil {
-		t.Fatalf("Failed TestOuterFetch: %s", err)
+		t.Fatalf("Failed RunOuterFetchOrder: %s", err)
+	}
+
+	publishers := result.AsSlice().([]*Publisher)
+
+	if len(publishers) != 2 {
+		t.Fatalf("Expected 2 Publishers, but got %v", len(publishers))
+	}
+
+	pub := publishers[0]
+	if len(pub.Books) != 1 {
+		t.Fatalf("Expected 1 Book for Publishers %s, but got %v", *pub.Name, len(pub.Books))
+	}
+
+	if *publishers[0].Id != 1 {
+		t.Fatalf("The result order for publisher is not correct. Expected record with id 1 in the first position, but got %v", *publishers[0].Id)
+	}
+
+	book := pub.Books[0]
+	if len(book.Authors) != 1 {
+		t.Fatalf("Expected 1 Author for Book %s, but got %v", *book.Name, len(book.Authors))
+	}
+
+	pub = publishers[1]
+	if len(pub.Books) != 2 {
+		t.Fatalf("Expected 2 Book for Publishers %s, but got %v", *pub.Name, len(pub.Books))
+	}
+
+	book = pub.Books[0]
+	if len(book.Authors) != 2 {
+		t.Fatalf("Expected 2 Author for Book %s, but got %v", *book.Name, len(book.Authors))
+	}
+
+	book = pub.Books[1]
+	if len(book.Authors) != 2 {
+		t.Fatalf("Expected 2 Author for Book %s, but got %v", *book.Name, len(book.Authors))
+	}
+
+	if *book.Authors[0].Id != 2 {
+		t.Fatalf("The result order of authors is not correct. Expected record with id 2 in the first position, but got %v", *publishers[0].Id)
+	}
+
+	for k, v := range publishers {
+		logger.Debugf("publishers[%v] = %s", k, v.String())
+		if v.Id == nil {
+			t.Fatal("Expected a valid Id, but got nil")
+		}
+	}
+}
+
+func RunOuterFetchOrderAs(TM ITransactionManager, t *testing.T) {
+	ResetDB(TM)
+
+	logger.Debugf("Running RunOuterFetchOrderAs")
+
+	store := TM.Store()
+	result, err := store.Query(PUBLISHER).
+		All().
+		Outer(PUBLISHER_A_BOOKS).As("book").
+		Outer(BOOK_A_AUTHORS).As("auth").
+		Fetch().
+		Order(PUBLISHER_C_ID). // main table
+		OrderAs(BOOK_C_ID.For("book")).
+		OrderAs(AUTHOR_C_ID.For("auth")).Desc().
+		ListTreeOf((*Publisher)(nil))
+
+	if err != nil {
+		t.Fatalf("Failed RunOuterFetchOrderAs: %s", err)
 	}
 
 	publishers := result.AsSlice().([]*Publisher)
@@ -1249,7 +1317,7 @@ func RunGroupBy(TM ITransactionManager, t *testing.T) {
 		List(&dtos)
 
 	if err != nil {
-		t.Fatalf("Failed TestGroupBy: %s", err)
+		t.Fatalf("Failed RunGroupBy: %s", err)
 	}
 
 	if len(dtos) != 2 {
@@ -1274,7 +1342,7 @@ func RunOrderBy(TM ITransactionManager, t *testing.T) {
 	})
 
 	if err != nil {
-		t.Fatalf("Failed TestGroupBy: %s", err)
+		t.Fatalf("Failed RunOrderBy: %s", err)
 	}
 
 	if len(publishers) != 2 {

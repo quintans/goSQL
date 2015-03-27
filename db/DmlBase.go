@@ -173,11 +173,11 @@ func (this *DmlBase) GetAliasForAssociation(association *Association) string {
 
 // includes the associations as inner joins to the current path
 // param associations
-func (this *DmlBase) inner(associations ...*Association) {
+func (this *DmlBase) inner(inner bool, associations ...*Association) {
 	for _, association := range associations {
 		pe := new(PathElement)
 		pe.Base = association
-		pe.Inner = true
+		pe.Inner = inner
 		this.path = append(this.path, pe)
 	}
 
@@ -189,9 +189,9 @@ Indicates that the current association chain should be used to join only.
 A table end alias can also be supplied.
 This
 */
-func (this *DmlBase) joinTo(endAlias string, path []*PathElement, fetch bool) {
+func (this *DmlBase) joinTo(path []*PathElement, fetch bool) {
 	if len(path) > 0 {
-		this.addJoin(endAlias, path, nil, fetch)
+		this.addJoin(path, nil, fetch)
 
 		// the first position refers to constraints applied to the table, due to a association discriminator
 		pathCriterias := this.buildPathCriterias(path)
@@ -302,15 +302,14 @@ func (this *DmlBase) buildPathCriterias(paths []*PathElement) []*PathCriteria {
 	return pathCriterias
 }
 
-func (this *DmlBase) addJoin(lastAlias string, associations []*PathElement, common []*PathElement, fetch bool) []*PathElement {
+func (this *DmlBase) addJoin(associations []*PathElement, common []*PathElement, fetch bool) []*PathElement {
 	var local []*PathElement
 
 	if common == nil {
 		common = DeepestCommonPath(this.cachedAssociation, associations)
 	}
 
-	// creates a copy, since the table alias are going to be defined
-	fks := make([]*Association, len(associations))
+	deriveds := make([]*Association, len(associations))
 	var lastFk *Association
 	matches := true
 	f := 0
@@ -329,14 +328,14 @@ func (this *DmlBase) addJoin(lastAlias string, associations []*PathElement, comm
 
 		if lastCachedFk == nil {
 			// copies to assign the alias to this query
-			fks[f], _ = association.Clone().(*Association)
+			deriveds[f], _ = association.Clone().(*Association)
 
 			/*
 				Processes the associations.
 				The alias of the initial side (from) of the first associations
 				is assigned the value 'firstAlias' (main table value)
 				The alias of the final side of the last association is assigned the
-				value 'lastAlias', if it is not null
+				value 'pe.Alias', if it is not empty
 			*/
 			var fkAlias string
 			if f == 0 {
@@ -344,19 +343,22 @@ func (this *DmlBase) addJoin(lastAlias string, associations []*PathElement, comm
 			} else {
 				fkAlias = this.joinBag.GetAlias(lastFk)
 			}
-			if fks[f].IsMany2Many() {
-				fromFk := fks[f].FromM2M
-				toFk := fks[f].ToM2M
+			fmt.Println("===> fkAlias:", fkAlias)
+
+			if deriveds[f].IsMany2Many() {
+				fromFk := deriveds[f].FromM2M
+				toFk := deriveds[f].ToM2M
 
 				this.prepareAssociation(
 					fkAlias,
 					this.joinBag.GetAlias(fromFk),
 					fromFk)
 
-				if lastAlias == "" || f < len(fks)-1 {
+				if pe.PreferredAlias == "" {
 					fkAlias = this.joinBag.GetAlias(toFk)
 				} else {
-					fkAlias = lastAlias
+					fkAlias = pe.PreferredAlias
+					this.joinBag.SetAlias(toFk, pe.PreferredAlias)
 				}
 				this.prepareAssociation(
 					this.joinBag.GetAlias(fromFk),
@@ -365,29 +367,30 @@ func (this *DmlBase) addJoin(lastAlias string, associations []*PathElement, comm
 				lastFk = toFk
 			} else {
 				var fkAlias2 string
-				if fkAlias2 == "" || f < len(fks)-1 {
-					fkAlias2 = this.joinBag.GetAlias(fks[f])
+				if pe.PreferredAlias == "" {
+					fkAlias2 = this.joinBag.GetAlias(deriveds[f])
 				} else {
-					fkAlias2 = lastAlias
+					fkAlias2 = pe.PreferredAlias
+					this.joinBag.SetAlias(deriveds[f], pe.PreferredAlias)
 				}
 				this.prepareAssociation(
 					fkAlias,
 					fkAlias2,
-					fks[f])
-				lastFk = fks[f]
+					deriveds[f])
+				lastFk = deriveds[f]
 			}
 
 		} else {
 			// the main list allways with association many-to-many
-			fks[f] = lastCachedFk
+			deriveds[f] = lastCachedFk
 			// defines the previous fk
-			if fks[f].IsMany2Many() {
-				lastFk = fks[f].ToM2M
+			if deriveds[f].IsMany2Many() {
+				lastFk = deriveds[f].ToM2M
 			} else {
 				lastFk = lastCachedFk
 			}
 		}
-		pe.Derived = fks[f]
+		pe.Derived = deriveds[f]
 		local = append(local, pe) // cache it
 
 		f++
@@ -396,17 +399,10 @@ func (this *DmlBase) addJoin(lastAlias string, associations []*PathElement, comm
 	// only caches if the path was different
 	if !matches {
 		this.cachedAssociation = append(this.cachedAssociation, local)
-		// gets the alias of the last join
-		if lastAlias != "" {
-			this.lastFkAlias = lastAlias
-			this.joinBag.SetAlias(lastFk, lastAlias)
-		}
 	}
 
 	// gets the alias of the last join
-	if lastAlias == "" {
-		this.lastFkAlias = this.joinBag.GetAlias(lastFk)
-	}
+	this.lastFkAlias = this.joinBag.GetAlias(lastFk)
 
 	this.lastJoin = NewJoin(local, fetch)
 	this.joins = append(this.joins, this.lastJoin)

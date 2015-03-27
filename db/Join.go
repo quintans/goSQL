@@ -3,12 +3,13 @@ package db
 import ()
 
 type PathElement struct {
-	Base     *Association
-	Derived  *Association
-	Inner    bool
-	Criteria *Criteria
-	Columns  []Tokener
-	Orders   []*Order
+	Base           *Association
+	Derived        *Association
+	Inner          bool
+	Criteria       *Criteria
+	Columns        []Tokener
+	Orders         []*Order
+	PreferredAlias string // user preferred alias
 }
 
 type Join struct {

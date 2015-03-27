@@ -23,7 +23,7 @@ func (this *Column) As(alias string) *Column {
 	return this
 }
 
-// DEfines the table alias for this column in the SQL
+// Defines the table alias for this column in the SQL
 func (this *Column) For(tableAlias string) *ColumnHolder {
 	return NewColumnHolder(this).For(tableAlias)
 }
