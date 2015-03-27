@@ -207,16 +207,20 @@ func (this *EntityTransformer) ToEntity(
 		if bp.Position > 0 {
 			position := bp.Position
 			value := row[position-1]
+			isPtr := false
 			v := reflect.ValueOf(value)
 			if v.Kind() == reflect.Ptr {
+				isPtr = true
 				v = v.Elem()
 			}
 			ok := bp.Set(instance, v)
-			if ok && emptyBean != nil {
+			// if it was set being a pointer or it was a non zero value, then it is not empty
+			if ok && (isPtr || v.IsValid()) && emptyBean != nil {
 				*emptyBean = false
 			}
-			if !ok && bp.Key { // if property is a key, check if it is nil
-				// if any key is nil, the bean is nil. ex: a bean coming from a outer join
+			// if property is a key, and it was not set or it's not a pointer and is a zero value, return invalid
+			if bp.Key && (!ok || !isPtr && !v.IsValid()) {
+				// if any key is nil or has zero value, the bean is nil. ex: a bean coming from a outer join
 				return false, nil
 			}
 		}
