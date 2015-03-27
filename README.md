@@ -434,10 +434,13 @@ The generated SQL will include all columns.
 ```go
 var publisher Publisher
 publisher.Name = ext.StrPtr("Untited Editors")
-publisher.Id = ext.Int64Ptr(1)      // identifies the record
-publisher.Version = ext.Int64Ptr(1) // for optimistic locking
+publisher.Id = ext.Int64Ptr(1)      // identifies the record.
+publisher.Version = 1   // for optimistic locking
 store.Update(PUBLISHER).Submit(&publisher) // passing as a pointer
 ```
+
+In this example we are using the `publisher.Id` as a pointer, but it could be a value.
+When using values zero is considered unassigned. If that breaks your business logic, use pointers.
 
 A shorter version would be
 
@@ -489,7 +492,7 @@ As we can see the Version column is not taken into account.
 ```go
 var book Book
 book.Id = ext.Int64Ptr(2)
-book.Version = ext.Int64Ptr(1)
+book.Version = 1
 store.Delete(BOOK).Submit(book)
 ```
 

@@ -34,7 +34,7 @@ func (this *PublisherSales) String() string {
 // since entities can be at the left outer join side, every Id field SHOULD be a pointer
 type EntityBase struct {
 	Id      *int64
-	Version *int64
+	Version int64
 }
 
 // PUBLISHER

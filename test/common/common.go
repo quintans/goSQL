@@ -435,7 +435,7 @@ func RunSelectUTF8(TM ITransactionManager, t *testing.T) {
 
 	if err != nil {
 		t.Fatalf("%s", err)
-	} else if !ok || *publisher.Id != 2 || *publisher.Version != 1 || *publisher.Name != PUBLISHER_UTF8_NAME {
+	} else if !ok || *publisher.Id != 2 || publisher.Version != 1 || *publisher.Name != PUBLISHER_UTF8_NAME {
 		t.Fatalf("The record for publisher id 2, was not properly retrived. Retrived %s", publisher)
 	}
 }
@@ -523,7 +523,7 @@ func RunInsertStructReturningKey(TM ITransactionManager, t *testing.T) {
 			t.Fatal("The Auto Insert Key for the ID column was not set")
 		}
 
-		if pub.Version == nil || *pub.Version == 0 {
+		if pub.Version == 0 {
 			t.Fatal("Version column was not set")
 		}
 
@@ -568,7 +568,7 @@ func RunStructUpdate(TM ITransactionManager, t *testing.T) {
 		var publisher Publisher
 		publisher.Name = ext.StrPtr("Untited Editors")
 		publisher.Id = ext.Int64Ptr(1)
-		publisher.Version = ext.Int64Ptr(1)
+		publisher.Version = 1
 		affectedRows, err := store.Update(PUBLISHER).Submit(&publisher) // passing as a pointer
 		if err != nil {
 			t.Fatalf("Failed RunStructUpdate: %s", err)
@@ -578,8 +578,8 @@ func RunStructUpdate(TM ITransactionManager, t *testing.T) {
 			t.Fatal("The record was not updated")
 		}
 
-		if *publisher.Version != 2 {
-			t.Fatalf("Expected Version = 2, got %v", *publisher.Version)
+		if publisher.Version != 2 {
+			t.Fatalf("Expected Version = 2, got %v", publisher.Version)
 		}
 
 		publisher.Name = ext.StrPtr("Super Duper Test")
@@ -592,8 +592,8 @@ func RunStructUpdate(TM ITransactionManager, t *testing.T) {
 			t.Fatal("The record was not Modifyied")
 		}
 
-		if *publisher.Version != 3 {
-			t.Fatalf("Expected Version = 3, got %v", *publisher.Version)
+		if publisher.Version != 3 {
+			t.Fatalf("Expected Version = 3, got %v", publisher.Version)
 		}
 
 		return nil
@@ -619,8 +619,8 @@ func RunStructSaveAndRetrive(TM ITransactionManager, t *testing.T) {
 			t.Fatal("The record was not Saved")
 		}
 
-		if *publisher.Version != 1 {
-			t.Fatalf("Expected Version = 1, got %v", *publisher.Version)
+		if publisher.Version != 1 {
+			t.Fatalf("Expected Version = 1, got %v", publisher.Version)
 		}
 
 		// === check insert ===
@@ -634,8 +634,8 @@ func RunStructSaveAndRetrive(TM ITransactionManager, t *testing.T) {
 			t.Fatal("The record was not Saved")
 		}
 
-		if *publisher.Version != *oldPub.Version {
-			t.Fatalf("Expected same Version = 1, got %v", *oldPub.Version)
+		if publisher.Version != oldPub.Version {
+			t.Fatalf("Expected same Version = 1, got %v", oldPub.Version)
 		}
 
 		// === save update ===
@@ -649,8 +649,8 @@ func RunStructSaveAndRetrive(TM ITransactionManager, t *testing.T) {
 			t.Fatal("The record was not Saved")
 		}
 
-		if *publisher.Version != 2 {
-			t.Fatalf("Expected Version = 2, got %v", *publisher.Version)
+		if publisher.Version != 2 {
+			t.Fatalf("Expected Version = 2, got %v", publisher.Version)
 		}
 
 		// === check update ===
@@ -664,12 +664,12 @@ func RunStructSaveAndRetrive(TM ITransactionManager, t *testing.T) {
 			t.Fatal("The record was not Saved")
 		}
 
-		if *publisher.Version != *oldPub.Version {
-			t.Fatalf("Expected same Version, got %v", *oldPub.Version)
+		if publisher.Version != oldPub.Version {
+			t.Fatalf("Expected same Version, got %v", oldPub.Version)
 		}
 
 		// === check optimistic lock ===
-		*publisher.Version = 1 // invalid version
+		publisher.Version = 1 // invalid version
 		ok, err = store.Save(&publisher)
 		fail, _ := err.(*dbx.OptimisticLockFail)
 		if fail == nil {
@@ -748,7 +748,7 @@ func RunStructDelete(TM ITransactionManager, t *testing.T) {
 
 		var book Book
 		book.Id = ext.Int64Ptr(2)
-		book.Version = ext.Int64Ptr(1)
+		book.Version = 1
 		affectedRows, err := store.Delete(BOOK).Submit(book)
 		if err != nil {
 			t.Fatalf("Failed RunStructDelete (id=2): %s", err)
