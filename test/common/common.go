@@ -95,6 +95,8 @@ func RunAll(TM ITransactionManager, t *testing.T) {
 	RunListFlatTree(TM, t)
 	RunListTreeOf(TM, t)
 	RunListSimple(TM, t)
+	RunSearchedCase(TM, t)
+	RunSimpleCase(TM, t)
 	RunColumnSubquery(TM, t)
 	RunWhereSubquery(TM, t)
 	RunInnerOn(TM, t)
@@ -174,7 +176,7 @@ func ResetDB(TM ITransactionManager) {
 			return err
 		}
 
-		insert.Values(2, 1, "Cookbook", 7.2, time.Date(2013, time.July, 24, 0, 0, 0, 0, time.UTC), 2)
+		insert.Values(2, 1, "Cookbook", 12.5, time.Date(2013, time.July, 24, 0, 0, 0, 0, time.UTC), 2)
 		_, err = insert.Execute()
 		if err != nil {
 			return err
@@ -694,7 +696,7 @@ func RunUpdateSubquery(TM ITransactionManager, t *testing.T) {
 			Column(AsIs(nil)).
 			Where(
 			BOOK_C_PUBLISHER_ID.Matches(Col(BOOK_C_ID).For("a")),
-			BOOK_C_PRICE.Greater(10),
+			BOOK_C_PRICE.Greater(15),
 		)
 
 		affectedRows, err := store.Update(PUBLISHER).Alias("a").
@@ -1042,6 +1044,62 @@ func RunListSimple(TM ITransactionManager, t *testing.T) {
 
 	if len(names) != 2 {
 		t.Fatalf("Expected 2 Publisher names, but got %v", len(names))
+	}
+}
+
+func RunSearchedCase(TM ITransactionManager, t *testing.T) {
+	ResetDB(TM)
+
+	var dtos []struct {
+		Name           string
+		Classification string
+	}
+
+	store := TM.Store()
+	err := store.Query(BOOK).
+		Column(BOOK_C_NAME).
+		Column(
+		If(BOOK_C_PRICE.Greater(20)).Then("expensive").
+			If(BOOK_C_PRICE.Range(10, 20)).Then("normal").
+			Else("cheap").
+			End(),
+	).As("Classification").
+		List(&dtos)
+
+	if err != nil {
+		t.Fatalf("Failed RunSearchedCase: %s", err)
+	}
+
+	if len(dtos) != 3 {
+		t.Fatalf("Expected 3 Books, but got %v", len(dtos))
+	}
+
+	for k, v := range dtos {
+		logger.Debugf("dtos[%v] = %+v", k, v)
+	}
+}
+
+func RunSimpleCase(TM ITransactionManager, t *testing.T) {
+	ResetDB(TM)
+
+	var sale float64
+	store := TM.Store()
+	_, err := store.Query(BOOK).
+		Column(
+		Sum(
+			Case(BOOK_C_NAME).
+				When("Scrapbook").Then(10).
+				Else(AsIs(20)). // showing off AsIs(): value is written as is to the query
+				End(),
+		),
+	).SelectInto(&sale)
+
+	if err != nil {
+		t.Fatalf("Failed RunSimpleCase: %s", err)
+	}
+
+	if sale != 50 {
+		t.Fatalf("Expected sale of 50, but got %v", sale)
 	}
 }
 

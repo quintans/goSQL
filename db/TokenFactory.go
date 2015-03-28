@@ -189,3 +189,11 @@ func SubQuery(sq *Query) *Token {
 func Coalesce(values ...interface{}) *Token {
 	return NewToken(TOKEN_COALESCE, values...)
 }
+
+func If(criteria *Criteria) *SearchedWhen {
+	return NewSearchedCase().If(criteria)
+}
+
+func Case(expression interface{}) *SimpleCase {
+	return NewSimpleCase(expression)
+}

@@ -722,6 +722,20 @@ func (this *GenericTranslator) Init(overrider db.Translator) {
 		return fmt.Sprintf("COALESCE(%s)", RolloverParameter(dmlType, tx, m, ", "))
 	})
 
+	this.RegisterTranslation(db.TOKEN_CASE, func(dmlType db.DmlType, token db.Tokener, tx db.Translator) string {
+		m := token.GetMembers()
+		return fmt.Sprintf("CASE %s END", RolloverParameter(dmlType, tx, m, " "))
+	})
+
+	this.RegisterTranslation(db.TOKEN_CASE_WHEN, func(dmlType db.DmlType, token db.Tokener, tx db.Translator) string {
+		m := token.GetMembers()
+		return fmt.Sprintf("WHEN %s THEN %s", tx.Translate(dmlType, m[0]), tx.Translate(dmlType, m[1]))
+	})
+
+	this.RegisterTranslation(db.TOKEN_CASE_ELSE, func(dmlType db.DmlType, token db.Tokener, tx db.Translator) string {
+		m := token.GetMembers()
+		return fmt.Sprintf("ELSE %s", tx.Translate(dmlType, m[0]))
+	})
 }
 
 func (this *GenericTranslator) RegisterTranslation(name string, handler func(dmlType db.DmlType, token db.Tokener, tx db.Translator) string) {

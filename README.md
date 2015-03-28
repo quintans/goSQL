@@ -11,7 +11,6 @@ a ORM like library in Go (golang) that makes SQL easier to use.
 * [Dependencies](#dependencies)
 * [Instalation](#instalation)
 * [Startup Guide](#startup-guide)
-* [Usage](#usage)
 * [Entity Relation Diagram](#entity-relation-diagram)
 * [Table definition](#table-definition)
 * [Transactions](#transactions)
@@ -37,6 +36,9 @@ a ORM like library in Go (golang) that makes SQL easier to use.
 	* [ListOf](#listof)
 	* [ListFlatTree](#listflattree)
 	* [ListTreeOf](#listtreeof)
+	* [Case Statement](#case-statement)
+        * [Simple CASE](#simple-case)
+        * [Searched CASE](#searched-case)
 	* [Column Subquery](#column-subquery)
 	* [Where Subquery](#where-subquery)
 	* [Joins](#joins)
@@ -234,13 +236,11 @@ func main() {
 
 Something like this is what you will find in [common.go](test/common/common.go).
 
-## Usage
-In this chapter I will try to explain the several aspects of the library using a set of examples.
+In the following chapters I will try to explain the several aspects of the library using a set of examples.
 These examples are supported by tables defined in [tables_mysql.sql](test/mysql/tables_mysql.sql), a MySQL database sql script.
+I will start first by describing the table model and how to map the entities.
 
-Before diving in to the examples I first describe the table model and how to map the entities.
-
-### Entity Relation Diagram
+## Entity Relation Diagram
 ![ER Diagram](test/er.png)
 
 Relationships explained:
@@ -249,7 +249,7 @@ Relationships explained:
 - **Many-to-Many**: One Author can have many Books and one Book can have many Authors
 
 
-### Table definition
+## Table definition
 
 As seen in the [Startup Guide](#startup-guide), mapping a table is pretty straight forward.
 
@@ -338,7 +338,7 @@ The order of the parameters is very important, because they indicate the directi
 The full definition of the tables and the struct entities used in this document are in [entities.go](test/common/entities.go), covering all aspects of table mapping.
 
 
-### Transactions
+## Transactions
 
 To wrap operations inside a transaction we do this:
 
@@ -353,9 +353,9 @@ If an error is returned or panic occurs, the transaction is rolled back, otherwi
 [common.go](test/common/common.go) has several examples of transactions.
 
 
-### Insert Examples
+## Insert Examples
 
-#### Simple Insert
+### Simple Insert
 
 ```go
 insert := Insert(PUBLISHER).
@@ -376,7 +376,7 @@ In this example the value for the `name` parameter is directly supplied in the s
 One example, could be `language` (pt, eng, ...) for internationalized text, or `channel` (web, mobile, ...) for descriptions, etc.
 
 
-#### Insert With a Struct
+### Insert With a Struct
 
 When inserting with a struct, the struct fields are matched with the respective columns.
 
@@ -397,7 +397,7 @@ but this implies that the table was registered with the same alias as the struct
 In both cases the values of the Id and Version fields of the struct are also set if present.
 
 
-#### Insert Returning Generated Key
+### Insert Returning Generated Key
 Any of the above snippets, if the Id field/column is undefined (0 or nil) it returns the generated key by the database.
 
 ```go
@@ -410,9 +410,9 @@ key, _ := store.Insert(PUBLISHER).
 > **Key fields can be as many as we want. If a key field is of the type (*)int64 and single, it is considered to be a auto generated key.**
 
 
-### Update Examples
+## Update Examples
 
-#### Update selected columns with Optimistic lock
+### Update selected columns with Optimistic lock
 
 ```go
 store.Update(PUBLISHER).
@@ -425,7 +425,7 @@ store.Update(PUBLISHER).
 ```
 
 
-#### Update with struct
+### Update with struct
 
 When updating with a struct, the struct fields are matched with the respective columns.
 If a version column is present its value is also updated.
@@ -458,7 +458,7 @@ store.Save(&publisher)
 > Assumes that the table `PUBLISHER` was registered with the name `Publisher`.
 
 
-#### Update with SubQuery
+### Update with SubQuery
 
 This example shows the use of a subquery to do an update, and also the use of `Exists`.
 
@@ -476,9 +476,9 @@ store.Update(PUBLISHER).Alias("a").
 	Execute()
 ```
 
-### Delete Examples
+## Delete Examples
 
-#### Simple Delete
+### Simple Delete
 
 ```go
 store.Delete(BOOK).Where(BOOK_C_ID.Matches(2)).Execute()
@@ -487,7 +487,7 @@ store.Delete(BOOK).Where(BOOK_C_ID.Matches(2)).Execute()
 As we can see the Version column is not taken into account.
 
 
-#### Delete with struct
+### Delete with struct
 
 ```go
 var book Book
@@ -509,13 +509,13 @@ store.Remove(book)
 When deleting with a struct, the presence of a key field is mandatory.
 
 
-### Query Examples
+## Query Examples
 
 The query operation is by far the richest operation of the ones we have seen.
 Query operation that start with `Select*` retrive **one** instance, and those that start with `List*` returns **many** instances.
 
 
-#### SelectInto
+### SelectInto
 
 The result of the query is put in the supplied variables. They must be a pointers.
 
@@ -528,7 +528,7 @@ store.Query(PUBLISHER).
 ```
 
 
-#### SelectTo
+### SelectTo
 
 The result of the query is put in the supplied struct pointer.
 
@@ -551,7 +551,7 @@ store.Retrive(&publisher, 2)
 The supplied keys must be in the same order as they were declared in the table definition.
 
 
-#### SelectTree
+### SelectTree
 
 Executes the query and builds a struct tree, reusing previously obtained entities,
 putting the first element in the supplied struct pointer.
@@ -571,7 +571,7 @@ store.Query(PUBLISHER).
 	SelectTree(&publisher)
 ```
 
-#### SelectFlatTree
+### SelectFlatTree
 
 Executes the query and builds a flat struct tree putting the first element in the supplied struct pointer.
 
@@ -594,7 +594,7 @@ store.Query(PUBLISHER).
 ```
 
 
-#### ListSimple
+### ListSimple
 
 Lists simple variables using a closure to assemble the result list.
 The types for scanning are supplied by the instances parameter.
@@ -610,7 +610,7 @@ store.Query(PUBLISHER).
 ```
 
 
-#### ListInto
+### ListInto
 
 This method is very similar to the previous one, but relies on reflection.
 A function is used to build the result list. The types for row scanning are supplied by the function parameters.
@@ -642,7 +642,7 @@ store.Query(BOOK).
  The target entity is determined by the receiving type of the function.
 
 
-#### List
+### List
 
 Executes a query, putting the result in the slice, passed as an argument.
 
@@ -654,7 +654,7 @@ store.Query(BOOK).
 ```
 
 
-#### ListOf
+### ListOf
 
 Another way of executing the above query would be
 
@@ -676,7 +676,7 @@ for e := books.Enumerator(); e.HasNext(); {
 ```
 
 
-#### ListFlatTree
+### ListFlatTree
 
 Executes a query, putting the result in the slice, passed as an argument.
 
@@ -715,7 +715,7 @@ The responsability of building the result is delegated to the receiving function
 There is another query function named `ListFlatTreeOf` with the same behaviour as `ListFlatTree` but returns a collection.
 
 
-#### ListTreeOf
+### ListTreeOf
 
 Executes a query and transform the results into a tree with the head with the passed struct type.
 It matches the result column alias with the struct field name, building a struct tree.
@@ -738,7 +738,52 @@ for e := publishers.Enumerator(); e.HasNext(); {
 ```
 
 
-#### Column Subquery
+### Case Statement
+
+In the following examples we will demonstrate how to declare
+a Simple CASE statement and a Searched CASE statement.
+
+#### Simple CASE
+
+Sum all books where the book named "Scrapbook" costs 10 and the others cost 20.
+
+```go
+var sale float64
+store := TM.Store()
+_, err := store.Query(BOOK).
+	Column(
+	Sum(
+		Case(BOOK_C_NAME).
+			When("Scrapbook").Then(10).
+			Else(AsIs(20)). // showing off AsIs(): value is written as is to the query
+			End(),
+	),
+).SelectInto(&sale)
+```
+
+#### Searched CASE
+
+Classify the cost of each book.
+
+```go
+var dtos []struct {
+	Name           string
+	Classification string
+}
+
+err := store.Query(BOOK).
+	Column(BOOK_C_NAME).
+	Column(
+	If(BOOK_C_PRICE.Greater(20)).Then("expensive").
+		If(BOOK_C_PRICE.Range(10, 20)).Then("normal").
+		Else("cheap").
+		End(),
+).As("Classification"). // maps to struct field Classification
+	List(&dtos)
+```
+
+
+### Column Subquery
 
 For this example we will use the following struct which will hold the result for each row.
 
@@ -771,7 +816,7 @@ store.Query(PUBLISHER).Alias("p").
 Notice that when I use the subquery variable an alias `"Value"` is defined. This alias matches with a struct field in `Dto`. In this query the `PUBLISHER_C_NAME` column as no associated alias, so the default column alias is used.
 
 
-#### Where Subquery
+### Where Subquery
 
 In this example I get a list of records with the name of the `Publisher`, the name and price of every `Book`, where the price is lesser or equal than 10. The result is put in a slice of `Dto` instances.
 For this a subquery is used in the where clause.
@@ -795,7 +840,7 @@ store.Query(PUBLISHER).
 	List(&dtos)
 ```
 
-#### Joins
+### Joins
 
 The concepts of joins was already introduced in the section [SelectTree](#selecttree) where we can see the use of an outer join.
 In the context of goSQL, a Join is seen has a path of associations that goes from the main table to the target table. Along the way we can apply constraints and/or include columns from the participating tables. These paths can overlap without problem because they are seen as isolated from one another.
@@ -845,7 +890,7 @@ store.Query(BOOK).
 ```
 
 
-#### Group By
+### Group By
 
 For this example I will use the struct defined in [Column Subquery](#column-subquery).
 
@@ -861,7 +906,7 @@ store.Query(PUBLISHER).
 ```
 
 
-#### Having
+### Having
 
 The criteria used in the `Having` clause must refer to columns of the `Query`. This reference is achieved using columns alias.
 To demonstrate this I will use the following struct which will hold the result for each row.
@@ -889,7 +934,7 @@ store.Query(PUBLISHER).
 ```
 
 
-#### Order By
+### Order By
 
 List all publishers, ordering ascending by name.
 
@@ -935,7 +980,7 @@ store.Query(PUBLISHER).
 ```
 
 
-#### Union
+### Union
 
 This example list all `Publishers` and shows side by side the sales of this year and the previous year.
 The function used in `List` is responsible for agregating the result.
@@ -992,7 +1037,7 @@ store.Query(PUBLISHER).
 
 > The alias in the second query is necessary to avoid overlaping replaced parameters between the two queries
 
-#### Pagination
+### Pagination
 
 To paginate the results of a query we use the windowing functions `Skip` and `Limit`.
 
@@ -1008,7 +1053,7 @@ store.Query(PUBLISHER).
 	ListFlatTree(&publishers)
 ```
 
-### Struct Triggers
+## Struct Triggers
 
 It is possible to define methods that are called before/after an insert/update/delete/query to the database.
 
@@ -1039,7 +1084,7 @@ If an error is returned in a Pre trigger the action is not performed.
 To know if a trigger is called inside a transaction use `store.InTransaction()`.
 
 
-### Table Triggers
+## Table Triggers
 
 It is also possible to declare triggers/hooks in the table declaration.
 
@@ -1072,7 +1117,7 @@ upd.GetDb() gets a reference to the IDb instance that is unique by transaction.
 TODO: explain in more detail
 
 
-### Association Discriminator
+## Association Discriminator
 
 An exclusive OR relationship indicates that entity A is related to either entity B or entity C but not both B and C. This is implemented by defining associations with a constraint.
 
@@ -1105,7 +1150,7 @@ store.Query(PROJECT).
 ```
 
 
-### Table Discriminator
+## Table Discriminator
 
 When mapping a table it is possible to declare that the domain of that table only refers to a subset of values of the physical table. This is done by defining a restriction (Discriminator) at the table definition.
 With this we avoid of having to write a **where** condition every time we want to refer to a specific domain.
@@ -1122,7 +1167,7 @@ store.Query(STATUS).
 ```
 
 
-### Custom Functions
+## Custom Functions
 
 The supplied Translators do not have all possible functions of all the databases, but one can register quite easily any missing standard SQL function or even a custom function.
 
@@ -1175,7 +1220,7 @@ store.Query(BOOK).
 ```
 
 
-### Native SQL
+## Native SQL
 
 It is possible to execute native SQL. The the next example demonstrates the execution of a MariaDB query.
 
