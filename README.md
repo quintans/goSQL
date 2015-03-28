@@ -109,7 +109,7 @@ store.Modify(&publisher)
 ```
 <br>
 Besides the examples in this page there are a lot more examples in the
-[Kanban taskboard](quintans/taskboard) specifically [here](quintans/taskboard/blob/master/biz/impl/TaskBoardService.go).
+[Kanban taskboard](/quintans/taskboard) specifically [here](/quintans/taskboard/blob/master/biz/impl/TaskBoardService.go).
 
 ## Features
 
