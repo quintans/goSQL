@@ -66,7 +66,8 @@ Structs can be used as a representation of a table record for CRUD operations bu
 This library is not locked to any database vendor. This database abstraction is achieved by what I called _Translators_. Translators for MySQL, PostgreSQL, FirebirdSQL and Oracle are provided.
 These Translators can be extended  by registering functions to implement functionality not covered by the initial Translators or customize to something specific to a project.
 
-This library is supported by a mapping system that enables you to avoid writing any SQL text.
+This library is supported by a mapping system that enables you to avoid writing any SQL text, and if you are using an editor with auto-complete it will be easy to write your SQL.
+
 References to your database schema are located in one place, avoiding a major pain when you have to refactor your database.
 
 An example of the syntax is as follows:
@@ -106,6 +107,8 @@ and the shorter version...
 ```go
 store.Modify(&publisher)
 ```
+<br>
+Besides the examples in this page there are a lot more examples in the [Kanban taskboard](taskboard) specifically [here](TaskBoardService.go).
 
 ## Features
 
@@ -235,6 +238,8 @@ func main() {
 ```
 
 Something like this is what you will find in [common.go](test/common/common.go).
+
+<br>
 
 In the following chapters I will try to explain the several aspects of the library using a set of examples.
 These examples are supported by tables defined in [tables_mysql.sql](test/mysql/tables_mysql.sql), a MySQL database sql script.
