@@ -186,12 +186,14 @@ func (this *Query) Count(column interface{}) *Query {
 	return this.Column(Count(column))
 }
 
-func (this *Query) Column(column interface{}) *Query {
-	this.lastToken = tokenizeOne(column)
-	this.replaceRaw(this.lastToken)
+func (this *Query) Column(columns ...interface{}) *Query {
+	for _, column := range columns {
+		this.lastToken = tokenizeOne(column)
+		this.replaceRaw(this.lastToken)
 
-	this.lastToken.SetTableAlias(this.tableAlias)
-	this.Columns = append(this.Columns, this.lastToken)
+		this.lastToken.SetTableAlias(this.tableAlias)
+		this.Columns = append(this.Columns, this.lastToken)
+	}
 
 	this.rawSQL = nil
 
