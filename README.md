@@ -30,9 +30,9 @@ a ORM like library in Go (golang) that makes SQL easier to use.
 	* [SelectTo](#selectto)
 	* [SelectTree](#selectTree)
 	* [SelectFlatTree](#selectflattree)
+	* [List](#list)
 	* [ListSimple](#listsimple)
 	* [ListInto](#listinto)
-	* [List](#list)
 	* [ListOf](#listof)
 	* [ListFlatTree](#listflattree)
 	* [ListTreeOf](#listtreeof)
@@ -533,7 +533,6 @@ store.Query(PUBLISHER).
 	SelectInto(&name)
 ```
 
-
 ### SelectTo
 
 The result of the query is put in the supplied struct pointer.
@@ -599,10 +598,41 @@ store.Query(PUBLISHER).
 	SelectFlatTree(&publisher)
 ```
 
+### List
+
+Executes a query, putting the result into a **slice**.
+
+```go
+var books []Book  // []*Book is also valid
+store.Query(BOOK).
+	All().
+	Where(BOOK_C_NAME.Like("%book"))
+	List(&books)
+```
+
+As a side note, the WHERE condition can be declared outside the query.
+Imagine the following example. I want to list published books that have a certain name, that I do not know at runtime.
+I only want to include the name condition only if the suppliyed name filter in not empty.
+The code could be something like this:
+
+```go
+c := BOOK_C_PUBLISHED.IsNull().Not()
+// bookName is some input field unknow at runtime
+if bookName != "" {
+	// insenstive case like
+	c = c.And(T.USER_C_NAME.ILike("%" + bookName + "%"))
+}
+
+var names []string  // []*string is also valid
+store.Query(BOOK).
+	Column(BOOK_C_NAME).
+	Where(c).
+	List(&names)
+```
 
 ### ListSimple
 
-Lists simple variables using a closure to assemble the result list.
+Lists simple variables using a closure to assemble the result list, or to do some work.
 The types for scanning are supplied by the instances parameter.
 
 ```go
@@ -646,18 +676,6 @@ store.Query(BOOK).
 ```
 
  The target entity is determined by the receiving type of the function.
-
-
-### List
-
-Executes a query, putting the result in the slice, passed as an argument.
-
-```go
-var books []Book  // []*Book is also valid
-store.Query(BOOK).
-	All().
-	List(&books)
-```
 
 
 ### ListOf
@@ -1231,10 +1249,11 @@ store.Query(BOOK).
 It is possible to execute native SQL. The the next example demonstrates the execution of a MariaDB query.
 
 ```go
-	// get the database connection
-	dba := dbx.NewSimpleDBA(TM.Store().GetConnection())
-	var result []string
-	_, err := dba.QueryInto("select `name` from `book` where `name` like ?", func(name string) {
+// get the database connection
+dba := dbx.NewSimpleDBA(TM.Store().GetConnection())
+var result []string
+_, err := dba.QueryInto("select `name` from `book` where `name` like ?",
+	func(name string) { // we calso use pointers: func(name *string)
 		result = append(result, name)
 	}, "%book")
 ```
@@ -1250,22 +1269,21 @@ If for some reason you want more control you can use the following.
 // get the database connection
 dba := dbx.NewSimpleDBA(TM.Store().GetConnection())
 result := make([]string, 0)
-dba.QueryClosure("select `name` from `book` where `name` like ?", func(rows *sql.Rows) error {
-	var name string
-	rows.Scan(&name); err != nil {
-		return err
-	}
-	result = append(result, name)
-	return nil
-}, "%book")
+dba.QueryClosure("select `name` from `book` where `name` like ?",
+	func(rows *sql.Rows) error {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return err
+		}
+		result = append(result, name)
+		return nil
+	}, "%book")
 ```
 
 Please see the source code for other methods...
 
 
 # Credits
-
-
 
 
 # TODO

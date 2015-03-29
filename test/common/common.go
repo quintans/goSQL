@@ -90,10 +90,11 @@ func RunAll(TM ITransactionManager, t *testing.T) {
 	RunSelectTree(TM, t)
 	RunSelectTreeTwoBranches(TM, t)
 	RunSelectFlatTree(TM, t)
-	RunList(TM, t)
+	RunListInto(TM, t)
 	RunListOf(TM, t)
 	RunListFlatTree(TM, t)
 	RunListTreeOf(TM, t)
+	RunListForSlice(TM, t)
 	RunListSimple(TM, t)
 	RunSearchedCase(TM, t)
 	RunSimpleCase(TM, t)
@@ -872,7 +873,7 @@ func RunSelectFlatTree(TM ITransactionManager, t *testing.T) {
 	}
 }
 
-func RunList(TM ITransactionManager, t *testing.T) {
+func RunListInto(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	store := TM.Store()
@@ -1023,6 +1024,30 @@ func RunListTreeOf(TM ITransactionManager, t *testing.T) {
 			if len(publisher.Books) != 2 {
 				t.Fatalf("The list of books for the publisher with id 2 was incorrectly retrived. Expected 2 got %v", len(publisher.Books))
 			}
+		}
+	}
+}
+
+func RunListForSlice(TM ITransactionManager, t *testing.T) {
+	ResetDB(TM)
+
+	store := TM.Store()
+	var names []string
+	err := store.Query(PUBLISHER).
+		Column(PUBLISHER_C_NAME).
+		List(&names)
+	if err != nil {
+		t.Fatalf("Failed RunListSlice: %s", err)
+	}
+
+	if len(names) != 2 {
+		t.Fatalf("Expected 2 Publisher names, but got %v", len(names))
+	}
+
+	for k, v := range names {
+		logger.Debugf("names[%v] = %s", k, v)
+		if v == "" {
+			t.Fatalf("Expected a value for names[%v], but got an empty string", k)
 		}
 	}
 }
@@ -1645,9 +1670,10 @@ func RunRawSQL1(TM ITransactionManager, t *testing.T) {
 	dba := dbx.NewSimpleDBA(TM.Store().GetConnection())
 	var result []string
 
-	_, err := dba.QueryInto(RAW_SQL, func(name string) { // we calso use pointers: func(name *string)
-		result = append(result, name)
-	}, "%book")
+	_, err := dba.QueryInto(RAW_SQL,
+		func(name string) { // we calso use pointers: func(name *string)
+			result = append(result, name)
+		}, "%book")
 
 	if err != nil {
 		t.Fatalf("Failed TestRawSQL1: %s", err)
@@ -1668,14 +1694,15 @@ func RunRawSQL2(TM ITransactionManager, t *testing.T) {
 	dba := dbx.NewSimpleDBA(TM.Store().GetConnection())
 	var result []string
 
-	err := dba.QueryClosure(RAW_SQL, func(rows *sql.Rows) error {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			return err
-		}
-		result = append(result, name)
-		return nil
-	}, "%book")
+	err := dba.QueryClosure(RAW_SQL,
+		func(rows *sql.Rows) error {
+			var name string
+			if err := rows.Scan(&name); err != nil {
+				return err
+			}
+			result = append(result, name)
+			return nil
+		}, "%book")
 
 	if err != nil {
 		t.Fatalf("Failed TestRawSQL2: %s", err)

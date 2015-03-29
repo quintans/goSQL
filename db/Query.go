@@ -787,22 +787,33 @@ func (this *Query) ListTreeOf(template tk.Hasher) (coll.Collection, error) {
 //
 //This method does not create a tree of related instances.
 func (this *Query) List(target interface{}) error {
-	caller, typ, ok := checkSlice(target)
+	caller, typ, isStruct, ok := checkSlice(target)
 	if !ok {
 		return errors.New(fmt.Sprintf("goSQL: Expected a slice of type *[]*struct. Got %s", typ.String()))
 	}
 
-	_, err := this.list(NewEntityFactoryTransformer(this, typ, caller))
-	return err
+	if isStruct {
+		_, err := this.list(NewEntityFactoryTransformer(this, typ, caller))
+		return err
+	} else {
+		holder := reflect.New(typ).Interface()
+		return this.listClosure(func(rows *sql.Rows) error {
+			if err := rows.Scan(holder); err != nil {
+				return err
+			}
+			caller(reflect.ValueOf(holder).Elem())
+			return nil
+		})
+	}
 }
 
-func checkSlice(i interface{}) (func(val reflect.Value) reflect.Value, reflect.Type, bool) {
+func checkSlice(i interface{}) (func(val reflect.Value) reflect.Value, reflect.Type, bool, bool) {
 	arr := reflect.ValueOf(i)
 	// pointer to the slice
 	if arr.Kind() == reflect.Ptr {
 		arr = arr.Elem()
 	} else {
-		return nil, nil, false
+		return nil, nil, false, false
 	}
 
 	// slice element
@@ -810,9 +821,10 @@ func checkSlice(i interface{}) (func(val reflect.Value) reflect.Value, reflect.T
 	if arr.Kind() == reflect.Slice {
 		typ = arr.Type().Elem()
 	} else {
-		return nil, nil, false
+		return nil, nil, false, false
 	}
 
+	isStruct := typ.Kind() == reflect.Struct || typ.Kind() == reflect.Ptr && typ.Elem().Kind() == reflect.Struct
 	ptrElem := (typ.Kind() == reflect.Ptr)
 	if !ptrElem {
 		typ = reflect.PtrTo(typ) // get the pointer
@@ -835,7 +847,7 @@ func checkSlice(i interface{}) (func(val reflect.Value) reflect.Value, reflect.T
 		return reflect.Value{}
 	}
 
-	return slicer, typ, true
+	return slicer, typ, isStruct, true
 }
 
 func checkCollector(collector interface{}) (func(val reflect.Value) reflect.Value, reflect.Type, bool) {
@@ -904,8 +916,8 @@ func (this *Query) ListFlatTreeOf(template interface{}) (coll.Collection, error)
 //The argument must be a function with the signature func(<<*>struct>) or a slice like *[]<*>struct.
 //See also List.
 func (this *Query) ListFlatTree(target interface{}) error {
-	caller, typ, ok := checkSlice(target)
-	if !ok {
+	caller, typ, isStruct, ok := checkSlice(target)
+	if !ok || !isStruct {
 		caller, typ, ok = checkCollector(target)
 		if !ok {
 			return errors.New(fmt.Sprintf("goSQL: Expected a slice of type *[]<*>struct or a function with the signature func(<<*>struct>). got %s", typ.String()))
