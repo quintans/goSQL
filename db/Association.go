@@ -67,6 +67,7 @@ type Association struct {
 }
 
 var _ tk.Base = &Association{}
+var _ tk.Clonable = &Association{}
 
 func NewAssociationCopy(fk *Association) *Association {
 	this := new(Association)
@@ -251,7 +252,8 @@ func (this *Association) String() string {
 }
 
 func (this *Association) Clone() interface{} {
-	return NewAssociationCopy(this)
+	a := NewAssociationCopy(this)
+	return a
 }
 
 func (this *Association) Equals(o interface{}) bool {

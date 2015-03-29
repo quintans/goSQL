@@ -49,7 +49,9 @@ func (this *Criteria) SetRight(right interface{}) {
 
 func (this *Criteria) Clone() interface{} {
 	c := NewCriteria(this.Operator)
-	c.Token = this.Token.Clone().(*Token)
+	// Deep cloning
+	//c.Token = this.Token.Clone().(*Token)
+	c.Token = this.Token
 
 	if this.IsNot {
 		c.Not()

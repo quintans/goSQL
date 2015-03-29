@@ -343,7 +343,6 @@ func (this *DmlBase) addJoin(associations []*PathElement, common []*PathElement,
 			} else {
 				fkAlias = this.joinBag.GetAlias(lastFk)
 			}
-			fmt.Println("===> fkAlias:", fkAlias)
 
 			if deriveds[f].IsMany2Many() {
 				fromFk := deriveds[f].FromM2M

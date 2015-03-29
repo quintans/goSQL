@@ -33,7 +33,6 @@ func tokenizeAll(values []interface{}) []Tokener {
 }
 
 type Tokener interface {
-	//tk.Base
 	tk.Clonable
 
 	GetAlias() string
@@ -168,20 +167,32 @@ func (this *Token) Clone() interface{} {
 	token.Operator = this.Operator
 	token.Alias = this.Alias
 
+	/*
+		// Deep cloning
+		if this.Members != nil {
+			otherMembers := make([]Tokener, len(this.Members))
+			for i, o := range this.Members {
+				// it may contains others. ex: param("foo")
+				otherMembers[i] = o.Clone().(Tokener)
+			}
+			token.Members = otherMembers
+		} else if this.Value != nil {
+			// value
+			if t, ok := this.Value.(tk.Clonable); ok {
+				token.Value = t.Clone()
+			} else {
+				token.Value = this.Value
+			}
+		}
+	*/
 	if this.Members != nil {
 		otherMembers := make([]Tokener, len(this.Members))
 		for i, o := range this.Members {
-			// it may contains others. ex: param("foo")
-			otherMembers[i] = o.Clone().(Tokener)
+			otherMembers[i] = o
 		}
 		token.Members = otherMembers
-	} else if this.Value != nil {
-		// value
-		if t, ok := this.Value.(tk.Clonable); ok {
-			token.Value = t.Clone()
-		} else {
-			token.Value = this.Value
-		}
+	} else {
+		token.Value = this.Value
 	}
 	return token
 }

@@ -153,8 +153,7 @@ func Count(column interface{}) *Token {
 	if column == nil {
 		return NewEndToken(TOKEN_COUNT, nil)
 	}
-	token := tokenizeOne(column)
-	return NewToken(TOKEN_COUNT_COLUMN, token)
+	return NewToken(TOKEN_COUNT_COLUMN, column)
 }
 
 func Rtrim(token interface{}) *Token {
