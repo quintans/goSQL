@@ -405,7 +405,7 @@ pub.Name = ...
 store.Create(&pub)
 ```
 
-More detail on inserting with structs can be found [here](#Insert-with-a-struct).
+More detail on inserting with structs can be found [here](#insert-with-a-struct).
 
 ### Retrive
 
