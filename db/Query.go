@@ -783,7 +783,8 @@ func (this *Query) ListTreeOf(template tk.Hasher) (coll.Collection, error) {
 	return this.list(NewEntityTreeTransformer(this, true, template))
 }
 
-//Executes a query, putting the result in a slice, passed as an argument
+//Executes a query, putting the result in a slice, passed as an argument.
+// The slice element slice can be a struct or a primitive (ex: string).
 //
 //This method does not create a tree of related instances.
 func (this *Query) List(target interface{}) error {
@@ -976,14 +977,18 @@ func (this *Query) selectTree(typ interface{}, reuse bool) (interface{}, error) 
 
 //The first result of the query is put in the passed struct.
 //Returns true if a result was found, false if no result
-func (this *Query) SelectTo(typ interface{}) (bool, error) {
-	res, err := this.selectTransformer(NewEntityTransformer(this, typ))
+func (this *Query) SelectTo(instance interface{}) (bool, error) {
+	res, err := this.selectTransformer(NewEntityTransformer(this, instance))
 	if err != nil {
 		return false, err
 	}
 	if res != nil {
-		tk.Set(typ, res)
+		tk.Set(instance, res)
 		return true, nil
+	}
+	// remove previous marks
+	if t, ok := instance.(Markable); ok {
+		t.Unmark()
 	}
 	return false, nil
 }
@@ -1028,6 +1033,10 @@ func (this *Query) selectTreeTo(instance interface{}, reuse bool) (bool, error) 
 	if res != nil {
 		tk.Set(instance, res)
 		return true, nil
+	}
+	// remove previous marks
+	if t, ok := instance.(Markable); ok {
+		t.Unmark()
 	}
 	return false, nil
 }

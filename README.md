@@ -14,6 +14,14 @@ a ORM like library in Go (golang) that makes SQL easier to use.
 * [Entity Relation Diagram](#entity-relation-diagram)
 * [Table definition](#table-definition)
 * [Transactions](#transactions)
+* [Quick CRUD](#quick-crud)
+	* [Create](#create)
+	* [Retrive](#retrive)
+	* [FindFirst](#findfirst)
+	* [FindAll](#findall)
+	* [Update](#update)
+	* [Delete](#delete)
+	* [Tracking changed fields](#tracking-changed-fields)
 * [Insert Examples](#insert-examples)
 	* [Simple Insert](#simple-insert)
 	* [Insert With a Struct](#insert-with-a-struct)
@@ -73,7 +81,7 @@ References to your database schema are located in one place, avoiding a major pa
 An example of the syntax is as follows:
 
 ```go
-var publisher = Publisher{}
+var publisher Publisher
 store.Query(PUBLISHER).
 	All().
 	Where(PUBLISHER_C_ID.Matches(2)).
@@ -89,7 +97,7 @@ store.Retrive(&publisher, 2)
 We are not restricted to the use of structs as demonstrated by the next snippet
 
 ```go
-var name *string
+var name string
 store.Query(PUBLISHER).
 	Column(PUBLISHER_C_NAME).
 	Where(PUBLISHER_C_ID.Matches(2)).
@@ -114,16 +122,15 @@ Besides the examples in this page there are a lot more examples in the
 ## Features
 
  - SQL DSL
+ - CRUD actions using structs
  - Simple join declaration
  - Populate struct tree with query results containing joins
  - Subqueries
  - Automatic setting of primary keys for inserts
- - Automatic version increment
+ - Optimistic Locking with automatic version increment
  - Database Abstraction
  - Transactions
- - Optimistic Locking
  - Result Pagination
- - Quick CRUD actions
  - Pre/Post insert/update/delete Struct triggers
  - Support for primitive pointer types like `*string`, `*int64`, `*float64`, `*bool`, etc
  - Support for types implementing `driver.Valuer` and `sql.Scanner` interface, like NullString, etc
@@ -150,7 +157,7 @@ I used the one in https://github.com/go-sql-driver/mysql
 
 So lets get started.
 
-Create the table `PUBLISHER` in a MySQL database called `goSQL`.
+Create the table `PUBLISHER` in a MySQL database called `gosql`.
 Of course the database name can be changed and configured to something else.
 
 ```sql
@@ -168,6 +175,8 @@ DEFAULT CHARSET=utf8;
 And the code is
 
 ```go
+package main
+
 import (
 	. "github.com/quintans/goSQL/db"
 	"github.com/quintans/goSQL/dbx"
@@ -181,9 +190,9 @@ import (
 
 // the entity
 type Publisher struct {
-	Id      *int64
-	Version *int64
-	Name    *string
+	Id      int64
+	Version int64
+	Name    string
 }
 
 // table description/mapping
@@ -199,7 +208,7 @@ var TM ITransactionManager
 
 func init() {
 	// database configuration
-	mydb, err := sql.Open("mysql", "root:root@/goSQL?parseTime=true")
+	mydb, err := sql.Open("mysql", "root:root@/gosql?parseTime=true")
 	if err != nil {
 		panic(err)
 	}
@@ -223,36 +232,35 @@ func main() {
 	// get the databse context
 	store := TM.Store()
 	// the target entity
-	var publisher = Publisher{}
-
-	_, err := store.Query(PUBLISHER).
-		All().
-		Where(PUBLISHER_C_ID.Matches(2)).
-		SelectTo(&publisher)
-
+	var publisher Publisher
+	// Retrive
+	_, err := store.Retrive(&publisher, 2)
 	if err != nil {
 		panic(err)
 	}
 
-	fmt.Printf("%s", publisher)
+	fmt.Println(publisher)
 }
 ```
 
-Something like this is what you will find in [common.go](test/common/common.go).
+Source from [intro.go](intro.go).
+
+You can also check out [common.go](test/common/common.go) for a lot more examples.
 
 <br>
 
 In the following chapters I will try to explain the several aspects of the library using a set of examples.
 These examples are supported by tables defined in [tables_mysql.sql](test/mysql/tables_mysql.sql), a MySQL database sql script.
+
 I will start first by describing the table model and how to map the entities.
 
 ## Entity Relation Diagram
 ![ER Diagram](test/er.png)
 
 Relationships explained:
-- **One-to-Many**: One Publisher can have many Books and one Book has one Publisher.
-- **One-to-One**: One Book has one Book_Bin (Hardcover) - binary data is stored in a separated table - and one Book_Bin has one Book.
-- **Many-to-Many**: One Author can have many Books and one Book can have many Authors
+- **One-to-Many**: One `PUBLISHER` can have many `BOOK`s and one `BOOK` has one `PUBLISHER`.
+- **One-to-One**: One `BOOK` has one `BOOK_BIN` (Hardcover) - binary data is stored in a separated table - and one `BOOK_BIN` has one `BOOK`.
+- **Many-to-Many**: One `AUTHOR` can have many `BOOK`s and one `BOOK` can have many `AUTHOR`s.
 
 
 ## Table definition
@@ -272,7 +280,7 @@ var PUBLISHER_C_NAME = PUBLISHER.COLUMN("NAME")     // implicit map to field 'Na
 ```
 
 By default, the result value for this column will be put in the field `Name` of the target struct.
-If we wish for a different alias we use the `.As("...")` at the end resulting in:
+If we wish for a different alias we use the `.As(...)` at the end resulting in:
 
 ```go
 var PUBLISHER_C_NAME = PUBLISHER.COLUMN("NAME").As("Other") // map to field 'Other'
@@ -315,7 +323,26 @@ The `.As("Books")` part indicates that when transforming a query result to a str
 the `Books` field to put the transformation part regarding to the `BOOK` entity.
 The Association knows nothing about the multiplicity of its edges.
 This association only covers going from `PUBLISHER` to `BOOK`. If we want to go from `BOOK` to `PUBLISHER` we
-need to declare the reverse association.
+need to declare the reverse association in the table `BOOK` mapping.
+
+In a association with multiple keys columns we just declare the following:
+
+```go
+var PARENT_A_CHILDREN = PARENT.
+			ASSOCIATE(PARENT_C_ID1, PARENT_C_ID2).
+			TO(CHILD_C_PARENT_ID1, CHILD_C_PARENT_ID2).
+			As("Children")
+```
+
+and the reverse association
+
+```go
+var CHILD_A_PARENT = CHILD.
+			ASSOCIATE(CHILD_C_PARENT_ID1, CHILD_C_PARENT_ID2).
+			TO(PARENT_C_ID1, PARENT_C_ID2).
+			As("Parent")
+```
+
 
 **Declaring a Composite association.**
 
@@ -354,10 +381,147 @@ TM.Transaction(func(store IDb) error {
 });
 ```
 
-If an error is returned or panic occurs, the transaction is rolled back, otherwise is commited.
+If an error is returned or a panic occurs, the transaction is rolled back, otherwise is commited.
 
 [common.go](test/common/common.go) has several examples of transactions.
 
+## Quick CRUD
+
+The following methods are a way to use structs for quick CRUD operations over the database.
+They have a short syntax but they are not as powerful as the long version,
+missing certain features like ordering, greater than, etc
+
+For this operations to work the table must be registered with the same alias as the struct name.
+In this case the table `PUBLISHER` is registered with the name `Publisher`.
+
+See the table mappings [here](test/common/common.go)
+
+### Create
+
+```go
+var pub Publisher
+pub.Name = ...
+(...)
+store.Create(&pub)
+```
+
+More detail on inserting with structs can be found [here](#Insert-with-a-struct).
+
+### Retrive
+
+```go
+store.Retrive(&publisher, 2)
+```
+
+If there are multiple keys for a table, the supplied keys must be in the same order as they were declared in the table definition.
+
+When using `Retrive`, if there is a struct field with the tag `sql:"omit"` its value will not be retrived.
+The strcut `Àuthor` has this tag in the field `Secret`.
+
+More detail on selecting one instance with structs can be found [here](#selectto).
+
+### FindFirst
+
+```go
+var book Book
+store.FindFirst(&book, Book{PublisherId: ext.Int64(1)})
+```
+
+Retrives the first record where `PublisherId` is 1.
+The same rules of `Retrive()` apply.
+
+### FindAll
+
+```go
+var books []Book
+store.FindAll(&books, Book{PublisherId: ext.Int64(2)})
+```
+
+Retrives all the records where `PublisherId` is 2.
+The same rules of `Retrive()` apply.
+
+### Update
+
+```go
+var publisher Publisher
+publisher.Name = ...
+(...)
+store.Modify(&publisher)
+```
+
+There is also another interesting method that does a Insert or an Update, depending on the value of the version field.
+If the field version is zero or nil an insert is issued, otherwise is an update.
+
+```go
+store.Save(&publisher)
+```
+
+More detail on updating with structs can be found [here](#update-with-struct).
+
+### Delete
+
+This removes only the book with the matching Id.
+If the version field is present it is also used in the matching criteria.
+
+```go
+var book Book
+book.Id = ...
+(...)
+store.Remove(&book)
+```
+
+The following example removes all records that match the criteria defined by the non zero values of the struct.
+
+```go
+store.RemoveAll(Project{StatusCod: ext.String("DEV")})
+```
+
+More detail on deleting with structs can be found [here](#delete-with-struct).
+
+### Tracking changed fields
+When using only struct fields we have no way to select the fields to include in SQL statement.
+All fields are used (excepts the ones with `sql:"omit"`), even the ones we did not change.
+To get around this we need to keep track the changed fields.
+If there is no changed field, then all fields are used in the SQL statement.
+
+This tracking only applies to updates and inserts.
+
+We track this fields by:
+* adding the anonymous struct `db.Marker` to the struct entity
+* for every field add a setter
+* inside each setter register the field as changed.
+
+As an example, we show the setter for the field `Price` of `Book`.
+
+First `Book` is defined as:
+
+```go
+type Book struct {
+	Marker
+	(...)
+}
+```
+
+And the `Price` setter is:
+
+```go
+func (this *Book) SetPrice(price float64) {
+	this.Price = price
+	this.Mark("Price") // marks the field for update
+}
+```
+
+The normal flow for an update would be:
+
+```go
+var book Book
+store.Retrive(&book, 1)
+book.SetPrice(book.Price * 0.8) // marked for change
+store.Modify(&book)
+```
+
+Since we only changed the `Price` field, only the `PRICE` column will be included in the update.
+(In reality, the `VERSION` column is also included in the due to the optimistic locking.)
 
 ## Insert Examples
 
@@ -388,19 +552,15 @@ When inserting with a struct, the struct fields are matched with the respective 
 
 ```go
 var pub Publisher
-pub.Name = ext.StrPtr("Untited Editors")
+pub.Name = ext.String("Untited Editors")
 store.Insert(PUBLISHER).Submit(&pub) // passing as a pointer
 ```
 
-A shorter version would be
+The `Id` and `Version` fields of the struct are updated if they exist present.
 
-```go
-store.Create(&pub)
-```
+> **Key fields can be as many as we want. If a key field is of the type (*)int64 and single, it is considered to be a auto generated key.**
 
-but this implies that the table was registered with the same alias as the struct name. In this case is `Publisher`.
-
-In both cases the values of the Id and Version fields of the struct are also set if present.
+A shorter version is the quick CRUD operation [Create](#create)
 
 
 ### Insert Returning Generated Key
@@ -412,9 +572,6 @@ key, _ := store.Insert(PUBLISHER).
 	Values(nil, 1, "New Editions").
 	Execute()
 ```
-
-> **Key fields can be as many as we want. If a key field is of the type (*)int64 and single, it is considered to be a auto generated key.**
-
 
 ## Update Examples
 
@@ -430,17 +587,16 @@ store.Update(PUBLISHER).
 ).Execute()
 ```
 
-
 ### Update with struct
 
 When updating with a struct, the struct fields are matched with the respective columns.
-If a version column is present its value is also updated.
-The generated SQL will include all columns.
+The presence of a key field is mandatory.
+If a version column is present its value is also incremented.
 
 ```go
 var publisher Publisher
-publisher.Name = ext.StrPtr("Untited Editors")
-publisher.Id = ext.Int64Ptr(1)      // identifies the record.
+publisher.Name = ext.String("Untited Editors")
+publisher.Id = ext.Int64(1)      // identifies the record.
 publisher.Version = 1   // for optimistic locking
 store.Update(PUBLISHER).Submit(&publisher) // passing as a pointer
 ```
@@ -448,20 +604,10 @@ store.Update(PUBLISHER).Submit(&publisher) // passing as a pointer
 In this example we are using the `publisher.Id` as a pointer, but it could be a value.
 When using values zero is considered unassigned. If that breaks your business logic, use pointers.
 
-A shorter version would be
+The generated SQL will include all matching columns unless the struct has a field tagged with `sql:"omit"` and its value is a zero value.
+Generaly `sql:"omit"` is used for fields with sensitive information, like passwords.
 
-```go
-store.Modify(&publisher)
-```
-
-There is also another interesting method that does a Insert or an Update, depending on the value of the version field.
-If the field version is zero or nil an insert is issued, otherwise is an update.
-
-```go
-store.Save(&publisher)
-```
-
-> Assumes that the table `PUBLISHER` was registered with the name `Publisher`.
+A shorter version is the quick CRUD operation [Update](#update)
 
 
 ### Update with SubQuery
@@ -497,33 +643,27 @@ As we can see the Version column is not taken into account.
 
 ```go
 var book Book
-book.Id = ext.Int64Ptr(2)
+book.Id = ext.Int64(2)
 book.Version = 1
 store.Delete(BOOK).Submit(book)
 ```
 
-Althougt we are using `Book` to execute the delete, any struct with a fields named `Id` could be used. `Version` could also be present.
+Althougt we are using `Book` to execute the delete, any struct with a fields named `Id` , pointer or not, could be used. `Version` could also be present.
+The presence of a key field is mandatory.
 
-Shorter Version for the last instruction:
-
-```go
-store.Remove(book)
-```
-
-> Assumes that the table `BOOK` was registered with the name `Book`.
-
-When deleting with a struct, the presence of a key field is mandatory.
+A shorter version is the quick CRUD operation [Delete](#delete)
 
 
 ## Query Examples
 
 The query operation is by far the richest operation of the ones we have seen.
+
 Query operation that start with `Select*` retrive **one** instance, and those that start with `List*` returns **many** instances.
 
 
 ### SelectInto
 
-The result of the query is put in the supplied variables. They must be a pointers.
+The result of the query is put in the supplied variables. They must be pointers.
 
 ```go
 var name string
@@ -545,16 +685,7 @@ store.Query(PUBLISHER).
 	SelectTo(&publisher)
 ```
 
-The short version, that internally uses the previous query, is:
-
-```go
-store.Retrive(&publisher, 2)
-```
-
-> Assumes that the table `PUBLISHER` was registered with the name `Publisher`.
-
-The supplied keys must be in the same order as they were declared in the table definition.
-
+A shorter version is the quick CRUD operation [Retrive](#retrive)
 
 ### SelectTree
 
@@ -1246,7 +1377,7 @@ store.Query(BOOK).
 
 ## Native SQL
 
-It is possible to execute native SQL. The the next example demonstrates the execution of a MariaDB query.
+It is possible to execute native SQL. The the next example demonstrates the execution of a MySQL query.
 
 ```go
 // get the database connection
@@ -1261,7 +1392,7 @@ _, err := dba.QueryInto("select `name` from `book` where `name` like ?",
 In the previous example we could have used pointers in the receiving function: `func(name *string)`.
 The receiving function must have the same number of arguments as the number of columns in the query, in the same order and type.
 Using native SQL has the drawback of your query not being portable nor easy refactored.
-For example the prepared statement placeholder for MariaDB is '?' while for PostgreSQL is '$1'.
+For example the prepared statement placeholder for MySQL is '?' while for PostgreSQL is '$1'.
 
 If for some reason you want more control you can use the following.
 

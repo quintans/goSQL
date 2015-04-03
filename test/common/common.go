@@ -72,12 +72,19 @@ func InitDB(driverName, dataSourceName string, translator Translator) (ITransact
 
 const (
 	PUBLISHER_UTF8_NAME = "Edições Lusas"
+	AUTHOR_UTF8_NAME    = "Graça Tostão"
 	LANG                = "pt"
 	BOOK_LANG_TITLE     = "Era uma vez..."
 )
 
 func RunAll(TM ITransactionManager, t *testing.T) {
 	RunSelectUTF8(TM, t)
+	RunRetrive(TM, t)
+	RubFindFirst(TM, t)
+	RunFindAll(TM, t)
+	RunOmitField(TM, t)
+	RunModifyField(TM, t)
+	RunRemoveAll(TM, t)
 	RunInsertReturningKey(TM, t)
 	RunInsertStructReturningKey(TM, t)
 	RunSimpleUpdate(TM, t)
@@ -238,20 +245,20 @@ func ResetDB(TM ITransactionManager) {
 
 		// insert Author
 		insert = DB.Insert(AUTHOR).
-			Columns(AUTHOR_C_ID, AUTHOR_C_VERSION, AUTHOR_C_NAME).
-			Values(1, 1, "John Doe")
+			Columns(AUTHOR_C_ID, AUTHOR_C_VERSION, AUTHOR_C_NAME, AUTHOR_C_SECRET).
+			Values(1, 1, "John Doe", "@xpto")
 		_, err = insert.Execute()
 		if err != nil {
 			return err
 		}
 
-		insert.Values(2, 1, "Jane Doe")
+		insert.Values(2, 1, "Jane Doe", "947590245")
 		_, err = insert.Execute()
 		if err != nil {
 			return err
 		}
 
-		insert.Values(3, 1, "Graça Tostão")
+		insert.Values(3, 1, AUTHOR_UTF8_NAME, "#$%&!")
 		_, err = insert.Execute()
 		if err != nil {
 			return err
@@ -437,9 +444,125 @@ func RunSelectUTF8(TM ITransactionManager, t *testing.T) {
 		SelectTo(&publisher)
 
 	if err != nil {
-		t.Fatalf("%s", err)
+		t.Fatalf("Failed RunSelectUTF8: %s", err)
 	} else if !ok || *publisher.Id != 2 || publisher.Version != 1 || *publisher.Name != PUBLISHER_UTF8_NAME {
 		t.Fatalf("The record for publisher id 2, was not properly retrived. Retrived %s", publisher)
+	}
+}
+
+func RunRetrive(TM ITransactionManager, t *testing.T) {
+	ResetDB(TM)
+
+	// get the database context
+	store := TM.Store()
+	// the target entity
+	var author Author
+	ok, err := store.Retrive(&author, 3)
+	if err != nil {
+		t.Fatalf("Failed RunRetrive: %s", err)
+	}
+	if !ok || *author.Id != 3 || author.Version != 1 || *author.Name != AUTHOR_UTF8_NAME {
+		t.Fatalf("Failed RunRetrive: The record for publisher id 3, was not properly retrived. Retrived %s", author.String())
+	}
+	if author.Secret != nil {
+		t.Fatalf("Failed RunRetrive: Expected secret to be nil, found %s", *author.Secret)
+	}
+}
+
+func RubFindFirst(TM ITransactionManager, t *testing.T) {
+	ResetDB(TM)
+
+	// get the database context
+	store := TM.Store()
+	// the target entity
+	var book Book
+	ok, err := store.FindFirst(&book, Book{PublisherId: ext.Int64(1)})
+	if err != nil {
+		t.Fatalf("Failed RubFindFirst: %s", err)
+	}
+	if !ok {
+		t.Fatalf("Failed RubFindFirst: Expected 1 books, got none.")
+	}
+}
+
+func RunFindAll(TM ITransactionManager, t *testing.T) {
+	ResetDB(TM)
+
+	// get the database context
+	store := TM.Store()
+	// the target entity
+	var books []Book
+	err := store.FindAll(&books, Book{PublisherId: ext.Int64(2)})
+	if err != nil {
+		t.Fatalf("Failed RunFindAll: %s", err)
+	}
+	if len(books) != 2 {
+		t.Fatalf("Failed RunFindAll: Expected 2 books, got %s", len(books))
+	}
+}
+
+func RunOmitField(TM ITransactionManager, t *testing.T) {
+	ResetDB(TM)
+
+	// get the database context
+	store := TM.Store()
+	var author = Author{}
+	ok, err := store.Retrive(&author, 1)
+	if !ok || err != nil {
+		t.Fatalf("Failed RunOmitField: Unable to Retrive - %s", err)
+	}
+	if author.Secret != nil {
+		t.Fatal("Failed RunOmitField: Author.Secret was retrived")
+	}
+	name := "Paulo Quintans"
+	author.Name = &name
+	ok, err = store.Modify(&author)
+	if !ok || err != nil {
+		t.Fatalf("Failed RunOmitField: Failed Modify - %s", err)
+	}
+
+	// check the unchanged value of secret
+	var auth Author
+	ok, err = store.Query(AUTHOR).All().Where(AUTHOR_C_ID.Matches(1)).SelectTo(&auth)
+	if !ok || err != nil {
+		t.Fatalf("Failed RunOmitField: Unable to query - %s", err)
+	}
+	if *auth.Name != name || auth.Secret == nil {
+		t.Fatalf("Failed RunOmitField: failed to modify using an omited field. Name: %v, Secret: %v, Author: %s", *auth.Name, auth.Secret, &auth)
+	}
+}
+
+func RunModifyField(TM ITransactionManager, t *testing.T) {
+	ResetDB(TM)
+
+	// get the database context
+	store := TM.Store()
+	var book Book
+	store.Retrive(&book, 1)
+	price := book.Price * 0.8
+	book.SetPrice(price)
+	ok, err := store.Modify(&book)
+	if !ok || err != nil {
+		t.Fatalf("Failed RunModifyField: Unable to query - %s", err)
+	}
+	store.Retrive(&book, 1)
+	if book.Price != price {
+		t.Fatalf("Failed RunModifyField: Expected price %v, got %v", price, book.Price)
+	}
+}
+
+func RunRemoveAll(TM ITransactionManager, t *testing.T) {
+	ResetDB2(TM)
+
+	// get the database context
+	store := TM.Store()
+	// the target entity
+	affected, err := store.RemoveAll(Project{StatusCod: ext.String("DEV")})
+	if err != nil {
+		t.Fatalf("Failed RunRemoveAll: %s", err)
+	}
+	if affected != 2 {
+		t.Fatalf("Failed RunRemoveAll: Expected 2 deleted Projects, got %s", affected)
 	}
 }
 
@@ -490,7 +613,7 @@ func RunInsertStructReturningKey(TM ITransactionManager, t *testing.T) {
 	var err error
 	if err = TM.Transaction(func(store IDb) error {
 		var pub Publisher
-		pub.Name = ext.StrPtr("Untited Editors")
+		pub.Name = ext.String("Untited Editors")
 		key, err := store.Insert(PUBLISHER).Submit(&pub) // passing as a pointer
 		if err != nil {
 			return err
@@ -505,7 +628,7 @@ func RunInsertStructReturningKey(TM ITransactionManager, t *testing.T) {
 		}
 
 		var pubPtr = new(Publisher)
-		pubPtr.Name = ext.StrPtr("Untited Editors")
+		pubPtr.Name = ext.String("Untited Editors")
 		key, err = store.Insert(PUBLISHER).Submit(pubPtr)
 		if err != nil {
 			return err
@@ -516,7 +639,7 @@ func RunInsertStructReturningKey(TM ITransactionManager, t *testing.T) {
 		}
 
 		pub = Publisher{}
-		pubPtr.Name = ext.StrPtr("Untited Editors")
+		pubPtr.Name = ext.String("Untited Editors")
 		err = store.Create(&pub)
 		if err != nil {
 			return err
@@ -569,8 +692,8 @@ func RunStructUpdate(TM ITransactionManager, t *testing.T) {
 	var err error
 	if err = TM.Transaction(func(store IDb) error {
 		var publisher Publisher
-		publisher.Name = ext.StrPtr("Untited Editors")
-		publisher.Id = ext.Int64Ptr(1)
+		publisher.Name = ext.String("Untited Editors")
+		publisher.Id = ext.Int64(1)
 		publisher.Version = 1
 		affectedRows, err := store.Update(PUBLISHER).Submit(&publisher) // passing as a pointer
 		if err != nil {
@@ -585,7 +708,7 @@ func RunStructUpdate(TM ITransactionManager, t *testing.T) {
 			t.Fatalf("Expected Version = 2, got %v", publisher.Version)
 		}
 
-		publisher.Name = ext.StrPtr("Super Duper Test")
+		publisher.Name = ext.String("Super Duper Test")
 		ok, err := store.Modify(&publisher)
 		if err != nil {
 			t.Fatalf("Failed RunStructUpdate: %s", err)
@@ -612,7 +735,7 @@ func RunStructSaveAndRetrive(TM ITransactionManager, t *testing.T) {
 	if err = TM.Transaction(func(store IDb) error {
 		var publisher Publisher
 		// === save insert ===
-		publisher.Name = ext.StrPtr("Super Duper Test")
+		publisher.Name = ext.String("Super Duper Test")
 		ok, err := store.Save(&publisher)
 		if err != nil {
 			t.Fatalf("Failed RunStructSaveAndRetrive: %s", err)
@@ -642,7 +765,7 @@ func RunStructSaveAndRetrive(TM ITransactionManager, t *testing.T) {
 		}
 
 		// === save update ===
-		publisher.Name = ext.StrPtr("UPDDATE: Super Duper Test")
+		publisher.Name = ext.String("UPDDATE: Super Duper Test")
 		ok, err = store.Save(&publisher)
 		if err != nil {
 			t.Fatalf("Failed RunStructSaveAndRetrive: %s", err)
@@ -750,7 +873,7 @@ func RunStructDelete(TM ITransactionManager, t *testing.T) {
 		store.Delete(BOOK_BIN).Where(BOOK_BIN_C_ID.Matches(2)).Execute()
 
 		var book Book
-		book.Id = ext.Int64Ptr(2)
+		book.Id = ext.Int64(2)
 		book.Version = 1
 		affectedRows, err := store.Delete(BOOK).Submit(book)
 		if err != nil {
@@ -1289,7 +1412,7 @@ func RunOuterFetchOrder(TM ITransactionManager, t *testing.T) {
 
 	book := pub.Books[0]
 	if len(book.Authors) != 1 {
-		t.Fatalf("Expected 1 Author for Book %s, but got %v", *book.Name, len(book.Authors))
+		t.Fatalf("Expected 1 Author for Book %s, but got %v", book.Name, len(book.Authors))
 	}
 
 	pub = publishers[1]
@@ -1299,12 +1422,12 @@ func RunOuterFetchOrder(TM ITransactionManager, t *testing.T) {
 
 	book = pub.Books[0]
 	if len(book.Authors) != 2 {
-		t.Fatalf("Expected 2 Author for Book %s, but got %v", *book.Name, len(book.Authors))
+		t.Fatalf("Expected 2 Author for Book %s, but got %v", book.Name, len(book.Authors))
 	}
 
 	book = pub.Books[1]
 	if len(book.Authors) != 2 {
-		t.Fatalf("Expected 2 Author for Book %s, but got %v", *book.Name, len(book.Authors))
+		t.Fatalf("Expected 2 Author for Book %s, but got %v", book.Name, len(book.Authors))
 	}
 
 	if *book.Authors[0].Id != 2 {
@@ -1356,7 +1479,7 @@ func RunOuterFetchOrderAs(TM ITransactionManager, t *testing.T) {
 
 	book := pub.Books[0]
 	if len(book.Authors) != 1 {
-		t.Fatalf("Expected 1 Author for Book %s, but got %v", *book.Name, len(book.Authors))
+		t.Fatalf("Expected 1 Author for Book %s, but got %v", book.Name, len(book.Authors))
 	}
 
 	pub = publishers[1]
@@ -1366,12 +1489,12 @@ func RunOuterFetchOrderAs(TM ITransactionManager, t *testing.T) {
 
 	book = pub.Books[0]
 	if len(book.Authors) != 2 {
-		t.Fatalf("Expected 2 Author for Book %s, but got %v", *book.Name, len(book.Authors))
+		t.Fatalf("Expected 2 Author for Book %s, but got %v", book.Name, len(book.Authors))
 	}
 
 	book = pub.Books[1]
 	if len(book.Authors) != 2 {
-		t.Fatalf("Expected 2 Author for Book %s, but got %v", *book.Name, len(book.Authors))
+		t.Fatalf("Expected 2 Author for Book %s, but got %v", book.Name, len(book.Authors))
 	}
 
 	if *book.Authors[0].Id != 2 {
@@ -1572,8 +1695,8 @@ func RunTableDiscriminator(TM ITransactionManager, t *testing.T) {
 
 	var tmp int64
 	status := statuses[0]
-	status.Code = ext.StrPtr("X")
-	status.Description = ext.StrPtr("Unknown")
+	status.Code = ext.String("X")
+	status.Description = ext.String("Unknown")
 	tmp, err = store.Update(STATUS).Submit(status)
 	if err != nil {
 		t.Fatalf("Failed Update in TestTableDiscriminator: %s", err)
@@ -1591,8 +1714,8 @@ func RunTableDiscriminator(TM ITransactionManager, t *testing.T) {
 	}
 
 	status = new(Status)
-	status.Code = ext.StrPtr("X")
-	status.Description = ext.StrPtr("Unknown")
+	status.Code = ext.String("X")
+	status.Description = ext.String("Unknown")
 	tmp, err = store.Insert(STATUS).Submit(status)
 	if err != nil {
 		t.Fatalf("Failed Insert in TestTableDiscriminator: %s", err)

@@ -126,6 +126,13 @@ func (this *Insert) Submit(instance interface{}) (int64, error) {
 		elem = elem.Elem()
 	}
 
+	var marks map[string]bool
+	markable, isMarkable := instance.(Markable)
+	if isMarkable {
+		marks = markable.Marks()
+	}
+	useMarks := len(marks) > 0
+
 	var version int64 = 1
 	for e := this.table.GetColumns().Enumerator(); e.HasNext(); {
 		column := e.Next().(*Column)
@@ -134,8 +141,9 @@ func (this *Insert) Submit(instance interface{}) (int64, error) {
 		} else {
 			bp := mappings[column.GetAlias()]
 			if bp != nil {
+				var marked = !useMarks || marks[column.GetAlias()]
 				v := bp.Get(elem)
-				if v.IsValid() {
+				if v.IsValid() && (!useMarks || marked) {
 					if v.Kind() == reflect.Ptr && v.IsNil() {
 						this.Set(column, nil)
 					} else {
@@ -195,6 +203,10 @@ func (this *Insert) Submit(instance interface{}) (int64, error) {
 	// post trigger
 	if t, isT := instance.(PostInserter); isT {
 		t.PostInsert(this.GetDb())
+	}
+
+	if isMarkable {
+		markable.Unmark()
 	}
 
 	return key, nil

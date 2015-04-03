@@ -10,6 +10,7 @@ type EntityProperty struct {
 	Type      reflect.Type
 	InnerType reflect.Type
 	Key       bool
+	Tag       reflect.StructTag
 }
 
 func (this *EntityProperty) New() reflect.Value {
@@ -88,14 +89,13 @@ func walkTreeStruct(prefix string, typ reflect.Type, attrs map[string]*EntityPro
 				}
 				attrs[key] = ep
 				ep.FieldName = p.Name
+				ep.Tag = p.Tag
 				// we want pointers. only pointer are addressable
 				if p.Type.Kind() == reflect.Ptr || p.Type.Kind() == reflect.Slice || p.Type.Kind() == reflect.Array {
 					ep.Type = p.Type
 				} else {
 					ep.Type = reflect.PtrTo(p.Type)
 				}
-				// we want pointers too
-				//ep.Type = p.Type
 
 				if p.Type.Kind() == reflect.Slice || p.Type.Kind() == reflect.Array {
 					ep.InnerType = p.Type.Elem()

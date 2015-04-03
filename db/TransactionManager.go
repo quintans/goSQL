@@ -159,5 +159,5 @@ func (this TransactionManager) WithoutTransaction(handler func(db IDb) error) er
 */
 
 func (this *TransactionManager) Store() IDb {
-	return this.dbFactory(BoolPtr(false), this.database)
+	return this.dbFactory(Bool(false), this.database)
 }

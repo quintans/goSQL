@@ -15,6 +15,41 @@ var logger = log.LoggerFor("github.com/quintans/goSQL/db")
 var OPTIMISTIC_LOCK_MSG = "No update was possible for this version of the data. Data may have changed."
 var VERSION_SET_MSG = "Unable to set Version data."
 
+const (
+	sqlOmitionKey = "sql"
+	sqlOmitionVal = "omit"
+)
+
+// Interface that a struct must implement to inform what columns where changed
+type Markable interface {
+	// Retrive property names that were changed
+	//
+	// return names of the changed properties
+	Marks() map[string]bool
+	Unmark()
+}
+
+type Marker struct {
+	changes map[string]bool
+}
+
+var _ Markable = &Marker{}
+
+func (this *Marker) Mark(mark string) {
+	if this.changes == nil {
+		this.changes = make(map[string]bool)
+	}
+	this.changes[mark] = true
+}
+
+func (this *Marker) Marks() map[string]bool {
+	return this.changes
+}
+
+func (this *Marker) Unmark() {
+	this.changes = nil
+}
+
 type IDb interface {
 	GetTranslator() Translator
 	GetConnection() dbx.IConnection
@@ -27,8 +62,11 @@ type IDb interface {
 
 	Create(instance interface{}) error
 	Retrive(instance interface{}, keys ...interface{}) (bool, error)
+	FindFirst(instance interface{}, example interface{}) (bool, error)
+	FindAll(instance interface{}, example interface{}) error
 	Modify(instance interface{}) (bool, error)
 	Remove(instance interface{}) (bool, error)
+	RemoveAll(instance interface{}) (int64, error)
 	Save(instance interface{}) (bool, error) // Create or Modify
 
 	GetAttribute(string) (interface{}, bool)
@@ -51,11 +89,6 @@ type Db struct {
 	inTx       *bool
 	Connection dbx.IConnection
 	Translator Translator
-
-	lastInsert *Insert
-	lastUpdate *Update
-	lastDelete *Delete
-	lastQuery  *Query
 
 	attributes map[string]interface{}
 }
@@ -92,95 +125,167 @@ func (this *Db) Update(table *Table) *Update {
 	return NewUpdate(this, table)
 }
 
-func (this *Db) getLastInsert(table *Table) *Insert {
-	var dml *Insert
-	if this.lastInsert != nil && this.lastInsert.GetTable().Equals(table) {
-		dml = this.lastInsert
-	} else {
-		dml = this.Overrider.Insert(table)
-		this.lastInsert = dml
-	}
-	return dml
-}
-
-func (this *Db) getLastUpdate(table *Table) *Update {
-	var dml *Update
-	if this.lastUpdate != nil && this.lastUpdate.GetTable().Equals(table) {
-		dml = this.lastUpdate
-	} else {
-		dml = this.Overrider.Update(table)
-		this.lastUpdate = dml
-	}
-	return dml
-}
-
-func structName(instance interface{}) (*Table, error) {
+// finds the registered table for the passed struct
+func structName(instance interface{}) (*Table, reflect.Type, error) {
 	typ := reflect.TypeOf(instance)
+	// slice
+	if typ.Kind() == reflect.Slice {
+		typ = typ.Elem()
+	} else if typ.Kind() == reflect.Ptr && typ.Elem().Kind() == reflect.Slice {
+		typ = typ.Elem().Elem()
+	}
+
 	if typ.Kind() == reflect.Ptr {
 		typ = typ.Elem()
 	}
 	tab, ok := Tables.Get(Str(typ.Name()))
 	if !ok {
-		return nil, errors.New("There is no table mapped to " + typ.Name())
+		// tries to find using also the strcut package.
+		// The package correspondes to the database schema
+		tab, ok = Tables.Get(Str(typ.PkgPath() + "." + typ.Name()))
+		if !ok {
+			return nil, nil, errors.New("There is no table mapped to " + typ.Name())
+		}
 	}
 
-	return tab.(*Table), nil
+	return tab.(*Table), typ, nil
 }
 
 func (this *Db) Create(instance interface{}) error {
-	table, err := structName(instance)
+	table, _, err := structName(instance)
 	if err != nil {
 		return err
 	}
 
-	// get insert from cache
-	var dml = this.getLastInsert(table)
+	var dml = this.Overrider.Insert(table)
+
 	_, err = dml.Submit(instance)
 	return err
 }
 
+// struct field with `sql:"omit"` should be ignored if value is zero in an update.
+// in a Retrive, this field with this tag is also ignored
+func acceptColumn(table *Table, t reflect.Type, handler func(*Column)) {
+	mappings := PopulateMapping("", t)
+	cols := table.GetColumns().Elements()
+	for _, e := range cols {
+		column := e.(*Column)
+		bp, ok := mappings[column.GetAlias()]
+		if ok {
+			if bp.Tag.Get(sqlOmitionKey) != sqlOmitionVal {
+				handler(column)
+			}
+		}
+	}
+}
+
 func (this *Db) Retrive(instance interface{}, keys ...interface{}) (bool, error) {
-	table, err := structName(instance)
+	table, t, err := structName(instance)
 	if err != nil {
 		return false, err
 	}
 
-	// get query from cache
-	var dml *Query
-	if this.lastQuery != nil && this.lastQuery.GetTable().Equals(table) {
-		dml = this.lastQuery
-	} else {
-		dml = this.Overrider.Query(table)
-		this.lastQuery = dml
-	}
+	var dml = this.Overrider.Query(table)
+	acceptColumn(table, t, func(c *Column) {
+		dml.Column(c)
+	})
 
 	criterias := make([]*Criteria, 0)
 	pos := 0
 	for e := table.GetKeyColumns().Enumerator(); e.HasNext(); {
 		column := e.Next().(*Column)
-		if column.IsKey() {
-			if len(keys) > pos {
-				criterias = append(criterias, column.Matches(keys[pos]))
-			}
-			pos++
+		if len(keys) > pos {
+			criterias = append(criterias, column.Matches(keys[pos]))
 		}
+		pos++
 	}
 
 	if len(criterias) > 0 {
-		dml.Where(And(criterias...))
+		dml.Where(criterias...)
 	}
 
 	return dml.SelectTo(instance)
 }
 
+func isZero(x interface{}) bool {
+	if x == nil {
+		return true
+	} else {
+		v := reflect.TypeOf(x)
+		if v.Kind() != reflect.Slice && v.Kind() != reflect.Struct {
+			return x == reflect.Zero(v).Interface()
+		}
+	}
+	return false
+}
+
+func acceptField(tag reflect.StructTag, v interface{}) bool {
+	return tag.Get(sqlOmitionKey) != sqlOmitionVal || !isZero(v)
+}
+
+func buildCriteria(table *Table, example interface{}) []*Criteria {
+	criterias := make([]*Criteria, 0)
+
+	s := reflect.ValueOf(example)
+	t := reflect.TypeOf(example)
+	mappings := PopulateMapping("", t)
+	cols := table.GetColumns().Elements()
+	for _, e := range cols {
+		column := e.(*Column)
+		bp, ok := mappings[column.GetAlias()]
+		if ok {
+			v := bp.Get(s).Interface()
+			if !isZero(v) {
+				criterias = append(criterias, column.Matches(v))
+			}
+		}
+	}
+	return criterias
+}
+
+func (this *Db) find(instance interface{}, example interface{}) (*Query, error) {
+	table, t, err := structName(instance)
+	if err != nil {
+		return nil, err
+	}
+
+	query := this.Overrider.Query(table)
+	acceptColumn(table, t, func(c *Column) {
+		query.Column(c)
+	})
+
+	criterias := buildCriteria(table, example)
+	if len(criterias) > 0 {
+		query.Where(criterias...)
+	}
+
+	return query, nil
+}
+
+func (this *Db) FindFirst(instance interface{}, example interface{}) (bool, error) {
+	query, err := this.find(instance, example)
+	if err != nil {
+		return false, err
+	}
+	return query.Limit(1).
+		SelectTo(instance)
+}
+
+func (this *Db) FindAll(instance interface{}, example interface{}) error {
+	query, err := this.find(instance, example)
+	if err != nil {
+		return err
+	}
+	return query.List(instance)
+}
+
 func (this *Db) Modify(instance interface{}) (bool, error) {
-	table, err := structName(instance)
+	table, _, err := structName(instance)
 	if err != nil {
 		return false, err
 	}
 
-	// get Update from cache
-	var dml = this.getLastUpdate(table)
+	var dml = this.Overrider.Update(table)
 
 	var key int64
 	key, err = dml.Submit(instance)
@@ -188,39 +293,49 @@ func (this *Db) Modify(instance interface{}) (bool, error) {
 }
 
 func (this *Db) Remove(instance interface{}) (bool, error) {
-	table, err := structName(instance)
+	table, _, err := structName(instance)
 	if err != nil {
 		return false, err
 	}
 
-	// get Delete from cache
-	var dml *Delete
-	if this.lastDelete != nil && this.lastDelete.GetTable().Equals(table) {
-		dml = this.lastDelete
-	} else {
-		dml = this.Overrider.Delete(table)
-		this.lastDelete = dml
-	}
+	var dml = this.Overrider.Delete(table)
 
 	var deleted int64
 	deleted, err = dml.Submit(instance)
 	return deleted != 0, err
 }
 
-/*
-Inserts or Updates a record depending on the value of the Version value.
-If version is nil or zero, an insert is issue, otherwise an update.
-If there is no version column it returns an error.
-*/
+// removes all that match the criteria defined by the non zero values by the struct.
+func (this *Db) RemoveAll(instance interface{}) (int64, error) {
+	table, _, err := structName(instance)
+	if err != nil {
+		return 0, err
+	}
+
+	var dml = this.Overrider.Delete(table)
+	criterias := buildCriteria(table, instance)
+	if len(criterias) > 0 {
+		dml.Where(criterias...)
+	}
+
+	var deleted int64
+	deleted, err = dml.Execute()
+	return deleted, err
+}
+
+//Inserts or Updates a record depending on the value of the Version.
+//
+//If version is nil or zero, an insert is issue, otherwise an update.
+//If there is no version column it returns an error.
 func (this *Db) Save(instance interface{}) (bool, error) {
-	table, err := structName(instance)
+	table, _, err := structName(instance)
 	if err != nil {
 		return false, err
 	}
 
 	verColumn := table.GetVersionColumn()
 	if verColumn == nil {
-		return false, errors.New(fmt.Sprintf("The mapped table %s, does not have a mapped version column.", table.GetName()))
+		return false, errors.New(fmt.Sprintf("The mapped table %s, must have a mapped version column.", table.GetName()))
 	}
 
 	// find column
@@ -243,10 +358,10 @@ func (this *Db) Save(instance interface{}) (bool, error) {
 	ver := v.Int()
 
 	if ver == 0 {
-		k, err := this.getLastInsert(table).Submit(instance)
+		k, err := this.Overrider.Insert(table).Submit(instance)
 		return k != 0, err
 	} else {
-		k, err := this.getLastUpdate(table).Submit(instance)
+		k, err := this.Overrider.Update(table).Submit(instance)
 		return k != 0, err
 	}
 }

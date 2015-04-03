@@ -157,10 +157,11 @@ var (
 var _ tk.Hasher = &Book{}
 
 type Book struct {
+	Marker
 	EntityBase
 
-	Name        *string
-	Price       *float64
+	Name        string
+	Price       float64
 	Published   *time.Time
 	PublisherId *int64
 	Publisher   *Publisher // this is filled is a join fetch
@@ -168,6 +169,26 @@ type Book struct {
 	BookBin     *BookBin
 
 	Title *string
+}
+
+func (this *Book) SetName(name string) {
+	this.Name = name
+	this.Mark("Name")
+}
+
+func (this *Book) SetPrice(price float64) {
+	this.Price = price
+	this.Mark("Price")
+}
+
+func (this *Book) SetPublished(published *time.Time) {
+	this.Published = published
+	this.Mark("Published")
+}
+
+func (this *Book) SetPublisherId(id *int64) {
+	this.PublisherId = id
+	this.Mark("PublisherId")
 }
 
 func (this *Book) String() string {
@@ -263,8 +284,9 @@ var _ tk.Hasher = &Author{}
 type Author struct {
 	EntityBase
 
-	Name  *string
-	Books []*Book
+	Name   *string
+	Books  []*Book
+	Secret *string `sql:"omit"`
 }
 
 func (this *Author) String() string {
@@ -298,6 +320,7 @@ var (
 	AUTHOR_C_ID      = AUTHOR.KEY("ID")
 	AUTHOR_C_VERSION = AUTHOR.VERSION("VERSION")
 	AUTHOR_C_NAME    = AUTHOR.COLUMN("NAME")
+	AUTHOR_C_SECRET  = AUTHOR.COLUMN("SECRET")
 
 	AUTHOR_A_BOOKS = NewM2MAssociation(
 		"Books",
