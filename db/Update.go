@@ -90,6 +90,13 @@ func (this *Update) Submit(instance interface{}) (int64, error) {
 		elem = elem.Elem()
 	}
 
+	var marks map[string]bool
+	markable, isMarkable := instance.(Markable)
+	if isMarkable {
+		marks = markable.Marks()
+	}
+	useMarks := len(marks) > 0
+
 	for e := this.table.GetColumns().Enumerator(); e.HasNext(); {
 		column := e.Next().(*Column)
 		alias := column.GetAlias()
@@ -135,12 +142,15 @@ func (this *Update) Submit(instance interface{}) (int64, error) {
 					verColumn = column
 				}
 			} else {
-				if val.IsValid() {
+				var marked = useMarks && marks[column.GetAlias()]
+				if val.IsValid() && (!useMarks || marked) {
 					var isNil bool
 					if val.Kind() == reflect.Ptr {
 						isNil = val.IsNil()
 						if isNil {
-							this.Set(column, nil)
+							if marked || acceptField(bp.Tag, nil) {
+								this.Set(column, nil)
+							}
 						} else {
 							val = val.Elem()
 						}
@@ -154,9 +164,13 @@ func (this *Update) Submit(instance interface{}) (int64, error) {
 							if err != nil {
 								return 0, err
 							}
-							this.Set(column, value)
+							if marked || acceptField(bp.Tag, value) {
+								this.Set(column, value)
+							}
 						default:
-							this.Set(column, v)
+							if marked || acceptField(bp.Tag, v) {
+								this.Set(column, v)
+							}
 						}
 					}
 				}
@@ -195,6 +209,10 @@ func (this *Update) Submit(instance interface{}) (int64, error) {
 	// post trigger
 	if t, isT := instance.(PostUpdater); isT {
 		t.PostUpdate(this.GetDb())
+	}
+
+	if isMarkable {
+		markable.Unmark()
 	}
 
 	return affectedRows, nil
