@@ -92,6 +92,7 @@ type SimpleCase struct {
 func NewSimpleCase(expression interface{}) *SimpleCase {
 	this := new(SimpleCase)
 	this.expression = expression
+	this.whens = make([]*SimpleWhen, 0)
 	return this
 }
 
