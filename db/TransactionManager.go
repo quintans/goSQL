@@ -85,6 +85,10 @@ type TransactionManager struct {
 	stmtCache *cache.LRUCache
 }
 
+// NewTransactionManager creates a new Transaction Manager
+// database is the connection pool
+// dbFactory is a database connection factory. This factory accepts boolean flag that indicates if the created IDb is still valid.
+// This may be useful if an Entity holds a reference to the IDb to do lazy loading.
 func NewTransactionManager(database *sql.DB, dbFactory func(inTx *bool, c dbx.IConnection) IDb, capacity int) *TransactionManager {
 	this := new(TransactionManager)
 	this.database = database
@@ -96,7 +100,7 @@ func NewTransactionManager(database *sql.DB, dbFactory func(inTx *bool, c dbx.IC
 }
 
 func (this *TransactionManager) Transaction(handler func(db IDb) error) error {
-	logger.Debugf("Transaction Begin")
+	logger.Debugf("Transaction begin")
 	tx, err := this.database.Begin()
 
 	if err != nil {
@@ -105,7 +109,7 @@ func (this *TransactionManager) Transaction(handler func(db IDb) error) error {
 	defer func() {
 		err := recover()
 		if err != nil {
-			//logger.Fatalf("Transaction error: %s\n%s", err, debug.Stack())
+			logger.Debug("Transaction end in panic: ROLLBACK")
 			tx.Rollback()
 			panic(err) // up you go
 		}
@@ -120,10 +124,10 @@ func (this *TransactionManager) Transaction(handler func(db IDb) error) error {
 	err = handler(this.dbFactory(inTx, myTx))
 	*inTx = false
 	if err == nil {
-		logger.Debugf("%s", "COMMIT")
+		logger.Debug("Transaction end: COMMIT")
 		tx.Commit()
 	} else {
-		logger.Debugf("%s", "ROLLBACK")
+		logger.Debug("Transaction end: ROLLBACK")
 		tx.Rollback()
 	}
 	return err
