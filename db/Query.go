@@ -831,7 +831,11 @@ func checkSlice(i interface{}) (func(val reflect.Value) reflect.Value, reflect.T
 		typ = reflect.PtrTo(typ) // get the pointer
 	}
 
-	slice := reflect.New(arr.Type()).Elem()
+	// A non initialized array is the same as nil,
+	// so a slice is created so that it can be different from nil.
+	slice := reflect.MakeSlice(arr.Type(), 0, 0)
+	arr.Set(slice)
+	//slice := reflect.New(arr.Type()).Elem()
 	slicer := func(val reflect.Value) reflect.Value {
 		var v reflect.Value
 		// slice elements are pointers
