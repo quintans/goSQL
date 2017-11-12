@@ -2,13 +2,14 @@ package db
 
 import (
 	"fmt"
-	"github.com/quintans/goSQL/dbx"
-	tk "github.com/quintans/toolkit"
-	"github.com/quintans/toolkit/log"
 	"reflect"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/quintans/goSQL/dbx"
+	tk "github.com/quintans/toolkit"
+	"github.com/quintans/toolkit/log"
 )
 
 var lgr = log.LoggerFor("github.com/quintans/goSQL/db")
@@ -514,7 +515,7 @@ func (this *DmlBase) dumpParameters(params map[string]interface{}) string {
 func (this *DmlBase) debugTime(when time.Time, depth int) {
 	elapsed := time.Since(when)
 	if lgr.IsActive(log.DEBUG) {
-		lgr.CallerAt(depth + 1).Debug(func() string {
+		lgr.CallerAt(depth+1).Debugf("%s", func() string {
 			return fmt.Sprintf("executed in: %f secs", elapsed.Seconds())
 		})
 	}
@@ -523,7 +524,7 @@ func (this *DmlBase) debugTime(when time.Time, depth int) {
 func (this *DmlBase) debugSQL(sql string, depth int) {
 	if lgr.IsActive(log.DEBUG) {
 		dump := this.dumpParameters(this.parameters)
-		lgr.CallerAt(depth + 1).Debug(func() string {
+		lgr.CallerAt(depth+1).Debugf("%s", func() string {
 			return fmt.Sprintf("\n\t%T SQL: %s\n\tparameters: %s",
 				this, sql, dump)
 		})
