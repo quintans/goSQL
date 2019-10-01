@@ -2,6 +2,7 @@ package common
 
 import (
 	"io/ioutil"
+	"strings"
 
 	. "github.com/quintans/goSQL/db"
 	"github.com/quintans/goSQL/dbx"
@@ -16,8 +17,8 @@ import (
 var logger = log.LoggerFor("github.com/quintans/goSQL/test")
 
 // custom Db - for setting default parameters
-func NewMyDb(inTx *bool, connection dbx.IConnection, translator Translator, lang string) *MyDb {
-	baseDb := NewDb(inTx, connection, translator)
+func NewMyDb(connection dbx.IConnection, translator Translator, lang string) *MyDb {
+	baseDb := NewDb(connection, translator)
 	return &MyDb{baseDb, lang}
 }
 
@@ -46,28 +47,60 @@ func init() {
 
 var RAW_SQL string
 
-func InitDB(driverName, dataSourceName string, translator Translator) (ITransactionManager, *sql.DB) {
-	mydb, err := sql.Open(driverName, dataSourceName)
+func InitDB(t *testing.T, driverName, dataSourceName string, translator Translator, initSqlFile string) (ITransactionManager, *sql.DB) {
+	mydb, err := Connect(driverName, dataSourceName)
 	if err != nil {
-		panic(err)
+		t.Fatal(err)
 	}
 
-	// wake up the database pool
-	err = mydb.Ping()
-	if err != nil {
-		panic(err)
-	}
+	CreateTables(t, mydb, initSqlFile)
 
 	return NewTransactionManager(
 		// database
 		mydb,
 		// databse context factory
-		func(inTx *bool, c dbx.IConnection) IDb {
-			return NewMyDb(inTx, c, translator, "pt")
+		func(c dbx.IConnection) IDb {
+			return NewMyDb(c, translator, "pt")
 		},
 		// statement cache
 		1000,
 	), mydb
+}
+
+func Connect(driverName, dataSourceName string) (*sql.DB, error) {
+	mydb, err := sql.Open(driverName, dataSourceName)
+	if err != nil {
+		return nil, err
+	}
+
+	// wake up the database pool
+	err = mydb.Ping()
+	if err != nil {
+		return nil, err
+	}
+	return mydb, nil
+}
+
+func CreateTables(t *testing.T, db *sql.DB, initSqlFile string) {
+	logger.Infof("******* Creating tables *******\n")
+
+	sql, err := ioutil.ReadFile(initSqlFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	stmts := strings.Split(string(sql), ";\n")
+
+	for _, stmt := range stmts {
+		stmt = strings.TrimSpace(stmt)
+		logger.Debug(stmt)
+		if stmt != "" {
+			_, err := db.Exec(stmt)
+			if err != nil {
+				t.Fatalf("sql: %s\n%s", stmt, err)
+			}
+		}
+	}
 }
 
 const (
@@ -75,54 +108,63 @@ const (
 	AUTHOR_UTF8_NAME    = "Graça Tostão"
 	LANG                = "pt"
 	BOOK_LANG_TITLE     = "Era uma vez..."
+
+	Firebird = "Firebird"
+	Oracle   = "Oracle"
+	MySQL    = "MySQL"
+	Postgres = "Postgres"
 )
 
-func RunAll(TM ITransactionManager, t *testing.T) {
-	RunSelectUTF8(TM, t)
-	RunRetrive(TM, t)
-	RubFindFirst(TM, t)
-	RunFindAll(TM, t)
-	RunOmitField(TM, t)
-	RunModifyField(TM, t)
-	RunRemoveAll(TM, t)
-	RunInsertReturningKey(TM, t)
-	RunInsertStructReturningKey(TM, t)
-	RunSimpleUpdate(TM, t)
-	RunStructUpdate(TM, t)
-	RunStructSaveAndRetrive(TM, t)
-	RunUpdateSubquery(TM, t)
-	RunSimpleDelete(TM, t)
-	RunStructDelete(TM, t)
-	RunSelectInto(TM, t)
-	RunSelectTree(TM, t)
-	RunSelectTreeTwoBranches(TM, t)
-	RunSelectFlatTree(TM, t)
-	RunListInto(TM, t)
-	RunListOf(TM, t)
-	RunListFlatTree(TM, t)
-	RunListTreeOf(TM, t)
-	RunListForSlice(TM, t)
-	RunListSimple(TM, t)
-	RunSearchedCase(TM, t)
-	RunSimpleCase(TM, t)
-	RunColumnSubquery(TM, t)
-	RunWhereSubquery(TM, t)
-	RunInnerOn(TM, t)
-	RunInnerOn2(TM, t)
-	RunOuterFetchOrder(TM, t)
-	RunOuterFetchOrderAs(TM, t)
-	RunGroupBy(TM, t)
-	RunOrderBy(TM, t)
-	RunPagination(TM, t)
-	RunAssociationDiscriminator(TM, t)
-	RunAssociationDiscriminatorReverse(TM, t)
-	RunTableDiscriminator(TM, t)
-	RunJoinTableDiscriminator(TM, t)
-	RunCustomFunction(TM, t)
-	RunRawSQL1(TM, t)
-	RunRawSQL2(TM, t)
-	RunHaving(TM, t)
-	RunUnion(TM, t)
+type Tester struct {
+	DbName string
+}
+
+func (tt Tester) RunAll(TM ITransactionManager, t *testing.T) {
+	tt.RunSelectUTF8(TM, t)
+	tt.RunRetrive(TM, t)
+	tt.RunFindFirst(TM, t)
+	tt.RunFindAll(TM, t)
+	tt.RunOmitField(TM, t)
+	tt.RunModifyField(TM, t)
+	tt.RunRemoveAll(TM, t)
+	tt.RunInsertReturningKey(TM, t)
+	tt.RunInsertStructReturningKey(TM, t)
+	tt.RunSimpleUpdate(TM, t)
+	tt.RunStructUpdate(TM, t)
+	tt.RunStructSaveAndRetrive(TM, t)
+	tt.RunUpdateSubquery(TM, t)
+	tt.RunSimpleDelete(TM, t)
+	tt.RunStructDelete(TM, t)
+	tt.RunSelectInto(TM, t)
+	tt.RunSelectTree(TM, t)
+	tt.RunSelectTreeTwoBranches(TM, t)
+	tt.RunSelectFlatTree(TM, t)
+	tt.RunListInto(TM, t)
+	tt.RunListOf(TM, t)
+	tt.RunListFlatTree(TM, t)
+	tt.RunListTreeOf(TM, t)
+	tt.RunListForSlice(TM, t)
+	tt.RunListSimple(TM, t)
+	tt.RunSimpleCase(TM, t)
+	tt.RunSearchedCase(TM, t)
+	tt.RunColumnSubquery(TM, t)
+	tt.RunWhereSubquery(TM, t)
+	tt.RunInnerOn(TM, t)
+	tt.RunInnerOn2(TM, t)
+	tt.RunOuterFetchOrder(TM, t)
+	tt.RunOuterFetchOrderAs(TM, t)
+	tt.RunGroupBy(TM, t)
+	tt.RunOrderBy(TM, t)
+	tt.RunPagination(TM, t)
+	tt.RunAssociationDiscriminator(TM, t)
+	tt.RunAssociationDiscriminatorReverse(TM, t)
+	tt.RunTableDiscriminator(TM, t)
+	tt.RunJoinTableDiscriminator(TM, t)
+	tt.RunCustomFunction(TM, t)
+	tt.RunRawSQL1(TM, t)
+	tt.RunRawSQL2(TM, t)
+	tt.RunHaving(TM, t)
+	tt.RunUnion(TM, t)
 }
 
 func ResetDB(TM ITransactionManager) {
@@ -430,7 +472,7 @@ func ResetDB3(TM ITransactionManager) {
 	}
 }
 
-func RunSelectUTF8(TM ITransactionManager, t *testing.T) {
+func (tt Tester) RunSelectUTF8(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	// get the database context
@@ -450,7 +492,7 @@ func RunSelectUTF8(TM ITransactionManager, t *testing.T) {
 	}
 }
 
-func RunRetrive(TM ITransactionManager, t *testing.T) {
+func (tt Tester) RunRetrive(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	// get the database context
@@ -469,7 +511,7 @@ func RunRetrive(TM ITransactionManager, t *testing.T) {
 	}
 }
 
-func RubFindFirst(TM ITransactionManager, t *testing.T) {
+func (tt Tester) RunFindFirst(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	// get the database context
@@ -478,14 +520,14 @@ func RubFindFirst(TM ITransactionManager, t *testing.T) {
 	var book Book
 	ok, err := store.FindFirst(&book, Book{PublisherId: ext.Int64(1)})
 	if err != nil {
-		t.Fatalf("Failed RubFindFirst: %s", err)
+		t.Fatalf("Failed RunFindFirst: %s", err)
 	}
 	if !ok {
-		t.Fatalf("Failed RubFindFirst: Expected 1 books, got none.")
+		t.Fatalf("Failed RunFindFirst: Expected 1 books, got none.")
 	}
 }
 
-func RunFindAll(TM ITransactionManager, t *testing.T) {
+func (tt Tester) RunFindAll(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	// get the database context
@@ -501,7 +543,7 @@ func RunFindAll(TM ITransactionManager, t *testing.T) {
 	}
 }
 
-func RunOmitField(TM ITransactionManager, t *testing.T) {
+func (tt Tester) RunOmitField(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	// get the database context
@@ -532,7 +574,7 @@ func RunOmitField(TM ITransactionManager, t *testing.T) {
 	}
 }
 
-func RunModifyField(TM ITransactionManager, t *testing.T) {
+func (tt Tester) RunModifyField(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	// get the database context
@@ -551,7 +593,7 @@ func RunModifyField(TM ITransactionManager, t *testing.T) {
 	}
 }
 
-func RunRemoveAll(TM ITransactionManager, t *testing.T) {
+func (tt Tester) RunRemoveAll(TM ITransactionManager, t *testing.T) {
 	ResetDB2(TM)
 
 	// get the database context
@@ -566,7 +608,7 @@ func RunRemoveAll(TM ITransactionManager, t *testing.T) {
 	}
 }
 
-func RunInsertReturningKey(TM ITransactionManager, t *testing.T) {
+func (tt Tester) RunInsertReturningKey(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	var err error
@@ -607,7 +649,7 @@ func RunInsertReturningKey(TM ITransactionManager, t *testing.T) {
 	}
 }
 
-func RunInsertStructReturningKey(TM ITransactionManager, t *testing.T) {
+func (tt Tester) RunInsertStructReturningKey(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	var err error
@@ -659,7 +701,7 @@ func RunInsertStructReturningKey(TM ITransactionManager, t *testing.T) {
 	}
 }
 
-func RunSimpleUpdate(TM ITransactionManager, t *testing.T) {
+func (tt Tester) RunSimpleUpdate(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	var err error
@@ -668,9 +710,9 @@ func RunSimpleUpdate(TM ITransactionManager, t *testing.T) {
 			Set(PUBLISHER_C_NAME, "Untited Editors"). // column to update
 			Set(PUBLISHER_C_VERSION, 2).              // increment version
 			Where(
-			PUBLISHER_C_ID.Matches(1),
-			PUBLISHER_C_VERSION.Matches(1),
-		).
+				PUBLISHER_C_ID.Matches(1),
+				PUBLISHER_C_VERSION.Matches(1),
+			).
 			Execute()
 		if err != nil {
 			return err
@@ -686,7 +728,7 @@ func RunSimpleUpdate(TM ITransactionManager, t *testing.T) {
 	}
 }
 
-func RunStructUpdate(TM ITransactionManager, t *testing.T) {
+func (tt Tester) RunStructUpdate(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	var err error
@@ -728,7 +770,7 @@ func RunStructUpdate(TM ITransactionManager, t *testing.T) {
 	}
 }
 
-func RunStructSaveAndRetrive(TM ITransactionManager, t *testing.T) {
+func (tt Tester) RunStructSaveAndRetrive(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	var err error
@@ -812,16 +854,16 @@ func RunStructSaveAndRetrive(TM ITransactionManager, t *testing.T) {
 	}
 }
 
-func RunUpdateSubquery(TM ITransactionManager, t *testing.T) {
+func (tt Tester) RunUpdateSubquery(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	if err := TM.Transaction(func(store IDb) error {
 		sub := store.Query(BOOK).Alias("b").
 			Column(AsIs(nil)).
 			Where(
-			BOOK_C_PUBLISHER_ID.Matches(Col(BOOK_C_ID).For("a")),
-			BOOK_C_PRICE.Greater(15),
-		)
+				BOOK_C_PUBLISHER_ID.Matches(Col(BOOK_C_ID).For("a")),
+				BOOK_C_PRICE.Greater(15),
+			)
 
 		affectedRows, err := store.Update(PUBLISHER).Alias("a").
 			Set(PUBLISHER_C_NAME, Upper(PUBLISHER_C_NAME)).
@@ -842,7 +884,7 @@ func RunUpdateSubquery(TM ITransactionManager, t *testing.T) {
 	}
 }
 
-func RunSimpleDelete(TM ITransactionManager, t *testing.T) {
+func (tt Tester) RunSimpleDelete(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	if err := TM.Transaction(func(store IDb) error {
@@ -864,7 +906,7 @@ func RunSimpleDelete(TM ITransactionManager, t *testing.T) {
 	}
 }
 
-func RunStructDelete(TM ITransactionManager, t *testing.T) {
+func (tt Tester) RunStructDelete(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	if err := TM.Transaction(func(store IDb) error {
@@ -904,7 +946,7 @@ func RunStructDelete(TM ITransactionManager, t *testing.T) {
 	}
 }
 
-func RunSelectInto(TM ITransactionManager, t *testing.T) {
+func (tt Tester) RunSelectInto(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	store := TM.Store()
@@ -920,7 +962,7 @@ func RunSelectInto(TM ITransactionManager, t *testing.T) {
 	}
 }
 
-func RunSelectTree(TM ITransactionManager, t *testing.T) {
+func (tt Tester) RunSelectTree(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	store := TM.Store()
@@ -943,7 +985,7 @@ func RunSelectTree(TM ITransactionManager, t *testing.T) {
 	}
 }
 
-func RunSelectTreeTwoBranches(TM ITransactionManager, t *testing.T) {
+func (tt Tester) RunSelectTreeTwoBranches(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	store := TM.Store()
@@ -973,7 +1015,7 @@ func RunSelectTreeTwoBranches(TM ITransactionManager, t *testing.T) {
 	}
 }
 
-func RunSelectFlatTree(TM ITransactionManager, t *testing.T) {
+func (tt Tester) RunSelectFlatTree(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	store := TM.Store()
@@ -996,7 +1038,7 @@ func RunSelectFlatTree(TM ITransactionManager, t *testing.T) {
 	}
 }
 
-func RunListInto(TM ITransactionManager, t *testing.T) {
+func (tt Tester) RunListInto(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	store := TM.Store()
@@ -1004,8 +1046,8 @@ func RunListInto(TM ITransactionManager, t *testing.T) {
 	_, err := store.Query(BOOK).
 		All().
 		ListInto(func(book *Book) {
-		books = append(books, book)
-	})
+			books = append(books, book)
+		})
 	if err != nil {
 		t.Fatalf("Failed List Test: %s", err)
 	}
@@ -1039,7 +1081,7 @@ func RunListInto(TM ITransactionManager, t *testing.T) {
 	}
 }
 
-func RunListOf(TM ITransactionManager, t *testing.T) {
+func (tt Tester) RunListOf(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	store := TM.Store()
@@ -1062,7 +1104,7 @@ func RunListOf(TM ITransactionManager, t *testing.T) {
 	}
 }
 
-func RunListFlatTree(TM ITransactionManager, t *testing.T) {
+func (tt Tester) RunListFlatTree(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	store := TM.Store()
@@ -1100,8 +1142,8 @@ func RunListFlatTree(TM ITransactionManager, t *testing.T) {
 		Fetch(). // add all columns off book in the query
 		Where(PUBLISHER_C_ID.Matches(2)).
 		ListFlatTree(func(publisher *Publisher) {
-		publishers = append(publishers, publisher)
-	})
+			publishers = append(publishers, publisher)
+		})
 
 	if err != nil {
 		t.Fatalf("%s", err)
@@ -1123,7 +1165,7 @@ func RunListFlatTree(TM ITransactionManager, t *testing.T) {
 
 }
 
-func RunListTreeOf(TM ITransactionManager, t *testing.T) {
+func (tt Tester) RunListTreeOf(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	store := TM.Store()
@@ -1151,7 +1193,7 @@ func RunListTreeOf(TM ITransactionManager, t *testing.T) {
 	}
 }
 
-func RunListForSlice(TM ITransactionManager, t *testing.T) {
+func (tt Tester) RunListForSlice(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	store := TM.Store()
@@ -1175,7 +1217,7 @@ func RunListForSlice(TM ITransactionManager, t *testing.T) {
 	}
 }
 
-func RunListSimple(TM ITransactionManager, t *testing.T) {
+func (tt Tester) RunListSimple(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	store := TM.Store()
@@ -1184,8 +1226,8 @@ func RunListSimple(TM ITransactionManager, t *testing.T) {
 	err := store.Query(PUBLISHER).
 		Column(PUBLISHER_C_NAME).
 		ListSimple(func() {
-		names = append(names, name)
-	}, &name)
+			names = append(names, name)
+		}, &name)
 	if err != nil {
 		t.Fatalf("Failed TestListSimple: %s", err)
 	}
@@ -1195,7 +1237,12 @@ func RunListSimple(TM ITransactionManager, t *testing.T) {
 	}
 }
 
-func RunSearchedCase(TM ITransactionManager, t *testing.T) {
+func (tt Tester) RunSearchedCase(TM ITransactionManager, t *testing.T) {
+	// skip if it is Firebird
+	if tt.DbName == Firebird {
+		return
+	}
+
 	ResetDB(TM)
 
 	var dtos []struct {
@@ -1207,11 +1254,11 @@ func RunSearchedCase(TM ITransactionManager, t *testing.T) {
 	err := store.Query(BOOK).
 		Column(BOOK_C_NAME).
 		Column(
-		If(BOOK_C_PRICE.Greater(20)).Then("expensive").
-			If(BOOK_C_PRICE.Range(10, 20)).Then("normal").
-			Else("cheap").
-			End(),
-	).As("Classification").
+			If(BOOK_C_PRICE.Greater(20)).Then("expensive").
+				If(BOOK_C_PRICE.Range(10, 20)).Then("normal").
+				Else("cheap").
+				End(),
+		).As("Classification").
 		List(&dtos)
 
 	if err != nil {
@@ -1227,20 +1274,20 @@ func RunSearchedCase(TM ITransactionManager, t *testing.T) {
 	}
 }
 
-func RunSimpleCase(TM ITransactionManager, t *testing.T) {
+func (tt Tester) RunSimpleCase(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	var sale float64
 	store := TM.Store()
 	_, err := store.Query(BOOK).
 		Column(
-		Sum(
-			Case(BOOK_C_NAME).
-				When("Scrapbook").Then(10).
-				Else(AsIs(20)). // showing off AsIs(): value is written as is to the query
-				End(),
-		),
-	).SelectInto(&sale)
+			Sum(
+				Case(BOOK_C_NAME).
+					When("Scrapbook").Then(10).
+					Else(AsIs(20)). // showing off AsIs(): value is written as is to the query
+					End(),
+			),
+		).SelectInto(&sale)
 
 	if err != nil {
 		t.Fatalf("Failed RunSimpleCase: %s", err)
@@ -1251,15 +1298,15 @@ func RunSimpleCase(TM ITransactionManager, t *testing.T) {
 	}
 }
 
-func RunColumnSubquery(TM ITransactionManager, t *testing.T) {
+func (tt Tester) RunColumnSubquery(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	store := TM.Store()
 	subquery := store.Query(BOOK).Alias("b").
 		Column(Sum(BOOK_C_PRICE)).
 		Where(
-		BOOK_C_PUBLISHER_ID.Matches(Col(PUBLISHER_C_ID).For("p")),
-	)
+			BOOK_C_PUBLISHER_ID.Matches(Col(PUBLISHER_C_ID).For("p")),
+		)
 
 	var dtos []*Dto
 	err := store.Query(PUBLISHER).Alias("p").
@@ -1280,7 +1327,7 @@ func RunColumnSubquery(TM ITransactionManager, t *testing.T) {
 	}
 }
 
-func RunWhereSubquery(TM ITransactionManager, t *testing.T) {
+func (tt Tester) RunWhereSubquery(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	store := TM.Store()
@@ -1288,8 +1335,8 @@ func RunWhereSubquery(TM ITransactionManager, t *testing.T) {
 		Distinct().
 		Column(BOOK_C_PUBLISHER_ID).
 		Where(
-		BOOK_C_PRICE.LesserOrMatch(10),
-	)
+			BOOK_C_PRICE.LesserOrMatch(10),
+		)
 
 	var dtos []*Dto
 	err := store.Query(PUBLISHER).
@@ -1314,7 +1361,7 @@ func RunWhereSubquery(TM ITransactionManager, t *testing.T) {
 	}
 }
 
-func RunInnerOn(TM ITransactionManager, t *testing.T) {
+func (tt Tester) RunInnerOn(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	// gets all publishers that had a book published before 2013
@@ -1327,8 +1374,8 @@ func RunInnerOn(TM ITransactionManager, t *testing.T) {
 		On(BOOK_C_PUBLISHED.Lesser(time.Date(2013, time.January, 1, 0, 0, 0, 0, time.UTC))).
 		Join().
 		ListInto(func(publisher *Publisher) {
-		publishers = append(publishers, publisher)
-	})
+			publishers = append(publishers, publisher)
+		})
 
 	if err != nil {
 		t.Fatalf("Failed TestInnerOn: %s", err)
@@ -1346,7 +1393,7 @@ func RunInnerOn(TM ITransactionManager, t *testing.T) {
 	}
 }
 
-func RunInnerOn2(TM ITransactionManager, t *testing.T) {
+func (tt Tester) RunInnerOn2(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	store := TM.Store()
@@ -1377,7 +1424,7 @@ func RunInnerOn2(TM ITransactionManager, t *testing.T) {
 	}
 }
 
-func RunOuterFetchOrder(TM ITransactionManager, t *testing.T) {
+func (tt Tester) RunOuterFetchOrder(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	logger.Debugf("Running RunOuterFetchOrder")
@@ -1442,7 +1489,7 @@ func RunOuterFetchOrder(TM ITransactionManager, t *testing.T) {
 	}
 }
 
-func RunOuterFetchOrderAs(TM ITransactionManager, t *testing.T) {
+func (tt Tester) RunOuterFetchOrderAs(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	logger.Debugf("Running RunOuterFetchOrderAs")
@@ -1509,7 +1556,7 @@ func RunOuterFetchOrderAs(TM ITransactionManager, t *testing.T) {
 	}
 }
 
-func RunGroupBy(TM ITransactionManager, t *testing.T) {
+func (tt Tester) RunGroupBy(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	store := TM.Store()
@@ -1535,7 +1582,7 @@ func RunGroupBy(TM ITransactionManager, t *testing.T) {
 	}
 }
 
-func RunOrderBy(TM ITransactionManager, t *testing.T) {
+func (tt Tester) RunOrderBy(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	store := TM.Store()
@@ -1544,8 +1591,8 @@ func RunOrderBy(TM ITransactionManager, t *testing.T) {
 		All().
 		OrderBy(PUBLISHER_C_NAME).
 		ListInto(func(publisher *Publisher) {
-		publishers = append(publishers, publisher)
-	})
+			publishers = append(publishers, publisher)
+		})
 
 	if err != nil {
 		t.Fatalf("Failed RunOrderBy: %s", err)
@@ -1567,7 +1614,7 @@ func RunOrderBy(TM ITransactionManager, t *testing.T) {
 	}
 }
 
-func RunPagination(TM ITransactionManager, t *testing.T) {
+func (tt Tester) RunPagination(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	store := TM.Store()
@@ -1597,7 +1644,7 @@ func RunPagination(TM ITransactionManager, t *testing.T) {
 	}
 }
 
-func RunAssociationDiscriminator(TM ITransactionManager, t *testing.T) {
+func (tt Tester) RunAssociationDiscriminator(TM ITransactionManager, t *testing.T) {
 	ResetDB2(TM)
 
 	store := TM.Store()
@@ -1632,7 +1679,7 @@ func RunAssociationDiscriminator(TM ITransactionManager, t *testing.T) {
 	}
 }
 
-func RunAssociationDiscriminatorReverse(TM ITransactionManager, t *testing.T) {
+func (tt Tester) RunAssociationDiscriminatorReverse(TM ITransactionManager, t *testing.T) {
 	ResetDB2(TM)
 
 	store := TM.Store()
@@ -1669,7 +1716,7 @@ func RunAssociationDiscriminatorReverse(TM ITransactionManager, t *testing.T) {
 
 }
 
-func RunTableDiscriminator(TM ITransactionManager, t *testing.T) {
+func (tt Tester) RunTableDiscriminator(TM ITransactionManager, t *testing.T) {
 	ResetDB3(TM)
 
 	store := TM.Store()
@@ -1726,7 +1773,7 @@ func RunTableDiscriminator(TM ITransactionManager, t *testing.T) {
 
 }
 
-func RunJoinTableDiscriminator(TM ITransactionManager, t *testing.T) {
+func (tt Tester) RunJoinTableDiscriminator(TM ITransactionManager, t *testing.T) {
 	ResetDB3(TM)
 
 	store := TM.Store()
@@ -1753,7 +1800,7 @@ func RunJoinTableDiscriminator(TM ITransactionManager, t *testing.T) {
 	}
 }
 
-func RunCustomFunction(TM ITransactionManager, t *testing.T) {
+func (tt Tester) RunCustomFunction(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	// get the database context
@@ -1762,12 +1809,12 @@ func RunCustomFunction(TM ITransactionManager, t *testing.T) {
 	err := store.Query(BOOK).
 		All().
 		Where(
-		SecondsDiff(
-			time.Date(2013, time.July, 24, 0, 0, 0, 0, time.UTC),
-			BOOK_C_PUBLISHED,
+			SecondsDiff(
+				time.Date(2013, time.July, 24, 0, 0, 0, 0, time.UTC),
+				BOOK_C_PUBLISHED,
+			).
+				Greater(1000),
 		).
-			Greater(1000),
-	).
 		List(&books)
 
 	if err != nil {
@@ -1786,7 +1833,7 @@ func RunCustomFunction(TM ITransactionManager, t *testing.T) {
 	}
 }
 
-func RunRawSQL1(TM ITransactionManager, t *testing.T) {
+func (tt Tester) RunRawSQL1(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	// get the database connection
@@ -1810,7 +1857,7 @@ func RunRawSQL1(TM ITransactionManager, t *testing.T) {
 	}
 }
 
-func RunRawSQL2(TM ITransactionManager, t *testing.T) {
+func (tt Tester) RunRawSQL2(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	// get the database connection
@@ -1839,7 +1886,7 @@ func RunRawSQL2(TM ITransactionManager, t *testing.T) {
 	}
 }
 
-func RunHaving(TM ITransactionManager, t *testing.T) {
+func (tt Tester) RunHaving(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	// get the database context
@@ -1853,8 +1900,8 @@ func RunHaving(TM ITransactionManager, t *testing.T) {
 		GroupByPos(1).
 		Having(Alias("ThisYear").Greater(30)).
 		ListInto(func(sale *PublisherSales) {
-		sales = append(sales, sale)
-	})
+			sales = append(sales, sale)
+		})
 
 	if err != nil {
 		t.Fatalf("Failed TestHaving: %s", err)
@@ -1869,7 +1916,7 @@ func RunHaving(TM ITransactionManager, t *testing.T) {
 	}
 }
 
-func RunUnion(TM ITransactionManager, t *testing.T) {
+func (tt Tester) RunUnion(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	// get the database context
@@ -1881,47 +1928,47 @@ func RunUnion(TM ITransactionManager, t *testing.T) {
 		Outer(PUBLISHER_A_BOOKS).
 		Include(Sum(Coalesce(BOOK_C_PRICE, 0))).As("ThisYear").
 		On(
-		Range(
-			BOOK_C_PUBLISHED,
-			time.Date(2013, time.January, 01, 0, 0, 0, 0, time.UTC),
-			time.Date(2013, time.December, 31, 23, 59, 59, 1e9-1, time.UTC),
-		),
-	).
+			Range(
+				BOOK_C_PUBLISHED,
+				time.Date(2013, time.January, 01, 0, 0, 0, 0, time.UTC),
+				time.Date(2013, time.December, 31, 23, 59, 59, 1e9-1, time.UTC),
+			),
+		).
 		Join().
 		Column(AsIs(0)).As("PreviousYear").
 		GroupByPos(1, 2).
 		UnionAll(
-		store.Query(PUBLISHER).Alias("u").
-			Column(PUBLISHER_C_ID).
-			Column(PUBLISHER_C_NAME).
-			Outer(PUBLISHER_A_BOOKS).
-			Column(AsIs(0)).As("ThisYear").
-			Include(Sum(Coalesce(BOOK_C_PRICE, 0))).As("PreviousYear").
-			On(
-			Range(
-				BOOK_C_PUBLISHED,
-				time.Date(2012, time.January, 01, 0, 0, 0, 0, time.UTC),
-				time.Date(2012, time.December, 31, 23, 59, 59, 1e9-1, time.UTC),
-			),
+			store.Query(PUBLISHER).Alias("u").
+				Column(PUBLISHER_C_ID).
+				Column(PUBLISHER_C_NAME).
+				Outer(PUBLISHER_A_BOOKS).
+				Column(AsIs(0)).As("ThisYear").
+				Include(Sum(Coalesce(BOOK_C_PRICE, 0))).As("PreviousYear").
+				On(
+					Range(
+						BOOK_C_PUBLISHED,
+						time.Date(2012, time.January, 01, 0, 0, 0, 0, time.UTC),
+						time.Date(2012, time.December, 31, 23, 59, 59, 1e9-1, time.UTC),
+					),
+				).
+				Join().
+				GroupByPos(1, 2),
 		).
-			Join().
-			GroupByPos(1, 2),
-	).
 		ListInto(func(sale *PublisherSales) {
-		logger.Debugf("sales = %s", sale.String())
-		found := false
-		for _, v := range sales {
-			if sale.Id == v.Id {
-				v.ThisYear += sale.ThisYear
-				v.PreviousYear += sale.PreviousYear
-				found = true
-				break
+			logger.Debugf("sales = %s", sale.String())
+			found := false
+			for _, v := range sales {
+				if sale.Id == v.Id {
+					v.ThisYear += sale.ThisYear
+					v.PreviousYear += sale.PreviousYear
+					found = true
+					break
+				}
 			}
-		}
-		if !found {
-			sales = append(sales, sale)
-		}
-	})
+			if !found {
+				sales = append(sales, sale)
+			}
+		})
 
 	if err != nil {
 		t.Fatalf("Failed TestUnion: %s", err)

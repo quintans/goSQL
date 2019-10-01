@@ -2,19 +2,19 @@ package transformers
 
 import (
 	"database/sql"
-	"github.com/quintans/goSQL/api"
+
 	"github.com/quintans/goSQL/dbx"
-	tk "github.com/quintans/toolkit"
+	coll "github.com/quintans/toolkit/collections"
 )
 
 type SimpleAbstractRowTransformer struct {
 	Transformer func(rows *sql.Rows) (tk.Hasher, error)
 }
 
-var _ api.IRowTransformer = &SimpleAbstractRowTransformer{}
+var _ dbx.IRowTransformer = &SimpleAbstractRowTransformer{}
 
 func (this *SimpleAbstractRowTransformer) BeforeAll() coll.Collection {
-	return tk.NewArrayList()
+	return coll.NewArrayList()
 }
 
 func (this *SimpleAbstractRowTransformer) Transform(rows *sql.Rows) (tk.Hasher, error) {

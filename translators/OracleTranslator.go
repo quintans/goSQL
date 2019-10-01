@@ -1,6 +1,8 @@
 package translators
 
 import (
+	"strconv"
+
 	"github.com/quintans/goSQL/db"
 
 	"fmt"
@@ -52,4 +54,8 @@ func (this *OracleTranslator) PaginateSQL(query *db.Query, sql string) string {
 	}
 
 	return sql
+}
+
+func (this *OracleTranslator) GetPlaceholder(index int, name string) string {
+	return ":" + strconv.Itoa(index+1)
 }

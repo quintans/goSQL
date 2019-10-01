@@ -6,7 +6,7 @@ import (
 	"reflect"
 
 	tk "github.com/quintans/toolkit"
-	coll "github.com/quintans/toolkit/collection"
+	coll "github.com/quintans/toolkit/collections"
 	"github.com/quintans/toolkit/log"
 )
 

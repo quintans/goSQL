@@ -3,7 +3,7 @@ package db
 import (
 	"github.com/quintans/goSQL/dbx"
 	tk "github.com/quintans/toolkit"
-	coll "github.com/quintans/toolkit/collection"
+	coll "github.com/quintans/toolkit/collections"
 
 	"database/sql"
 	"errors"

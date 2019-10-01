@@ -3,7 +3,6 @@ package db
 import (
 	"github.com/quintans/goSQL/dbx"
 	"github.com/quintans/toolkit/cache"
-	. "github.com/quintans/toolkit/ext"
 
 	"database/sql"
 	"runtime/debug"
@@ -81,7 +80,7 @@ var _ ITransactionManager = &TransactionManager{}
 
 type TransactionManager struct {
 	database  *sql.DB
-	dbFactory func(inTx *bool, c dbx.IConnection) IDb
+	dbFactory func(dbx.IConnection) IDb
 	stmtCache *cache.LRUCache
 }
 
@@ -89,7 +88,7 @@ type TransactionManager struct {
 // database is the connection pool
 // dbFactory is a database connection factory. This factory accepts boolean flag that indicates if the created IDb is still valid.
 // This may be useful if an Entity holds a reference to the IDb to do lazy loading.
-func NewTransactionManager(database *sql.DB, dbFactory func(inTx *bool, c dbx.IConnection) IDb, capacity int) *TransactionManager {
+func NewTransactionManager(database *sql.DB, dbFactory func(dbx.IConnection) IDb, capacity int) *TransactionManager {
 	this := new(TransactionManager)
 	this.database = database
 	this.dbFactory = dbFactory
@@ -121,7 +120,7 @@ func (this *TransactionManager) Transaction(handler func(db IDb) error) error {
 
 	inTx := new(bool)
 	*inTx = true
-	err = handler(this.dbFactory(inTx, myTx))
+	err = handler(this.dbFactory(myTx))
 	*inTx = false
 	if err == nil {
 		logger.Debug("Transaction end: COMMIT")
@@ -149,7 +148,7 @@ func (this *TransactionManager) NoTransaction(handler func(db IDb) error) error 
 
 	inTx := new(bool)
 	*inTx = true
-	err := handler(this.dbFactory(inTx, myTx))
+	err := handler(this.dbFactory(myTx))
 	*inTx = false
 	logger.Debugf("TransactionLESS End")
 	return err
@@ -163,5 +162,5 @@ func (this TransactionManager) WithoutTransaction(handler func(db IDb) error) er
 */
 
 func (this *TransactionManager) Store() IDb {
-	return this.dbFactory(Bool(false), this.database)
+	return this.dbFactory(this.database)
 }

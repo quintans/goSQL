@@ -22,6 +22,9 @@ type PublisherSales struct {
 }
 
 func (this *PublisherSales) String() string {
+	if this == nil {
+		return "<nil>"
+	}
 	sb := tk.NewStrBuffer()
 	sb.Add("{Id: ", this.Id)
 	sb.Add(", Name: ", this.Name)
@@ -50,14 +53,17 @@ type Publisher struct {
 }
 
 func (this *Publisher) PostInsert(store IDb) {
-	logger.Infof("===> PostInsert trigger for Publisher with Id %v in transaction? %t", *this.Id, store.InTransaction())
+	logger.Infof("===> PostInsert trigger for Publisher with Id %v", *this.Id)
 }
 
 func (this *Publisher) PostRetrive(store IDb) {
-	logger.Infof("===> PostRetrive trigger for %s in transaction? %t", this.String(), store.InTransaction())
+	logger.Infof("===> PostRetrive trigger for %s", this.String())
 }
 
 func (this *Publisher) String() string {
+	if this == nil {
+		return "<nil>"
+	}
 	sb := tk.NewStrBuffer()
 	sb.Add("{Id: ", this.Id, ", Version: ", this.Version)
 	sb.Add(", Name: ", this.Name)
@@ -109,6 +115,9 @@ type BookBin struct {
 }
 
 func (this *BookBin) String() string {
+	if this == nil {
+		return "<nil>"
+	}
 	sb := tk.NewStrBuffer()
 	sb.Add("{Id: ", this.Id, ", Version: ", this.Version)
 	sb.Add(", Hardcover: ")
@@ -192,6 +201,9 @@ func (this *Book) SetPublisherId(id *int64) {
 }
 
 func (this *Book) String() string {
+	if this == nil {
+		return "nil"
+	}
 	sb := tk.NewStrBuffer()
 	sb.Add("{Id: ", this.Id, ", Version: ", this.Version)
 	sb.Add(", Name: ", this.Name)
@@ -290,6 +302,9 @@ type Author struct {
 }
 
 func (this *Author) String() string {
+	if this == nil {
+		return "<nil>"
+	}
 	sb := tk.NewStrBuffer()
 	sb.Add("{Id: ", this.Id, ", Version: ", this.Version)
 	sb.Add(", Name: ", this.Name)
@@ -348,6 +363,9 @@ type Project struct {
 }
 
 func (this *Project) String() string {
+	if this == nil {
+		return "<nil>"
+	}
 	sb := tk.NewStrBuffer()
 	sb.Add("{Id: ", this.Id, ", Version: ", this.Version)
 	sb.Add(", Name: ", this.Name)
@@ -420,6 +438,9 @@ type Employee struct {
 }
 
 func (this *Employee) String() string {
+	if this == nil {
+		return "<nil>"
+	}
 	sb := tk.NewStrBuffer()
 	sb.Add("{Id: ", this.Id, ", Version: ", this.Version)
 	sb.Add(", Name: ", this.Name)
@@ -473,6 +494,9 @@ type Consultant struct {
 }
 
 func (this *Consultant) String() string {
+	if this == nil {
+		return "<nil>"
+	}
 	sb := tk.NewStrBuffer()
 	sb.Add("{Id: ", this.Id, ", Version: ", this.Version)
 	sb.Add(", Name: ", this.Name)
@@ -536,6 +560,9 @@ type Status struct {
 }
 
 func (this *Status) String() string {
+	if this == nil {
+		return "nil"
+	}
 	sb := tk.NewStrBuffer()
 	sb.Add("{Id: ", this.Id, ", Version: ", this.Version)
 	sb.Add(", Code: ", this.Code)

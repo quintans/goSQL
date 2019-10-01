@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	tk "github.com/quintans/toolkit"
-	coll "github.com/quintans/toolkit/collection"
+	coll "github.com/quintans/toolkit/collections"
 )
 
 type ColGroup []*Column

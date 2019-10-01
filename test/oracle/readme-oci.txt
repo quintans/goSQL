@@ -32,3 +32,23 @@ Since the previous changes were in place I ammended the instructions from the go
 
 A good idea would be to point the CGO_CFLAGS to a more generic place like /usr/include
 Note to self: make links from all *.h in /usr/lib/instantclient_12_1/sdk/include to /usr/include
+
+===============================
+
+Download the Oracle 18 "Basic" zip file along with the SDK zip file.
+https://download.oracle.com/otn_software/linux/instantclient/193000/instantclient-basiclite-linux.x64-19.3.0.0.0dbru.zip
+and follow the instructions at the bottom of the page.
+
+essencially:
+
+sudo mkdir -p /opt/oracle
+cd /opt/oracle
+sudo mv ~/Downloads/instantclient-basiclite-linux.x64-19.3.0.0.0dbru.zip .
+sudo unzip instantclient-basiclite-linux.x64-19.3.0.0.0dbru.zip
+
+sudo apt install libaio1
+
+sudo sh -c "echo /opt/oracle/instantclient_19_3 > \
+      /etc/ld.so.conf.d/oracle-instantclient.conf"
+sudo ldconfig
+

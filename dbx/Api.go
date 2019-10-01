@@ -2,7 +2,7 @@ package dbx
 
 import (
 	"database/sql"
-	coll "github.com/quintans/toolkit/collection"
+	coll "github.com/quintans/toolkit/collections"
 )
 
 type IConnection interface {

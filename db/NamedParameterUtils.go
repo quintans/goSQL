@@ -2,7 +2,7 @@ package db
 
 import (
 	tk "github.com/quintans/toolkit"
-	coll "github.com/quintans/toolkit/collection"
+	coll "github.com/quintans/toolkit/collections"
 	. "github.com/quintans/toolkit/ext"
 
 	"unicode"

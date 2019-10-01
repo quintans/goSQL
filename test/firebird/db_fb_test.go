@@ -6,7 +6,7 @@ import (
 	trx "github.com/quintans/goSQL/translators"
 	"github.com/quintans/toolkit/log"
 
-	_ "bitbucket.org/miquella/mgodbc" // float64 was fixed acording to issue #5
+	_ "github.com/nakagami/firebirdsql" // float64 was fixed acording to issue #5
 
 	"database/sql"
 	"fmt"
@@ -15,8 +15,34 @@ import (
 
 var logger = log.LoggerFor("github.com/quintans/goSQL/test")
 
-func InitFirebirdSQL() (ITransactionManager, *sql.DB) {
+func TestFirebirdSQL(t *testing.T) {
 	logger.Infof("******* Using FirebirdSQL *******\n")
+
+	expPort := "3050/tcp"
+	ctx, server, port, err := common.Container(
+		"jacobalberty/firebird:3.0.4",
+		expPort,
+		map[string]string{
+			"FIREBIRD_USER":     "gosql",
+			"FIREBIRD_PASSWORD": "secret",
+			"FIREBIRD_DATABASE": "gosql.fdb",
+		},
+		"firebirdsql",
+		"gosql:secret@localhost:<port>//firebird/data/gosql.fdb",
+		1,
+	)
+
+	defer server.Terminate(ctx)
+	if err != nil {
+		t.Error(err)
+	}
+	tm, theDB := InitFirebirdSQL(t, port.Port())
+	tester := common.Tester{DbName: common.Firebird}
+	tester.RunAll(tm, t)
+	theDB.Close()
+}
+
+func InitFirebirdSQL(t *testing.T, port string) (ITransactionManager, *sql.DB) {
 
 	common.RAW_SQL = "SELECT name FROM book WHERE name LIKE ?"
 
@@ -33,11 +59,11 @@ func InitFirebirdSQL() (ITransactionManager, *sql.DB) {
 		},
 	)
 
-	return common.InitDB("mgodbc", "dsn=FbGoSQL;uid=SYSDBA;pwd=masterkey", translator)
-}
-
-func TestFirebirdSQL(t *testing.T) {
-	tm, theDB := InitFirebirdSQL()
-	common.RunAll(tm, t)
-	theDB.Close()
+	return common.InitDB(
+		t,
+		"firebirdsql",
+		fmt.Sprintf("gosql:secret@localhost:%s//firebird/data/gosql.fdb", port),
+		translator,
+		"tables_firebirdsql.sql",
+	)
 }

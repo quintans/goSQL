@@ -53,7 +53,6 @@ func (this *Marker) Unmark() {
 type IDb interface {
 	GetTranslator() Translator
 	GetConnection() dbx.IConnection
-	InTransaction() bool
 
 	Query(table *Table) *Query
 	Insert(table *Table) *Insert
@@ -75,10 +74,9 @@ type IDb interface {
 
 var _ IDb = &Db{}
 
-func NewDb(inTx *bool, connection dbx.IConnection, translator Translator) *Db {
+func NewDb(connection dbx.IConnection, translator Translator) *Db {
 	this := new(Db)
 	this.Overrider = this
-	this.inTx = inTx
 	this.Connection = connection
 	this.Translator = translator
 	return this
@@ -86,15 +84,10 @@ func NewDb(inTx *bool, connection dbx.IConnection, translator Translator) *Db {
 
 type Db struct {
 	Overrider  IDb
-	inTx       *bool
 	Connection dbx.IConnection
 	Translator Translator
 
 	attributes map[string]interface{}
-}
-
-func (this *Db) InTransaction() bool {
-	return *this.inTx
 }
 
 func (this *Db) GetTranslator() Translator {
