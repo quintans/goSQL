@@ -164,11 +164,20 @@ func (this *Update) Submit(instance interface{}) (int64, error) {
 							if err != nil {
 								return 0, err
 							}
+							value, err = ConvertToDb(bp, this.GetDb(), value)
+							if err != nil {
+								return 0, err
+							}
 							if marked || acceptField(bp.Tag, value) {
 								this.Set(column, value)
 							}
 						default:
 							if marked || acceptField(bp.Tag, v) {
+								var err error
+								v, err = ConvertToDb(bp, this.GetDb(), v)
+								if err != nil {
+									return 0, err
+								}
 								this.Set(column, v)
 							}
 						}

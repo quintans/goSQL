@@ -13,6 +13,12 @@ const (
 	QUERY
 )
 
+// Converter converts the data stored in the database into the data stored in the struct and vice-versa
+type Converter interface {
+	ToDb(in interface{}) (interface{}, error)
+	FromDb(in interface{}) (interface{}, error)
+}
+
 type Translator interface {
 	GetPlaceholder(index int, name string) string
 	// INSERT
@@ -33,4 +39,5 @@ type Translator interface {
 	ColumnName(column *Column) string
 	ColumnAlias(token Tokener, position int) string
 	IgnoreNullKeys() bool
+	GetConverter(name string) Converter
 }

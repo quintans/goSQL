@@ -1,6 +1,7 @@
 package db
 
 import (
+	"fmt"
 	"reflect"
 )
 
@@ -103,4 +104,38 @@ func walkTreeStruct(prefix string, typ reflect.Type, attrs map[string]*EntityPro
 			}
 		}
 	}
+}
+
+const ConverterTag = "converter"
+
+func ConvertFromDb(bp *EntityProperty, db IDb, value interface{}) (interface{}, error) {
+	return convertToOrFromDb(bp, db, value, false)
+}
+
+func ConvertToDb(bp *EntityProperty, db IDb, value interface{}) (interface{}, error) {
+	return convertToOrFromDb(bp, db, value, true)
+}
+
+func convertToOrFromDb(bp *EntityProperty, db IDb, value interface{}, toDb bool) (interface{}, error) {
+	cn := bp.Tag.Get(ConverterTag)
+	if cn == "" {
+		return value, nil
+	}
+
+	c := db.GetTranslator().GetConverter(cn)
+	if c == nil {
+		return nil, fmt.Errorf("Converter %s was not registered", cn)
+	}
+
+	var err error
+	if toDb {
+		value, err = c.ToDb(value)
+	} else {
+		value, err = c.FromDb(value)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return value, nil
 }

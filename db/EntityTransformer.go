@@ -206,7 +206,11 @@ func (this *EntityTransformer) ToEntity(
 	for _, bp := range properties {
 		if bp.Position > 0 {
 			position := bp.Position
-			value := row[position-1]
+			value, err := ConvertFromDb(bp, this.Query.GetDb(), row[position-1])
+			if err != nil {
+				return false, err
+			}
+
 			isPtr := false
 			v := reflect.ValueOf(value)
 			if v.Kind() == reflect.Ptr {

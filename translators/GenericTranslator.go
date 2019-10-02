@@ -424,6 +424,7 @@ type GenericTranslator struct {
 	InsertProcessorFactory func() InsertProcessor
 	UpdateProcessorFactory func() UpdateProcessor
 	DeleteProcessorFactory func() DeleteProcessor
+	converters             map[string]db.Converter
 }
 
 func RolloverParameter(dmlType db.DmlType, tx db.Translator, parameters []db.Tokener, separator string) string {
@@ -440,6 +441,7 @@ func RolloverParameter(dmlType db.DmlType, tx db.Translator, parameters []db.Tok
 func (this *GenericTranslator) Init(overrider db.Translator) {
 	this.overrider = overrider
 	this.tokens = make(map[string]func(dmlType db.DmlType, token db.Tokener, tx db.Translator) string)
+	this.converters = map[string]db.Converter{}
 
 	// Column
 	this.RegisterTranslation(db.TOKEN_COLUMN, func(dmlType db.DmlType, token db.Tokener, tx db.Translator) string {
@@ -1007,6 +1009,14 @@ func (this *GenericTranslator) OrderBy(query *db.Query, order *db.Order) string 
 	}
 
 	return str
+}
+
+func (this *GenericTranslator) RegisterConverter(name string, c db.Converter) {
+	this.converters[name] = c
+}
+
+func (this *GenericTranslator) GetConverter(name string) db.Converter {
+	return this.converters[name]
 }
 
 // CONDITIONS
