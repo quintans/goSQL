@@ -71,12 +71,13 @@ func (this *NoTx) Prepare(query string) (*sql.Stmt, error) {
 }
 
 type ITransactionManager interface {
+	With(db IDb) ITransactionManager
 	Transaction(handler func(db IDb) error) error
 	NoTransaction(handler func(db IDb) error) error
 	Store() IDb
 }
 
-var _ ITransactionManager = &TransactionManager{}
+var _ ITransactionManager = (*TransactionManager)(nil)
 
 type TransactionManager struct {
 	database  *sql.DB
@@ -96,6 +97,13 @@ func NewTransactionManager(database *sql.DB, dbFactory func(dbx.IConnection) IDb
 		this.stmtCache = cache.NewLRUCache(capacity)
 	}
 	return this
+}
+
+func (this *TransactionManager) With(db IDb) ITransactionManager {
+	if db == nil {
+		return this
+	}
+	return HollowTransactionManager{db}
 }
 
 func (this *TransactionManager) Transaction(handler func(db IDb) error) error {
@@ -163,4 +171,26 @@ func (this TransactionManager) WithoutTransaction(handler func(db IDb) error) er
 
 func (this *TransactionManager) Store() IDb {
 	return this.dbFactory(this.database)
+}
+
+var _ ITransactionManager = HollowTransactionManager{}
+
+type HollowTransactionManager struct {
+	db IDb
+}
+
+func (this HollowTransactionManager) With(db IDb) ITransactionManager {
+	return HollowTransactionManager{db}
+}
+
+func (this HollowTransactionManager) Transaction(handler func(db IDb) error) error {
+	return handler(this.db)
+}
+
+func (this HollowTransactionManager) NoTransaction(handler func(db IDb) error) error {
+	return handler(this.db)
+}
+
+func (this HollowTransactionManager) Store() IDb {
+	return this.db
 }
