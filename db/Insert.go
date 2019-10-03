@@ -145,20 +145,31 @@ func (this *Insert) Submit(instance interface{}) (int64, error) {
 				v := bp.Get(elem)
 				if v.IsValid() && (!useMarks || marked) {
 					if v.Kind() == reflect.Ptr && v.IsNil() {
-						this.Set(column, nil)
+						value, err := ConvertToDb(bp, this.GetDb(), nil)
+						if err != nil {
+							return 0, err
+						}
+						this.Set(column, value)
 					} else {
-						v := v.Interface()
+						val := v.Interface()
 						var value interface{}
 						var err error
-						switch T := v.(type) {
+						switch T := val.(type) {
 						case driver.Valuer:
 							value, err = T.Value()
 							if err != nil {
 								return 0, err
 							}
+							value, err = ConvertToDb(bp, this.GetDb(), value)
+							if err != nil {
+								return 0, err
+							}
 							this.Set(column, value)
 						default:
-							value = v
+							value, err = ConvertToDb(bp, this.GetDb(), val)
+							if err != nil {
+								return 0, err
+							}
 							// if it is a key column its value
 							// has to be diferent than the zero value
 							// to be included

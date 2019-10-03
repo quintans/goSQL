@@ -120,6 +120,7 @@ type Tester struct {
 }
 
 func (tt Tester) RunAll(TM ITransactionManager, t *testing.T) {
+	tt.RunDriverConverter(TM, t)
 	tt.RunSelectUTF8(TM, t)
 	tt.RunRetrive(TM, t)
 	tt.RunFindFirst(TM, t)
@@ -427,14 +428,14 @@ func ResetDB3(TM ITransactionManager) {
 	if err := TM.Transaction(func(DB IDb) error {
 		var err error
 
-		// clear projects
+		// clear catalog
 		if _, err = DB.Delete(CATALOG).Execute(); err != nil {
 			return err
 		}
 
 		// insert publisher
 		insert := DB.Insert(CATALOG).
-			Columns(CATALOG_C_ID, CATALOG_C_VERSION, CATALOG_C_DOMAIN, CATALOG_C_CODE, CATALOG_C_DESCRIPTION)
+			Columns(CATALOG_C_ID, CATALOG_C_VERSION, CATALOG_C_DOMAIN, CATALOG_C_CODE, CATALOG_C_VALUE)
 
 		_, err = insert.Values(1, 1, "GENDER", "M", "Male").Execute()
 		if err != nil {
@@ -1978,4 +1979,40 @@ func (tt Tester) RunUnion(TM ITransactionManager, t *testing.T) {
 		logger.Debugf("sales[%v] = %s", k, v.String())
 	}
 
+}
+
+func (tt Tester) RunDriverConverter(TM ITransactionManager, t *testing.T) {
+	db := TM.Store()
+	// clear catalog
+	if _, err := db.Delete(CATALOG).Execute(); err != nil {
+		t.Fatal(err)
+	}
+
+	p := Palette{
+		Code:  "GRAY",
+		Value: &Color{102, 101, 100},
+	}
+
+	db.Insert(CATALOG).Submit(&p)
+	actual := getColor(db, *p.Id)
+
+	expected := "102|101|100"
+	if actual != expected {
+		t.Fatalf("expected %s, got %s", expected, actual)
+	}
+
+	p2 := Palette{}
+	db.Query(CATALOG).
+		Where(CATALOG_C_ID.Matches(p.Id)).
+		SelectTo(&p2)
+
+	if *p.Value != *p2.Value {
+		t.Fatalf("Expected %+v, got %+v", p.Value, p2.Value)
+	}
+}
+
+func getColor(db IDb, id int64) string {
+	var raw string
+	db.Query(CATALOG).Column(CATALOG_C_VALUE).Where(CATALOG_C_ID.Matches(id)).SelectInto(&raw)
+	return raw
 }

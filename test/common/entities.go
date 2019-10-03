@@ -1,6 +1,11 @@
 package common
 
 import (
+	"database/sql/driver"
+	"fmt"
+	"strconv"
+	"strings"
+
 	. "github.com/quintans/goSQL/db"
 	tk "github.com/quintans/toolkit"
 	. "github.com/quintans/toolkit/ext"
@@ -539,12 +544,12 @@ var (
 // CATALOG
 
 var (
-	CATALOG               = TABLE("CATALOG")
-	CATALOG_C_ID          = CATALOG.KEY("ID")          // implicit map to field Id
-	CATALOG_C_VERSION     = CATALOG.VERSION("VERSION") // implicit map to field Version
-	CATALOG_C_DOMAIN      = CATALOG.COLUMN("DOMAIN")
-	CATALOG_C_CODE        = CATALOG.COLUMN("KEY")
-	CATALOG_C_DESCRIPTION = CATALOG.COLUMN("VALUE")
+	CATALOG           = TABLE("CATALOG")
+	CATALOG_C_ID      = CATALOG.KEY("ID")          // implicit map to field Id
+	CATALOG_C_VERSION = CATALOG.VERSION("VERSION") // implicit map to field Version
+	CATALOG_C_DOMAIN  = CATALOG.COLUMN("DOMAIN")
+	CATALOG_C_CODE    = CATALOG.COLUMN("KEY")
+	CATALOG_C_VALUE   = CATALOG.COLUMN("VALUE")
 )
 
 // STATUS
@@ -596,3 +601,32 @@ var (
 	STATUS_C_CODE        = STATUS.COLUMN("KEY").As("Code")
 	STATUS_C_DESCRIPTION = STATUS.COLUMN("VALUE").As("Description")
 )
+
+type Palette struct {
+	EntityBase
+
+	Code  string
+	Value *Color
+}
+
+type Color struct {
+	Red   int
+	Green int
+	Blue  int
+}
+
+func (c *Color) Value() (driver.Value, error) {
+	return fmt.Sprintf("%d|%d|%d", c.Red, c.Green, c.Blue), nil
+}
+
+func (c *Color) Scan(src interface{}) error {
+	s := src.(string)
+	rgb := strings.Split(s, "|")
+	r, _ := strconv.Atoi(rgb[0])
+	g, _ := strconv.Atoi(rgb[1])
+	b, _ := strconv.Atoi(rgb[2])
+	c.Red = r
+	c.Green = g
+	c.Blue = b
+	return nil
+}
