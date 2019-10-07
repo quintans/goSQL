@@ -43,8 +43,8 @@ func init() {
 		// database
 		mydb,
 		// database context factory
-		func(inTx *bool, c dbx.IConnection) IDb {
-			return NewDb(inTx, c, translator)
+		func(c dbx.IConnection) IDb {
+			return NewDb(c, translator)
 		},
 		// statement cache
 		1000,

@@ -120,6 +120,7 @@ type Tester struct {
 }
 
 func (tt Tester) RunAll(TM ITransactionManager, t *testing.T) {
+	tt.RunRetriveIntoUnexportedFields(TM, t)
 	tt.RunDriverConverter(TM, t)
 	tt.RunSelectUTF8(TM, t)
 	tt.RunRetrive(TM, t)
@@ -509,6 +510,29 @@ func (tt Tester) RunRetrive(TM ITransactionManager, t *testing.T) {
 	}
 	if author.Secret != nil {
 		t.Fatalf("Failed RunRetrive: Expected secret to be nil, found %s", *author.Secret)
+	}
+}
+
+func (tt Tester) RunRetriveIntoUnexportedFields(TM ITransactionManager, t *testing.T) {
+	ResetDB(TM)
+
+	// get the database context
+	store := TM.Store()
+	// the target entity
+	author := struct {
+		EntityBase
+		name *string
+	}{}
+	ok, err := store.Query(AUTHOR).
+		All().
+		Where(AUTHOR_C_ID.Matches(3)).
+		SelectTo(&author)
+
+	if err != nil {
+		t.Fatalf("Failed RunRetriveIntoUnexportedFields: %s", err)
+	}
+	if !ok || *author.Id != 3 || author.Version != 1 || *author.name != AUTHOR_UTF8_NAME {
+		t.Fatalf("Failed RunRetriveIntoUnexportedFields: The record for publisher id 3, was not properly retrived. Retrived %+v", author)
 	}
 }
 

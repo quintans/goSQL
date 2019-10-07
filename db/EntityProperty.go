@@ -3,6 +3,8 @@ package db
 import (
 	"fmt"
 	"reflect"
+	"strings"
+	"unsafe"
 )
 
 type EntityProperty struct {
@@ -31,6 +33,10 @@ func (this *EntityProperty) Set(instance reflect.Value, value reflect.Value) boo
 			instance = instance.Elem()
 		}
 		field := instance.FieldByName(this.FieldName)
+		if !field.CanSet() {
+			// Cheat: writting to unexported fields
+			field = reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem()
+		}
 		if field.Kind() == reflect.Ptr || field.Kind() == reflect.Slice || field.Kind() == reflect.Array {
 			field.Set(value)
 		} else {
@@ -76,33 +82,29 @@ func walkTreeStruct(prefix string, typ reflect.Type, attrs map[string]*EntityPro
 	// loop through the struct's fields and set the map
 	for i := 0; i < typ.NumField(); i++ {
 		p := typ.Field(i)
-		// no package path equals to exported field
-		if p.PkgPath == "" {
-			if p.Anonymous {
-				walkTreeStruct(prefix, p.Type, attrs)
+		if p.Anonymous {
+			walkTreeStruct(prefix, p.Type, attrs)
+		} else {
+			ep := new(EntityProperty)
+			key := strings.ToUpper(p.Name[:1]) + p.Name[1:]
+			if prefix != "" {
+				key = prefix + key
+			}
+			attrs[key] = ep
+			ep.FieldName = p.Name
+			ep.Tag = p.Tag
+			// we want pointers. only pointer are addressable
+			if p.Type.Kind() == reflect.Ptr || p.Type.Kind() == reflect.Slice || p.Type.Kind() == reflect.Array {
+				ep.Type = p.Type
 			} else {
-				ep := new(EntityProperty)
-				var key string
-				if prefix == "" {
-					key = p.Name
-				} else {
-					key = prefix + p.Name
-				}
-				attrs[key] = ep
-				ep.FieldName = p.Name
-				ep.Tag = p.Tag
-				// we want pointers. only pointer are addressable
-				if p.Type.Kind() == reflect.Ptr || p.Type.Kind() == reflect.Slice || p.Type.Kind() == reflect.Array {
-					ep.Type = p.Type
-				} else {
-					ep.Type = reflect.PtrTo(p.Type)
-				}
+				ep.Type = reflect.PtrTo(p.Type)
+			}
 
-				if p.Type.Kind() == reflect.Slice || p.Type.Kind() == reflect.Array {
-					ep.InnerType = p.Type.Elem()
-				}
+			if p.Type.Kind() == reflect.Slice || p.Type.Kind() == reflect.Array {
+				ep.InnerType = p.Type.Elem()
 			}
 		}
+
 	}
 }
 

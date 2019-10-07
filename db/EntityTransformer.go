@@ -1,6 +1,8 @@
 package db
 
 import (
+	"strings"
+
 	"github.com/quintans/goSQL/dbx"
 	coll "github.com/quintans/toolkit/collections"
 	. "github.com/quintans/toolkit/ext"
@@ -90,10 +92,10 @@ func (this *EntityTransformer) PopulateMapping(tableAlias string, typ reflect.Ty
 			if ta == "" && ok {
 				ta = ch.GetColumn().GetAlias()
 			}
-			bp, _ = mappings[ta]
+			bp = mappings[prefix+capFirst(ta)]
 		} else if ok {
 			if tableAlias == token.GetPseudoTableAlias() {
-				bp, _ = mappings[prefix+ch.GetColumn().GetAlias()]
+				bp = mappings[prefix+capFirst(ch.GetColumn().GetAlias())]
 				if this.Overrider.DiscardIfKeyIsNull() && bp != nil {
 					bp.Key = ch.GetColumn().IsKey()
 				}
@@ -106,6 +108,10 @@ func (this *EntityTransformer) PopulateMapping(tableAlias string, typ reflect.Ty
 	}
 
 	return mappings
+}
+
+func capFirst(name string) string {
+	return strings.ToUpper(name[:1]) + name[1:]
 }
 
 // can be overriden
