@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	tk "github.com/quintans/toolkit"
-	coll "github.com/quintans/toolkit/collections"
 )
 
 type ColGroup []*Column
@@ -232,19 +231,6 @@ func (this *Association) GetDiscriminators() []Discriminator {
 
 func (this *Association) SetDiscriminators(discriminators ...Discriminator) {
 	this.discriminators = discriminators
-}
-
-func (this *Association) GetLink(chain string, from *Table, foreignKeys coll.Collection) *LinkNav {
-	// verifica as tabelas
-	var table *Table
-	if this.tableFrom.Equals(from) {
-		table = this.tableTo
-	} else {
-		table = this.tableFrom
-	}
-
-	foreignKeys.Add(this)
-	return table.GetLink(chain, foreignKeys)
 }
 
 func (this *Association) String() string {

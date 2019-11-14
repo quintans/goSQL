@@ -227,36 +227,3 @@ func (this *Table) GetCriterias() []*Criteria {
 		return nil
 	}
 }
-
-func (this *Table) GetLink(chain string, foreignKeys coll.Collection) *LinkNav {
-	idx := strings.Index(chain, FK_NAV_SEP)
-	var link Str
-	if idx > 0 {
-		link = Str(chain[:idx])
-	} else {
-		link = Str(chain)
-	}
-
-	// check columns
-	o, _ := this.columnsMap.Get(link)
-	c, _ := o.(*Column)
-
-	if c != nil {
-		return NewLinkNav(foreignKeys, c)
-	}
-
-	var fk *Association
-	if this.associationMap != nil {
-		o, _ = this.associationMap.Get(link)
-		fk, _ = o.(*Association)
-	}
-
-	if fk != nil {
-		if idx < 0 {
-			foreignKeys.Add(fk)
-			return NewLinkNav(foreignKeys, c)
-		}
-		return fk.GetLink(chain[idx+1:], this, foreignKeys)
-	}
-	return nil
-}
