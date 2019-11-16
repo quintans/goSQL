@@ -14,7 +14,7 @@ import (
 type EntityTransformerOverrider interface {
 	dbx.IRowTransformer
 
-	PopulateMapping(tableAlias string, typ reflect.Type) map[string]*EntityProperty
+	PopulateMapping(tableAlias string, typ reflect.Type) (map[string]*EntityProperty, error)
 	DiscardIfKeyIsNull() bool
 	InitRowData(row []interface{}, properties map[string]*EntityProperty)
 	ToEntity(row []interface{}, instance reflect.Value, properties map[string]*EntityProperty, emptyBean *bool) (bool, error)
@@ -74,13 +74,16 @@ func (this *EntityTransformer) BeforeAll() coll.Collection {
 //	 param mappings: instance of Map
 //	 param tableAlias: The table alias. If <code>nil</code> the mapping key is only "propertyName"
 //	 param type: The entity class
-func (this *EntityTransformer) PopulateMapping(tableAlias string, typ reflect.Type) map[string]*EntityProperty {
+func (this *EntityTransformer) PopulateMapping(tableAlias string, typ reflect.Type) (map[string]*EntityProperty, error) {
 	prefix := tableAlias
 	if tableAlias != "" {
 		prefix = tableAlias + "."
 	}
 
-	mappings := PopulateMapping(prefix, typ)
+	mappings, err := PopulateMapping(prefix, typ, this.Query.GetDb().GetTranslator())
+	if err != nil {
+		return nil, err
+	}
 
 	// Matches the columns with the bean properties
 	for idx, token := range this.Query.Columns {
@@ -107,7 +110,7 @@ func (this *EntityTransformer) PopulateMapping(tableAlias string, typ reflect.Ty
 		}
 	}
 
-	return mappings
+	return mappings, nil
 }
 
 func capFirst(name string) string {
@@ -132,7 +135,11 @@ func (this *EntityTransformer) Transform(rows *sql.Rows) (interface{}, error) {
 	val := this.Factory()
 
 	if this.Properties == nil {
-		this.Properties = this.Overrider.PopulateMapping("", val.Type())
+		var err error
+		this.Properties, err = this.Overrider.PopulateMapping("", val.Type())
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if this.TemplateData == nil {
@@ -196,7 +203,12 @@ func (this *EntityTransformer) InitRowData(
 	for _, bp := range properties {
 		if bp.Position > 0 {
 			position := bp.Position
-			ptr := bp.New().Interface()
+			var ptr interface{}
+			if bp.converter != nil {
+				ptr = bp.converter.FromDbInstance()
+			} else {
+				ptr = bp.New()
+			}
 			row[position-1] = ptr
 		}
 	}
@@ -212,7 +224,7 @@ func (this *EntityTransformer) ToEntity(
 	for _, bp := range properties {
 		if bp.Position > 0 {
 			position := bp.Position
-			value, err := ConvertFromDb(bp, this.Query.GetDb(), row[position-1])
+			value, err := bp.ConvertFromDb(row[position-1])
 			if err != nil {
 				return false, err
 			}

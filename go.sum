@@ -95,8 +95,8 @@ github.com/pkg/errors v0.8.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINE
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/quintans/goSQL v0.0.0-20171112122952-e93145e9919d/go.mod h1:MkrXLc68zRc6X1w5FRMsbOxoAJQFQjk2Smpuhv+Po9E=
-github.com/quintans/toolkit v0.0.0-20190929021224-9d7ae45f29b7 h1:M43JwQverDzSvMYPRbpidenTP7PdRfdhCWgO6p5tA8o=
-github.com/quintans/toolkit v0.0.0-20190929021224-9d7ae45f29b7/go.mod h1:PpTakdDnp2jAKvAcnpWCEUg6RsDAdB3mK3jxUvXn1WM=
+github.com/quintans/toolkit v0.0.0-20191116152115-d7982be7971f h1:fdPmromFlWKeTfxFwjrTohKf4uOFLWY7ln4c4kF57Is=
+github.com/quintans/toolkit v0.0.0-20191116152115-d7982be7971f/go.mod h1:PpTakdDnp2jAKvAcnpWCEUg6RsDAdB3mK3jxUvXn1WM=
 github.com/remyoudompheng/bigfft v0.0.0-20190512091148-babf20351dd7 h1:FUL3b97ZY2EPqg2NbXKuMHs5pXJB9hjj1fDHnF2vl28=
 github.com/remyoudompheng/bigfft v0.0.0-20190512091148-babf20351dd7/go.mod h1:qqbHyh8v60DhA7CoWK5oRCqLrMHRGoxYCSS9EjAz6Eo=
 github.com/rogpeppe/go-internal v1.3.0/go.mod h1:M8bDsm7K2OlrFYOpmOWEs/qY81heoFRclV5y23lUDJ4=

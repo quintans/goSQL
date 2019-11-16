@@ -10,7 +10,7 @@ const FAULT_QUERY = "QRY01"
 const FAULT_TRANSFORM = "TRF01"
 const FAULT_OPTIMISTIC_LOCK = "OPT_LOCK"
 
-var _ error = &PersistenceFail{}
+var _ error = (*PersistenceFail)(nil)
 
 type PersistenceFail struct {
 	*tk.Fail

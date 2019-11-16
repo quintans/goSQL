@@ -16,6 +16,7 @@ const (
 // Converter converts the data stored in the database into the data stored in the struct and vice-versa
 type Converter interface {
 	ToDb(in interface{}) (interface{}, error)
+	FromDbInstance() interface{}
 	FromDb(in interface{}) (interface{}, error)
 }
 
@@ -39,5 +40,6 @@ type Translator interface {
 	ColumnName(column *Column) string
 	ColumnAlias(token Tokener, position int) string
 	IgnoreNullKeys() bool
+	RegisterConverter(name string, c Converter)
 	GetConverter(name string) Converter
 }

@@ -1,9 +1,9 @@
 package db
 
 import (
-	"errors"
-	"fmt"
 	"reflect"
+
+	"github.com/pkg/errors"
 
 	"github.com/quintans/goSQL/dbx"
 	. "github.com/quintans/toolkit/ext"
@@ -137,7 +137,7 @@ func structName(instance interface{}) (*Table, reflect.Type, error) {
 		// The package correspondes to the database schema
 		tab, ok = Tables.Get(Str(typ.PkgPath() + "." + typ.Name()))
 		if !ok {
-			return nil, nil, errors.New("There is no table mapped to " + typ.Name())
+			return nil, nil, errors.Errorf("There is no table mapped to %s", typ.Name())
 		}
 	}
 
@@ -158,8 +158,11 @@ func (this *Db) Create(instance interface{}) error {
 
 // struct field with `sql:"omit"` should be ignored if value is zero in an update.
 // in a Retrive, this field with this tag is also ignored
-func acceptColumn(table *Table, t reflect.Type, handler func(*Column)) {
-	mappings := PopulateMapping("", t)
+func (this *Db) acceptColumn(table *Table, t reflect.Type, handler func(*Column)) error {
+	mappings, err := PopulateMapping("", t, this.GetTranslator())
+	if err != nil {
+		return err
+	}
 	cols := table.GetColumns().Elements()
 	for _, e := range cols {
 		column := e.(*Column)
@@ -170,6 +173,7 @@ func acceptColumn(table *Table, t reflect.Type, handler func(*Column)) {
 			}
 		}
 	}
+	return nil
 }
 
 func (this *Db) Retrive(instance interface{}, keys ...interface{}) (bool, error) {
@@ -179,9 +183,11 @@ func (this *Db) Retrive(instance interface{}, keys ...interface{}) (bool, error)
 	}
 
 	var dml = this.Overrider.Query(table)
-	acceptColumn(table, t, func(c *Column) {
+	if err := this.acceptColumn(table, t, func(c *Column) {
 		dml.Column(c)
-	})
+	}); err != nil {
+		return false, err
+	}
 
 	criterias := make([]*Criteria, 0)
 	pos := 0
@@ -216,12 +222,15 @@ func acceptField(tag reflect.StructTag, v interface{}) bool {
 	return tag.Get(sqlOmitionKey) != sqlOmitionVal || !isZero(v)
 }
 
-func buildCriteria(table *Table, example interface{}) []*Criteria {
+func (this *Db) buildCriteria(table *Table, example interface{}) ([]*Criteria, error) {
 	criterias := make([]*Criteria, 0)
 
 	s := reflect.ValueOf(example)
 	t := reflect.TypeOf(example)
-	mappings := PopulateMapping("", t)
+	mappings, err := PopulateMapping("", t, this.GetTranslator())
+	if err != nil {
+		return nil, err
+	}
 	cols := table.GetColumns().Elements()
 	for _, e := range cols {
 		column := e.(*Column)
@@ -233,7 +242,7 @@ func buildCriteria(table *Table, example interface{}) []*Criteria {
 			}
 		}
 	}
-	return criterias
+	return criterias, nil
 }
 
 func (this *Db) find(instance interface{}, example interface{}) (*Query, error) {
@@ -243,11 +252,16 @@ func (this *Db) find(instance interface{}, example interface{}) (*Query, error) 
 	}
 
 	query := this.Overrider.Query(table)
-	acceptColumn(table, t, func(c *Column) {
+	if err := this.acceptColumn(table, t, func(c *Column) {
 		query.Column(c)
-	})
+	}); err != nil {
+		return nil, err
+	}
 
-	criterias := buildCriteria(table, example)
+	criterias, err := this.buildCriteria(table, example)
+	if err != nil {
+		return nil, err
+	}
 	if len(criterias) > 0 {
 		query.Where(criterias...)
 	}
@@ -306,7 +320,10 @@ func (this *Db) RemoveAll(instance interface{}) (int64, error) {
 	}
 
 	var dml = this.Overrider.Delete(table)
-	criterias := buildCriteria(table, instance)
+	criterias, err := this.buildCriteria(table, instance)
+	if err != nil {
+		return 0, err
+	}
 	if len(criterias) > 0 {
 		dml.Where(criterias...)
 	}
@@ -328,7 +345,7 @@ func (this *Db) Save(instance interface{}) (bool, error) {
 
 	verColumn := table.GetVersionColumn()
 	if verColumn == nil {
-		return false, errors.New(fmt.Sprintf("The mapped table %s, must have a mapped version column.", table.GetName()))
+		return false, errors.Errorf("The mapped table %s, must have a mapped version column.", table.GetName())
 	}
 
 	// find column

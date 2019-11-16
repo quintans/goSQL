@@ -5,8 +5,8 @@ import (
 	coll "github.com/quintans/toolkit/collections"
 
 	"database/sql/driver"
-	"errors"
 	"fmt"
+	"github.com/pkg/errors"
 	"reflect"
 	"time"
 )
@@ -74,7 +74,11 @@ func (this *Update) Submit(instance interface{}) (int64, error) {
 	if typ == this.lastType {
 		mappings = this.lastMappings
 	} else {
-		mappings = PopulateMapping("", typ)
+		var err error
+		mappings, err = PopulateMapping("", typ, this.GetDb().GetTranslator())
+		if err != nil {
+			return 0, err
+		}
 		criterias = make([]*Criteria, 0)
 		this.criteria = nil
 		this.lastMappings = mappings
@@ -109,7 +113,7 @@ func (this *Update) Submit(instance interface{}) (int64, error) {
 
 			if column.IsKey() {
 				if !val.IsValid() || (val.Kind() == reflect.Ptr && val.IsNil()) {
-					return 0, errors.New(fmt.Sprintf("goSQL: Value for key property '%s' cannot be nil.", alias))
+					return 0, errors.Errorf("goSQL: Value for key property '%s' cannot be nil.", alias)
 				}
 
 				if val.Kind() == reflect.Ptr {
@@ -164,7 +168,7 @@ func (this *Update) Submit(instance interface{}) (int64, error) {
 							if err != nil {
 								return 0, err
 							}
-							value, err = ConvertToDb(bp, this.GetDb(), value)
+							value, err = bp.ConvertToDb(value)
 							if err != nil {
 								return 0, err
 							}
@@ -174,7 +178,7 @@ func (this *Update) Submit(instance interface{}) (int64, error) {
 						default:
 							if marked || acceptField(bp.Tag, v) {
 								var err error
-								v, err = ConvertToDb(bp, this.GetDb(), v)
+								v, err = bp.ConvertToDb(v)
 								if err != nil {
 									return 0, err
 								}
@@ -210,7 +214,7 @@ func (this *Update) Submit(instance interface{}) (int64, error) {
 				id, ver, this.GetTable().GetName()))
 		}
 
-		ver += 1
+		ver++
 		bp := mappings[verColumn.GetAlias()]
 		bp.Set(elem, reflect.ValueOf(&ver))
 	}

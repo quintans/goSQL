@@ -4,7 +4,7 @@ import (
 	coll "github.com/quintans/toolkit/collections"
 
 	"database/sql/driver"
-	"errors"
+	"github.com/pkg/errors"
 	"reflect"
 	"time"
 )
@@ -116,7 +116,11 @@ func (this *Insert) Submit(instance interface{}) (int64, error) {
 	if typ == this.lastType {
 		mappings = this.lastMappings
 	} else {
-		mappings = PopulateMapping("", typ)
+		var err error
+		mappings, err = PopulateMapping("", typ, this.GetDb().GetTranslator())
+		if err != nil {
+			return 0, err
+		}
 		this.lastMappings = mappings
 		this.lastType = typ
 	}
@@ -145,7 +149,7 @@ func (this *Insert) Submit(instance interface{}) (int64, error) {
 				v := bp.Get(elem)
 				if v.IsValid() && (!useMarks || marked) {
 					if v.Kind() == reflect.Ptr && v.IsNil() {
-						value, err := ConvertToDb(bp, this.GetDb(), nil)
+						value, err := bp.ConvertToDb(nil)
 						if err != nil {
 							return 0, err
 						}
@@ -160,13 +164,13 @@ func (this *Insert) Submit(instance interface{}) (int64, error) {
 							if err != nil {
 								return 0, err
 							}
-							value, err = ConvertToDb(bp, this.GetDb(), value)
+							value, err = bp.ConvertToDb(value)
 							if err != nil {
 								return 0, err
 							}
 							this.Set(column, value)
 						default:
-							value, err = ConvertToDb(bp, this.GetDb(), val)
+							value, err = bp.ConvertToDb(val)
 							if err != nil {
 								return 0, err
 							}

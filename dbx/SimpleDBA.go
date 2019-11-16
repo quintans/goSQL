@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/pkg/errors"
 	tk "github.com/quintans/toolkit"
 	coll "github.com/quintans/toolkit/collections"
 	"github.com/quintans/toolkit/log"
@@ -178,7 +179,7 @@ func (this *SimpleDBA) QueryInto(
 	var results []interface{}
 	// output must be at most 1
 	if ftype.NumOut() > 1 {
-		return nil, fmt.Errorf("goSQL: A function must have at most one output. Got %s outputs.", ftype.NumOut())
+		return nil, fmt.Errorf("goSQL: A function must have at most one output. Got %d outputs", ftype.NumOut())
 	} else if ftype.NumOut() == 1 {
 		results = make([]interface{}, 0)
 	}
@@ -365,10 +366,11 @@ func (this *SimpleDBA) InsertReturning(sql string, params ...interface{}) (int64
 func rethrow(code string, cause error, sql string, params ...interface{}) error {
 	causeMessage := cause.Error()
 
-	msg := tk.NewStrBuffer(causeMessage, "\nSQL: ", sql, "\nParameters: ")
+	msg := tk.NewStrBuffer()
+	msg.Addf("[%s] ", code).Add(causeMessage, "\nSQL: ", sql, "\nParameters: ")
 	if params != nil {
-		msg.Add(fmt.Sprintf("%v", params))
+		msg.Addf("%v", params)
 	}
 
-	return NewPersistenceFail(code, msg.String())
+	return errors.Wrap(cause, msg.String())
 }

@@ -3,8 +3,8 @@ package db
 import (
 	"github.com/quintans/goSQL/dbx"
 
-	"errors"
 	"fmt"
+	"github.com/pkg/errors"
 	"reflect"
 	"time"
 )
@@ -44,7 +44,11 @@ func (this *Delete) Submit(value interface{}) (int64, error) {
 	if typ == this.lastType {
 		mappings = this.lastMappings
 	} else {
-		mappings = PopulateMapping("", typ)
+		var err error
+		mappings, err = PopulateMapping("", typ, this.GetDb().GetTranslator())
+		if err != nil {
+			return 0, err
+		}
 		criterias = make([]*Criteria, 0)
 		this.criteria = nil
 		this.lastMappings = mappings
@@ -66,7 +70,7 @@ func (this *Delete) Submit(value interface{}) (int64, error) {
 
 			if column.IsKey() {
 				if !val.IsValid() || (val.Kind() == reflect.Ptr && val.IsNil()) {
-					return 0, errors.New(fmt.Sprintf("goSQL: Value for key property '%s' cannot be nil.", alias))
+					return 0, errors.Errorf("goSQL: Value for key property '%s' cannot be nil.", alias)
 				}
 
 				if val.Kind() == reflect.Ptr {
@@ -101,7 +105,7 @@ func (this *Delete) Submit(value interface{}) (int64, error) {
 	}
 
 	if !hasId {
-		return 0, errors.New(fmt.Sprintf("goSQL: No key field was identified in %s.", typ.String()))
+		return 0, errors.Errorf("goSQL: No key field was identified in %s.", typ.String())
 	}
 
 	if criterias != nil {

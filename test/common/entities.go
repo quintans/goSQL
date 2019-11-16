@@ -1,7 +1,6 @@
 package common
 
 import (
-	"database/sql/driver"
 	"fmt"
 	"strconv"
 	"strings"
@@ -606,7 +605,7 @@ type Palette struct {
 	EntityBase
 
 	Code  string
-	Value *Color
+	Value *Color `converter:"color"`
 }
 
 type Color struct {
@@ -615,6 +614,7 @@ type Color struct {
 	Blue  int
 }
 
+/*
 func (c *Color) Value() (driver.Value, error) {
 	return fmt.Sprintf("%d|%d|%d", c.Red, c.Green, c.Blue), nil
 }
@@ -629,4 +629,37 @@ func (c *Color) Scan(src interface{}) error {
 	c.Green = g
 	c.Blue = b
 	return nil
+}
+*/
+
+type ColorConverter struct{}
+
+func (cc ColorConverter) ToDb(in interface{}) (interface{}, error) {
+	if in == nil {
+		return in, nil
+	}
+	c := in.(*Color)
+	return fmt.Sprintf("%d|%d|%d", c.Red, c.Green, c.Blue), nil
+}
+
+func (cc ColorConverter) FromDbInstance() interface{} {
+	var s string
+	return &s
+}
+
+func (cc ColorConverter) FromDb(in interface{}) (interface{}, error) {
+	if in == nil {
+		return in, nil
+	}
+
+	s := in.(*string)
+	rgb := strings.Split(*s, "|")
+	r, _ := strconv.Atoi(rgb[0])
+	g, _ := strconv.Atoi(rgb[1])
+	b, _ := strconv.Atoi(rgb[2])
+	c := &Color{}
+	c.Red = r
+	c.Green = g
+	c.Blue = b
+	return &c, nil
 }

@@ -1,10 +1,11 @@
 package db
 
 import (
-	"fmt"
 	"reflect"
 	"strings"
 	"unsafe"
+
+	"github.com/quintans/toolkit/faults"
 )
 
 type EntityProperty struct {
@@ -14,10 +15,11 @@ type EntityProperty struct {
 	InnerType reflect.Type
 	Key       bool
 	Tag       reflect.StructTag
+	converter Converter
 }
 
-func (this *EntityProperty) New() reflect.Value {
-	return reflect.New(this.Type)
+func (this *EntityProperty) New() interface{} {
+	return reflect.New(this.Type).Interface()
 }
 
 func (this *EntityProperty) IsMany() bool {
@@ -54,20 +56,20 @@ func (this *EntityProperty) Get(instance reflect.Value) reflect.Value {
 	return instance.FieldByName(this.FieldName)
 }
 
-func PopulateMappingOf(prefix string, m interface{}) map[string]*EntityProperty {
-	return PopulateMapping(prefix, reflect.TypeOf(m))
+func PopulateMappingOf(prefix string, m interface{}, translator Translator) (map[string]*EntityProperty, error) {
+	return PopulateMapping(prefix, reflect.TypeOf(m), translator)
 }
 
-func PopulateMapping(prefix string, typ reflect.Type) map[string]*EntityProperty {
+func PopulateMapping(prefix string, typ reflect.Type, translator Translator) (map[string]*EntityProperty, error) {
 	// create an attribute data structure as a map of types keyed by a string.
 	attrs := make(map[string]*EntityProperty)
 
-	walkTreeStruct(prefix, typ, attrs)
+	err := walkTreeStruct(prefix, typ, attrs, translator)
 
-	return attrs
+	return attrs, err
 }
 
-func walkTreeStruct(prefix string, typ reflect.Type, attrs map[string]*EntityProperty) {
+func walkTreeStruct(prefix string, typ reflect.Type, attrs map[string]*EntityProperty, translator Translator) error {
 	// if a pointer to a struct is passed, get the type of the dereferenced object
 	if typ.Kind() == reflect.Ptr {
 		typ = typ.Elem()
@@ -76,16 +78,16 @@ func walkTreeStruct(prefix string, typ reflect.Type, attrs map[string]*EntityPro
 	// Only structs are supported so return an empty result if the passed object
 	// isn't a struct
 	if typ.Kind() != reflect.Struct {
-		return
+		return nil
 	}
 
 	// loop through the struct's fields and set the map
 	for i := 0; i < typ.NumField(); i++ {
 		p := typ.Field(i)
 		if p.Anonymous {
-			walkTreeStruct(prefix, p.Type, attrs)
+			walkTreeStruct(prefix, p.Type, attrs, translator)
 		} else {
-			ep := new(EntityProperty)
+			ep := &EntityProperty{}
 			key := strings.ToUpper(p.Name[:1]) + p.Name[1:]
 			if prefix != "" {
 				key = prefix + key
@@ -93,6 +95,15 @@ func walkTreeStruct(prefix string, typ reflect.Type, attrs map[string]*EntityPro
 			attrs[key] = ep
 			ep.FieldName = p.Name
 			ep.Tag = p.Tag
+			cn := p.Tag.Get(ConverterTag)
+			if cn != "" {
+				c := translator.GetConverter(cn)
+				if c == nil {
+					return faults.New("Converter %s is not registered", cn)
+				}
+				ep.converter = c
+			}
+
 			// we want pointers. only pointer are addressable
 			if p.Type.Kind() == reflect.Ptr || p.Type.Kind() == reflect.Slice || p.Type.Kind() == reflect.Array {
 				ep.Type = p.Type
@@ -104,40 +115,22 @@ func walkTreeStruct(prefix string, typ reflect.Type, attrs map[string]*EntityPro
 				ep.InnerType = p.Type.Elem()
 			}
 		}
-
 	}
+	return nil
 }
 
 const ConverterTag = "converter"
 
-func ConvertFromDb(bp *EntityProperty, db IDb, value interface{}) (interface{}, error) {
-	return convertToOrFromDb(bp, db, value, false)
-}
-
-func ConvertToDb(bp *EntityProperty, db IDb, value interface{}) (interface{}, error) {
-	return convertToOrFromDb(bp, db, value, true)
-}
-
-func convertToOrFromDb(bp *EntityProperty, db IDb, value interface{}, toDb bool) (interface{}, error) {
-	cn := bp.Tag.Get(ConverterTag)
-	if cn == "" {
+func (bp *EntityProperty) ConvertFromDb(value interface{}) (interface{}, error) {
+	if bp.converter == nil {
 		return value, nil
 	}
+	return bp.converter.FromDb(value)
+}
 
-	c := db.GetTranslator().GetConverter(cn)
-	if c == nil {
-		return nil, fmt.Errorf("Converter %s was not registered", cn)
+func (bp *EntityProperty) ConvertToDb(value interface{}) (interface{}, error) {
+	if bp.converter == nil {
+		return value, nil
 	}
-
-	var err error
-	if toDb {
-		value, err = c.ToDb(value)
-	} else {
-		value, err = c.FromDb(value)
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	return value, nil
+	return bp.converter.ToDb(value)
 }

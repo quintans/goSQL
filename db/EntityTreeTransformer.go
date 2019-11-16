@@ -6,9 +6,9 @@ import (
 	. "github.com/quintans/toolkit/ext"
 
 	"database/sql"
-	"errors"
-	"fmt"
 	"reflect"
+
+	"github.com/pkg/errors"
 )
 
 //extends EntityTransformer
@@ -118,8 +118,11 @@ func (this *EntityTreeTransformer) InitFullRowData(
 	row []interface{},
 	typ reflect.Type,
 	alias string,
-) {
-	lastProps := this.getCachedProperties(alias, typ)
+) error {
+	lastProps, err := this.getCachedProperties(alias, typ)
+	if err != nil {
+		return err
+	}
 	// instanciate all target types for the driving entity
 	this.Overrider.InitRowData(row, lastProps)
 
@@ -146,6 +149,7 @@ func (this *EntityTreeTransformer) InitFullRowData(
 			}
 		}
 	}
+	return nil
 }
 
 func (this *EntityTreeTransformer) transformEntity(
@@ -154,10 +158,12 @@ func (this *EntityTreeTransformer) transformEntity(
 	alias string,
 ) (interface{}, error) {
 	var valid bool
-	lastProps := this.getCachedProperties(alias, parent.Type())
+	lastProps, err := this.getCachedProperties(alias, parent.Type())
+	if err != nil {
+		return nil, err
+	}
 	entity := parent.Interface()
 	hasher, isHasher := entity.(tk.Hasher)
-	var err error
 	emptyBean := true
 	if isHasher && this.reuse {
 		// for performance, loads only key, because it's sufficient for searching the cache
@@ -196,12 +202,11 @@ func (this *EntityTreeTransformer) transformEntity(
 				}
 			}
 			if noKey {
-				return nil, errors.New(
-					fmt.Sprintf("Key columns not found for %s."+
+				return nil, errors.Errorf(
+					"Key columns not found for %s."+
 						" When transforming to a object tree and reusing previous entities, "+
 						"the key columns must be declared in the select.",
-						parent.Type(),
-					),
+					parent.Type(),
 				)
 			}
 		}
@@ -310,7 +315,10 @@ func (this *EntityTreeTransformer) LoadInstanceKeys(
 		if bp.Position != 0 && bp.Key == onlyKeys {
 			invalid = false
 			position := bp.Position
-			value := row[position-1]
+			value, err := bp.ConvertFromDb(row[position-1])
+			if err != nil {
+				return false, err
+			}
 
 			v := reflect.ValueOf(value)
 			if v.Kind() == reflect.Ptr {
@@ -328,14 +336,18 @@ func (this *EntityTreeTransformer) LoadInstanceKeys(
 	return !invalid, nil
 }
 
-func (this *EntityTreeTransformer) getCachedProperties(alias string, typ reflect.Type) map[string]*EntityProperty {
+func (this *EntityTreeTransformer) getCachedProperties(alias string, typ reflect.Type) (map[string]*EntityProperty, error) {
 	properties, ok := this.cachedEntityMappings[alias]
 	if !ok {
-		properties = this.Overrider.PopulateMapping(alias, typ)
+		var err error
+		properties, err = this.Overrider.PopulateMapping(alias, typ)
+		if err != nil {
+			return nil, err
+		}
 		this.cachedEntityMappings[alias] = properties
 	}
 
-	return properties
+	return properties, nil
 }
 
 // return the list o current branches and moves forward to the next list

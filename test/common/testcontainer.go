@@ -2,7 +2,7 @@ package common
 
 import (
 	"context"
-	"errors"
+	"github.com/pkg/errors"
 	"strings"
 	"time"
 
@@ -61,7 +61,7 @@ func (ws *DbStrategy) WaitUntilReady(ctx context.Context, target wait.StrategyTa
 	defer cancelContext()
 
 	if strings.Index(ws.dataSourceName, "<port>") < 0 {
-		return errors.New("Missing placeholder <port> in " + ws.dataSourceName)
+		return errors.Errorf("Missing placeholder <port> in %s", ws.dataSourceName)
 	}
 
 	var ds string

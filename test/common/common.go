@@ -48,6 +48,8 @@ func init() {
 var RAW_SQL string
 
 func InitDB(t *testing.T, driverName, dataSourceName string, translator Translator, initSqlFile string) (ITransactionManager, *sql.DB) {
+	translator.RegisterConverter("color", ColorConverter{})
+
 	mydb, err := Connect(driverName, dataSourceName)
 	if err != nil {
 		t.Fatal(err)
@@ -120,8 +122,8 @@ type Tester struct {
 }
 
 func (tt Tester) RunAll(TM ITransactionManager, t *testing.T) {
-	tt.RunRetriveIntoUnexportedFields(TM, t)
 	tt.RunDriverConverter(TM, t)
+	tt.RunRetriveIntoUnexportedFields(TM, t)
 	tt.RunSelectUTF8(TM, t)
 	tt.RunRetrive(TM, t)
 	tt.RunFindFirst(TM, t)
@@ -2009,7 +2011,7 @@ func (tt Tester) RunDriverConverter(TM ITransactionManager, t *testing.T) {
 	db := TM.Store()
 	// clear catalog
 	if _, err := db.Delete(CATALOG).Execute(); err != nil {
-		t.Fatal(err)
+		t.Fatalf("%+v", err)
 	}
 
 	p := Palette{
@@ -2017,7 +2019,9 @@ func (tt Tester) RunDriverConverter(TM ITransactionManager, t *testing.T) {
 		Value: &Color{102, 101, 100},
 	}
 
-	db.Insert(CATALOG).Submit(&p)
+	if _, err := db.Insert(CATALOG).Submit(&p); err != nil {
+		t.Fatalf("%+v", err)
+	}
 	actual := getColor(db, *p.Id)
 
 	expected := "102|101|100"
@@ -2026,11 +2030,14 @@ func (tt Tester) RunDriverConverter(TM ITransactionManager, t *testing.T) {
 	}
 
 	p2 := Palette{}
-	db.Query(CATALOG).
+	_, err := db.Query(CATALOG).
 		Where(CATALOG_C_ID.Matches(p.Id)).
 		SelectTo(&p2)
+	if err != nil {
+		t.Fatalf("%+v", err)
+	}
 
-	if *p.Value != *p2.Value {
+	if p2.Value == nil || *p.Value != *p2.Value {
 		t.Fatalf("Expected %+v, got %+v", p.Value, p2.Value)
 	}
 }
