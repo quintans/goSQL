@@ -1245,7 +1245,7 @@ func (c *Color) Scan(src interface{}) error {
 
 ### Converter approach
 
-Another approach is to use the tag `converter:"aName"` on the struct field and register on translator the converter, that implements the `db.Converter` interface.
+Another approach is to use the tag `sql:"converter=aName"` on the struct field and register on translator the converter, that implements the `db.Converter` interface.
 
 This approach is less powerful than the previous one because we will not be able to use in search criterias. On the other hand it allows a cleaner model and we don't have to worry about the raw data coming from the database.
 
@@ -1254,7 +1254,7 @@ type Palette struct {
 	EntityBase
 
 	Code  string
-	Value *Color `converter:"color"`
+	Value *Color `sql:"converter=color"`
 }
 
 type Color struct {

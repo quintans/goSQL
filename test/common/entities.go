@@ -608,7 +608,7 @@ type Palette struct {
 	EntityBase
 
 	Code  string
-	Value *Color `converter:"color"`
+	Value *Color `sql:"converter=color"`
 }
 
 type Color struct {

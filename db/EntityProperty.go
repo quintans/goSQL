@@ -117,15 +117,25 @@ func walkTreeStruct(prefix string, typ reflect.Type, attrs map[string]*EntityPro
 	for i := 0; i < typ.NumField(); i++ {
 		p := typ.Field(i)
 		var omit, embeded bool
+		var converter Converter
 		sqlVal := p.Tag.Get(sqlKey)
 		if sqlVal != "" {
 			splits := strings.Split(sqlVal, ",")
-			for _, v := range splits {
+			for _, s := range splits {
+				v := strings.TrimSpace(s)
 				switch v {
 				case sqlOmitionVal:
 					omit = true
 				case sqlEmbededVal:
 					embeded = true
+				default:
+					if strings.HasPrefix(v, converterTag) {
+						cn := v[len(converterTag):]
+						converter = translator.GetConverter(cn)
+						if converter == nil {
+							return faults.New("Converter %s is not registered", cn)
+						}
+					}
 				}
 			}
 		}
@@ -151,15 +161,7 @@ func walkTreeStruct(prefix string, typ reflect.Type, attrs map[string]*EntityPro
 			attrs[key] = ep
 			ep.FieldName = p.Name
 			ep.Omit = omit
-			cn := p.Tag.Get(ConverterTag)
-			if cn != "" {
-				c := translator.GetConverter(cn)
-				if c == nil {
-					return faults.New("Converter %s is not registered", cn)
-				}
-				ep.converter = c
-			}
-
+			ep.converter = converter
 			// we want pointers. only pointer are addressable
 			if p.Type.Kind() == reflect.Ptr || p.Type.Kind() == reflect.Slice || p.Type.Kind() == reflect.Array {
 				ep.Type = p.Type
@@ -175,7 +177,7 @@ func walkTreeStruct(prefix string, typ reflect.Type, attrs map[string]*EntityPro
 	return nil
 }
 
-const ConverterTag = "converter"
+const converterTag = "converter="
 
 func (bp *EntityProperty) ConvertFromDb(value interface{}) (interface{}, error) {
 	if bp.converter == nil {
