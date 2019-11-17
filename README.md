@@ -55,6 +55,8 @@ a ORM like library in Go (golang) that makes SQL easier to use.
 	* [Order By](#order-by)
 	* [Union](#union)
 	* [Pagination](#pagination)
+* [Embeded Structs](#embeded-structs)
+* [Converters](#converters)
 * [Struct Triggers](#struct-triggers)
 * [Table Triggers](#table-triggers)
 * [Association Discriminator](#association-discriminator)
@@ -125,6 +127,7 @@ Besides the examples in this page there are a lot more examples in the
  - CRUD actions using structs
  - Simple join declaration
  - Populate struct tree with query results containing joins
+ - Embeded Structs
  - Subqueries
  - Automatic setting of primary keys for inserts
  - Optimistic Locking with automatic version increment
@@ -133,7 +136,7 @@ Besides the examples in this page there are a lot more examples in the
  - Result Pagination
  - Pre/Post insert/update/delete Struct triggers
  - Support for primitive pointer types like `*string`, `*int64`, `*float64`, `*bool`, etc
- - Support for types implementing `driver.Valuer` and `sql.Scanner` interface, like NullString, etc
+ - Support for types implementing `driver.Valuer` and `sql.Scanner` interface, like NullString, type converters, etc
  - Extensible
 
 ## Tested Databases
@@ -660,7 +663,6 @@ The query operation is by far the richest operation of the ones we have seen.
 
 Query operation that start with `Select*` retrive **one** instance, and those that start with `List*` returns **many** instances.
 
-
 ### SelectInto
 
 The result of the query is put in the supplied variables. They must be pointers.
@@ -776,7 +778,6 @@ store.Query(PUBLISHER).
 }, &name)
 ```
 
-
 ### ListInto
 
 This method is very similar to the previous one, but relies on reflection.
@@ -808,7 +809,6 @@ store.Query(BOOK).
 
  The target entity is determined by the receiving type of the function.
 
-
 ### ListOf
 
 Another way of executing the above query would be
@@ -829,7 +829,6 @@ for e := books.Enumerator(); e.HasNext(); {
 	// do something
 }
 ```
-
 
 ### ListFlatTree
 
@@ -869,7 +868,6 @@ The responsability of building the result is delegated to the receiving function
 
 There is another query function named `ListFlatTreeOf` with the same behaviour as `ListFlatTree` but returns a collection.
 
-
 ### ListTreeOf
 
 Executes a query and transform the results into a tree with the head with the passed struct type.
@@ -891,7 +889,6 @@ for e := publishers.Enumerator(); e.HasNext(); {
 	// do something here
 }
 ```
-
 
 ### Case Statement
 
@@ -937,7 +934,6 @@ err := store.Query(BOOK).
 	List(&dtos)
 ```
 
-
 ### Column Subquery
 
 For this example we will use the following struct which will hold the result for each row.
@@ -969,7 +965,6 @@ store.Query(PUBLISHER).Alias("p").
 ```
 
 Notice that when I use the subquery variable an alias `"Value"` is defined. This alias matches with a struct field in `Dto`. In this query the `PUBLISHER_C_NAME` column as no associated alias, so the default column alias is used.
-
 
 ### Where Subquery
 
@@ -1044,7 +1039,6 @@ store.Query(BOOK).
     SelectTree(&book)
 ```
 
-
 ### Group By
 
 For this example I will use the struct defined in [Column Subquery](#column-subquery).
@@ -1059,7 +1053,6 @@ store.Query(PUBLISHER).
 	GroupByPos(1). // result column position
 	List(&dtos)
 ```
-
 
 ### Having
 
@@ -1087,7 +1080,6 @@ store.Query(PUBLISHER).
 	Having(Alias("ThisYear").Greater(30)).
 	List(&sales)
 ```
-
 
 ### Order By
 
@@ -1133,7 +1125,6 @@ store.Query(PUBLISHER).
 		OrderAs(AUTHOR_C_ID.For("auth")).Desc(). // declares the table alias to use
 		ListTreeOf((*Publisher)(nil))
 ```
-
 
 ### Union
 
@@ -1206,172 +1197,6 @@ store.Query(PUBLISHER).
 	Skip(2).  // skip the first 2 records
 	Limit(3). // limit to 3 records
 	ListFlatTree(&publishers)
-```
-
-## Struct Triggers
-
-It is possible to define methods that are called before/after an insert/update/delete/query to the database.
-
-For example, defining the following method will trigger a call for every struct before a insert.
-
-```go
-PreInsert(store IDb) error
-```
-
-The same can be done for binding a trigger after an insert using the following signature.
-
-```go
-PostInsert(store IDb)
-```
-
-The remaining triggers are:
-
-```go
-PreUpdate(store IDb) error
-PostUpdate(store IDb)
-PreDelete(store IDb) error
-PostDelete(store IDb)
-PostRetrive(store IDb)
-```
-
-If an error is returned in a Pre trigger the action is not performed.
-
-To know if a trigger is called inside a transaction use `store.InTransaction()`.
-
-
-## Table Triggers
-
-It is also possible to declare triggers/hooks in the table declaration.
-
-Auditing example:
-
-```go
-func init() {
-	// pre insert trigger
-	BOOK.PreInsertTrigger = func(ins *db.Insert) {
-		ins.Set(BOOK_C_VERSION, 1)
-		ins.Set(BOOK_C_CREATION, ext.NOW())
-		uid, ok := ins.GetDb().GetAttribute(ATTR_USERID)
-		if ok {
-			ins.Set(BOOK_C_USER_CREATION, uid.(int64))
-		}
-	}
-	// pre update trigger
-	BOOK.PreUpdateTrigger = func(upd *db.Update) {
-		upd.Set(BOOK_C_MODIFICATION, ext.NOW())
-		uid, ok := upd.GetDb().GetAttribute(ATTR_USERID)
-		if ok {
-			upd.Set(BOOK_C_USER_MODIFICATION, uid.(int64))
-		}
-	}
-}
-```
-
-upd.GetDb() gets a reference to the IDb instance that is unique by transaction.
-
-TODO: explain in more detail
-
-
-## Association Discriminator
-
-An exclusive OR relationship indicates that entity A is related to either entity B or entity C but not both B and C. This is implemented by defining associations with a constraint.
-
-For the example I will use the following database schema:
-
-![ER Diagram](test/er2.png)
-
-
-As seen in [entities.go](test/common/entities.go) associations of this type are described as:
-
-```go
-PROJECT_A_CONSULTANT = PROJECT.
-			ASSOCIATE(PROJECT_C_MANAGER_ID).
-			TO(CONSULTANT_C_ID).
-			As("Consultant").
-			With(PROJECT_C_MANAGER_TYPE, "C")
-```
-
-where the function `With` declares the constraint applied to this association.
-
-With this in place, its use is the same as regular associations.
-
-```go
-store.Query(PROJECT).
-	All().
-	Inner(PROJECT_A_EMPLOYEE).
-	Fetch().
-	Order(PROJECT_C_NAME).  // implicit ascending
-	ListTreeOf((*Project)(nil))
-```
-
-
-## Table Discriminator
-
-When mapping a table it is possible to declare that the domain of that table only refers to a subset of values of the physical table. This is done by defining a restriction (Discriminator) at the table definition.
-With this we avoid of having to write a **where** condition every time we want to refer to a specific domain.
-Inserts will automatically apply the discriminator.
-
-To demonstrate this I will use a physical table named `CATALOG` that can hold unrelated information, like gender, eye color, etc.
-The creation script and table definitions for the next example are at [tables_mysql.sql](test/mysql/tables_mysql.sql) and [entities.go](test/common/entities.go) respectively.
-
-```go
-var statuses []*Status
-store.Query(STATUS).
-	All().
-	List(&statuses)
-```
-
-
-## Custom Functions
-
-The supplied Translators do not have all possible functions of all the databases, but one can register quite easily any missing standard SQL function or even a custom function.
-
-The following steps demonstrates how to add to the _Translator_, in this case MySQL, and use a function that computes the difference in seconds between two dates.
-
-1. Define the token name
-
-	```go
-	const TOKEN_SECONDSDIFF = "SECONDSDIFF"
-	```
-
-2. Register the translation for the token
-
-	```go
-	translator.RegisterTranslation(
-		TOKEN_SECONDSDIFF,
-		func(dmlType DmlType, token Tokener, tx Translator) string {
-			m := token.GetMembers()
-			return fmt.Sprintf(
-				"TIME_TO_SEC(TIMEDIFF(%s, %s))",
-				tx.Translate(dmlType, m[0]),
-				tx.Translate(dmlType, m[1]),
-			)
-		},
-	)
-	```
-
-3. Wrap the token creation in a function for easy use
-
-	```go
-	func SecondsDiff(left, right interface{}) *Token {
-		return NewToken(TOKEN_SECONDSDIFF, left, right)
-	}
-	```
-
-Now we are ready to use the new created function, `SecondsDiff`.
-
-```go
-var books []*Book
-store.Query(BOOK).
-	All().
-	Where(
-	SecondsDiff(
-		time.Date(2013, time.July, 24, 0, 0, 0, 0, time.UTC),
-		BOOK_C_PUBLISHED,
-	).
-		Greater(1000),
-).
-	List(&books)
 ```
 
 ## Converters
@@ -1510,6 +1335,168 @@ type FullNameVO struct {
 ```
 
 When querying `EMPLOYEE` table into the `Supervisor` the data in the columns `FIRST_NAME` and `LAST_NAME` will be put in the fields of the `FullNameVO` struct. The reverse (`UPDATE` and `INSERT`) is also true.
+
+## Struct Triggers
+
+It is possible to define methods that are called before/after an insert/update/delete/query to the database.
+
+For example, defining the following method will trigger a call for every struct before a insert.
+
+```go
+PreInsert(store IDb) error
+```
+
+The same can be done for binding a trigger after an insert using the following signature.
+
+```go
+PostInsert(store IDb)
+```
+
+The remaining triggers are:
+
+```go
+PreUpdate(store IDb) error
+PostUpdate(store IDb)
+PreDelete(store IDb) error
+PostDelete(store IDb)
+PostRetrive(store IDb)
+```
+
+If an error is returned in a Pre trigger the action is not performed.
+
+To know if a trigger is called inside a transaction use `store.InTransaction()`.
+
+## Table Triggers
+
+It is also possible to declare triggers/hooks in the table declaration.
+
+Auditing example:
+
+```go
+func init() {
+	// pre insert trigger
+	BOOK.PreInsertTrigger = func(ins *db.Insert) {
+		ins.Set(BOOK_C_VERSION, 1)
+		ins.Set(BOOK_C_CREATION, ext.NOW())
+		uid, ok := ins.GetDb().GetAttribute(ATTR_USERID)
+		if ok {
+			ins.Set(BOOK_C_USER_CREATION, uid.(int64))
+		}
+	}
+	// pre update trigger
+	BOOK.PreUpdateTrigger = func(upd *db.Update) {
+		upd.Set(BOOK_C_MODIFICATION, ext.NOW())
+		uid, ok := upd.GetDb().GetAttribute(ATTR_USERID)
+		if ok {
+			upd.Set(BOOK_C_USER_MODIFICATION, uid.(int64))
+		}
+	}
+}
+```
+
+upd.GetDb() gets a reference to the IDb instance that is unique by transaction.
+
+TODO: explain in more detail
+
+## Association Discriminator
+
+An exclusive OR relationship indicates that entity A is related to either entity B or entity C but not both B and C. This is implemented by defining associations with a constraint.
+
+For the example I will use the following database schema:
+
+![ER Diagram](test/er2.png)
+
+
+As seen in [entities.go](test/common/entities.go) associations of this type are described as:
+
+```go
+PROJECT_A_CONSULTANT = PROJECT.
+			ASSOCIATE(PROJECT_C_MANAGER_ID).
+			TO(CONSULTANT_C_ID).
+			As("Consultant").
+			With(PROJECT_C_MANAGER_TYPE, "C")
+```
+
+where the function `With` declares the constraint applied to this association.
+
+With this in place, its use is the same as regular associations.
+
+```go
+store.Query(PROJECT).
+	All().
+	Inner(PROJECT_A_EMPLOYEE).
+	Fetch().
+	Order(PROJECT_C_NAME).  // implicit ascending
+	ListTreeOf((*Project)(nil))
+```
+
+## Table Discriminator
+
+When mapping a table it is possible to declare that the domain of that table only refers to a subset of values of the physical table. This is done by defining a restriction (Discriminator) at the table definition.
+With this we avoid of having to write a **where** condition every time we want to refer to a specific domain.
+Inserts will automatically apply the discriminator.
+
+To demonstrate this I will use a physical table named `CATALOG` that can hold unrelated information, like gender, eye color, etc.
+The creation script and table definitions for the next example are at [tables_mysql.sql](test/mysql/tables_mysql.sql) and [entities.go](test/common/entities.go) respectively.
+
+```go
+var statuses []*Status
+store.Query(STATUS).
+	All().
+	List(&statuses)
+```
+
+## Custom Functions
+
+The supplied Translators do not have all possible functions of all the databases, but one can register quite easily any missing standard SQL function or even a custom function.
+
+The following steps demonstrates how to add to the _Translator_, in this case MySQL, and use a function that computes the difference in seconds between two dates.
+
+1. Define the token name
+
+	```go
+	const TOKEN_SECONDSDIFF = "SECONDSDIFF"
+	```
+
+2. Register the translation for the token
+
+	```go
+	translator.RegisterTranslation(
+		TOKEN_SECONDSDIFF,
+		func(dmlType DmlType, token Tokener, tx Translator) string {
+			m := token.GetMembers()
+			return fmt.Sprintf(
+				"TIME_TO_SEC(TIMEDIFF(%s, %s))",
+				tx.Translate(dmlType, m[0]),
+				tx.Translate(dmlType, m[1]),
+			)
+		},
+	)
+	```
+
+3. Wrap the token creation in a function for easy use
+
+	```go
+	func SecondsDiff(left, right interface{}) *Token {
+		return NewToken(TOKEN_SECONDSDIFF, left, right)
+	}
+	```
+
+Now we are ready to use the new created function, `SecondsDiff`.
+
+```go
+var books []*Book
+store.Query(BOOK).
+	All().
+	Where(
+	SecondsDiff(
+		time.Date(2013, time.July, 24, 0, 0, 0, 0, time.UTC),
+		BOOK_C_PUBLISHED,
+	).
+		Greater(1000),
+).
+	List(&books)
+```
 
 ## Native SQL
 
