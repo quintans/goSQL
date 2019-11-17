@@ -152,7 +152,7 @@ func (this *Update) Submit(instance interface{}) (int64, error) {
 					if val.Kind() == reflect.Ptr {
 						isNil = val.IsNil()
 						if isNil {
-							if marked || acceptField(bp.Tag, nil) {
+							if marked || acceptField(bp.Omit, nil) {
 								this.Set(column, nil)
 							}
 						} else {
@@ -172,11 +172,11 @@ func (this *Update) Submit(instance interface{}) (int64, error) {
 							if err != nil {
 								return 0, err
 							}
-							if marked || acceptField(bp.Tag, value) {
+							if marked || acceptField(bp.Omit, value) {
 								this.Set(column, value)
 							}
 						default:
-							if marked || acceptField(bp.Tag, v) {
+							if marked || acceptField(bp.Omit, v) {
 								var err error
 								v, err = bp.ConvertToDb(v)
 								if err != nil {

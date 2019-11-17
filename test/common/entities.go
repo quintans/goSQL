@@ -436,7 +436,8 @@ var _ tk.Hasher = &Employee{}
 type Employee struct {
 	EntityBase
 
-	Name *string
+	FirstName *string
+	LastName  *string
 
 	Project *Project
 }
@@ -447,7 +448,8 @@ func (this *Employee) String() string {
 	}
 	sb := tk.NewStrBuffer()
 	sb.Add("{Id: ", this.Id, ", Version: ", this.Version)
-	sb.Add(", Name: ", this.Name)
+	sb.Add(", FirstName: ", this.FirstName)
+	sb.Add(", FirstName: ", this.LastName)
 	sb.Add(", Project: ", this.Project)
 	sb.Add("}")
 	return sb.String()
@@ -472,10 +474,11 @@ func (this *Employee) HashCode() int {
 }
 
 var (
-	EMPLOYEE           = TABLE("EMPLOYEE")
-	EMPLOYEE_C_ID      = EMPLOYEE.KEY("ID")          // implicit map to field Id
-	EMPLOYEE_C_VERSION = EMPLOYEE.VERSION("VERSION") // implicit map to field Version
-	EMPLOYEE_C_NAME    = EMPLOYEE.COLUMN("NAME")     // implicit map to field Name
+	EMPLOYEE              = TABLE("EMPLOYEE")
+	EMPLOYEE_C_ID         = EMPLOYEE.KEY("ID")            // implicit map to field Id
+	EMPLOYEE_C_VERSION    = EMPLOYEE.VERSION("VERSION")   // implicit map to field Version
+	EMPLOYEE_C_FIRST_NAME = EMPLOYEE.COLUMN("FIRST_NAME") // implicit map to field FirstName
+	EMPLOYEE_C_LAST_NAME  = EMPLOYEE.COLUMN("LAST_NAME")  // implicit map to field LastName
 
 	EMPLOYEE_A_PROJECT = EMPLOYEE.
 				ASSOCIATE(EMPLOYEE_C_ID).
@@ -662,4 +665,21 @@ func (cc ColorConverter) FromDb(in interface{}) (interface{}, error) {
 	c.Green = g
 	c.Blue = b
 	return &c, nil
+}
+
+type Supervisor struct {
+	EntityBase
+
+	FullName FullNameVO `sql:"embeded"`
+}
+
+type FullNameVO struct {
+	FirstName string
+	LastName  string
+}
+
+type Supervisor2 struct {
+	EntityBase
+
+	FullName *FullNameVO `sql:"embeded"`
 }

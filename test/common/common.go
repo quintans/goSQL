@@ -122,7 +122,9 @@ type Tester struct {
 }
 
 func (tt Tester) RunAll(TM ITransactionManager, t *testing.T) {
-	tt.RunDriverConverter(TM, t)
+	tt.RunEmbeded(TM, t)
+	tt.RunEmbededPtr(TM, t)
+	tt.RunConverter(TM, t)
 	tt.RunRetriveIntoUnexportedFields(TM, t)
 	tt.RunSelectUTF8(TM, t)
 	tt.RunRetrive(TM, t)
@@ -384,7 +386,7 @@ func ResetDB2(TM ITransactionManager) {
 
 		// insert employee
 		insert = DB.Insert(EMPLOYEE).
-			Columns(EMPLOYEE_C_ID, EMPLOYEE_C_VERSION, EMPLOYEE_C_NAME).
+			Columns(EMPLOYEE_C_ID, EMPLOYEE_C_VERSION, EMPLOYEE_C_FIRST_NAME).
 			Values(1, 1, "Mary")
 		_, err = insert.Execute()
 		if err != nil {
@@ -1714,7 +1716,7 @@ func (tt Tester) RunAssociationDiscriminatorReverse(TM ITransactionManager, t *t
 		All().
 		Inner(EMPLOYEE_A_PROJECT).
 		Fetch().
-		Order(EMPLOYEE_C_NAME).
+		Order(EMPLOYEE_C_FIRST_NAME).
 		ListTreeOf((*Employee)(nil))
 
 	if err != nil {
@@ -1729,7 +1731,7 @@ func (tt Tester) RunAssociationDiscriminatorReverse(TM ITransactionManager, t *t
 
 		for _, v := range employees {
 			if v.Project == nil {
-				t.Fatalf("Expected Project for project '%v' but got <nil>", *v.Name)
+				t.Fatalf("Expected Project for emplyoee '%v' but got <nil>", *v.FirstName)
 			}
 		}
 
@@ -2007,7 +2009,7 @@ func (tt Tester) RunUnion(TM ITransactionManager, t *testing.T) {
 
 }
 
-func (tt Tester) RunDriverConverter(TM ITransactionManager, t *testing.T) {
+func (tt Tester) RunConverter(TM ITransactionManager, t *testing.T) {
 	db := TM.Store()
 	// clear catalog
 	if _, err := db.Delete(CATALOG).Execute(); err != nil {
@@ -2046,4 +2048,105 @@ func getColor(db IDb, id int64) string {
 	var raw string
 	db.Query(CATALOG).Column(CATALOG_C_VALUE).Where(CATALOG_C_ID.Matches(id)).SelectInto(&raw)
 	return raw
+}
+
+func (tt Tester) RunEmbeded(TM ITransactionManager, t *testing.T) {
+	db := TM.Store()
+	// clear catalog
+	if _, err := db.Delete(EMPLOYEE).Execute(); err != nil {
+		t.Fatalf("%+v", err)
+	}
+
+	expectedFirst := "Paulo"
+	expectedLast := "Pereira"
+	p := Supervisor{
+		FullName: FullNameVO{
+			FirstName: expectedFirst,
+			LastName:  expectedLast,
+		},
+	}
+
+	if _, err := db.Insert(EMPLOYEE).Submit(&p); err != nil {
+		t.Fatalf("%+v", err)
+	}
+	actualFirst, actualLast := getNames(db, *p.Id)
+
+	if actualFirst != expectedFirst {
+		t.Fatalf("expected %q, got %q", expectedFirst, actualFirst)
+	}
+	if actualLast != expectedLast {
+		t.Fatalf("expected %q, got %q", expectedLast, actualLast)
+	}
+
+	p2 := Supervisor{}
+	_, err := db.Query(EMPLOYEE).
+		Where(EMPLOYEE_C_ID.Matches(p.Id)).
+		SelectTo(&p2)
+	if err != nil {
+		t.Fatalf("%+v", err)
+	}
+
+	fn := FullNameVO{
+		FirstName: expectedFirst,
+		LastName:  expectedLast,
+	}
+
+	if p2.FullName != fn {
+		t.Fatalf("Expected %+v, got %+v", fn, p2.FullName)
+	}
+}
+
+func getNames(db IDb, id int64) (string, string) {
+	var first, last string
+	db.Query(EMPLOYEE).
+		Column(EMPLOYEE_C_FIRST_NAME).
+		Column(EMPLOYEE_C_LAST_NAME).
+		Where(EMPLOYEE_C_ID.Matches(id)).SelectInto(&first, &last)
+	return first, last
+}
+
+func (tt Tester) RunEmbededPtr(TM ITransactionManager, t *testing.T) {
+	db := TM.Store()
+	// clear catalog
+	if _, err := db.Delete(EMPLOYEE).Execute(); err != nil {
+		t.Fatalf("%+v", err)
+	}
+
+	expectedFirst := "Paulo"
+	expectedLast := "Pereira"
+	p := Supervisor2{
+		FullName: &FullNameVO{
+			FirstName: expectedFirst,
+			LastName:  expectedLast,
+		},
+	}
+
+	if _, err := db.Insert(EMPLOYEE).Submit(&p); err != nil {
+		t.Fatalf("%+v", err)
+	}
+	actualFirst, actualLast := getNames(db, *p.Id)
+
+	if actualFirst != expectedFirst {
+		t.Fatalf("expected %q, got %q", expectedFirst, actualFirst)
+	}
+	if actualLast != expectedLast {
+		t.Fatalf("expected %q, got %q", expectedLast, actualLast)
+	}
+
+	p2 := Supervisor2{}
+	_, err := db.Query(EMPLOYEE).
+		Where(EMPLOYEE_C_ID.Matches(p.Id)).
+		SelectTo(&p2)
+	if err != nil {
+		t.Fatalf("%+v", err)
+	}
+
+	fn := FullNameVO{
+		FirstName: expectedFirst,
+		LastName:  expectedLast,
+	}
+
+	if p2.FullName == nil || *p2.FullName != fn {
+		t.Fatalf("Expected %+v, got %+v", fn, p2.FullName)
+	}
 }

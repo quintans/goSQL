@@ -16,8 +16,9 @@ var OPTIMISTIC_LOCK_MSG = "No update was possible for this version of the data. 
 var VERSION_SET_MSG = "Unable to set Version data."
 
 const (
-	sqlOmitionKey = "sql"
+	sqlKey        = "sql"
 	sqlOmitionVal = "omit"
+	sqlEmbededVal = "embeded"
 )
 
 // Interface that a struct must implement to inform what columns where changed
@@ -168,7 +169,7 @@ func (this *Db) acceptColumn(table *Table, t reflect.Type, handler func(*Column)
 		column := e.(*Column)
 		bp, ok := mappings[column.GetAlias()]
 		if ok {
-			if bp.Tag.Get(sqlOmitionKey) != sqlOmitionVal {
+			if !bp.Omit {
 				handler(column)
 			}
 		}
@@ -218,8 +219,8 @@ func isZero(x interface{}) bool {
 	return false
 }
 
-func acceptField(tag reflect.StructTag, v interface{}) bool {
-	return tag.Get(sqlOmitionKey) != sqlOmitionVal || !isZero(v)
+func acceptField(omit bool, v interface{}) bool {
+	return !omit || !isZero(v)
 }
 
 func (this *Db) buildCriteria(table *Table, example interface{}) ([]*Criteria, error) {

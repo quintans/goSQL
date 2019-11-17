@@ -1374,6 +1374,142 @@ store.Query(BOOK).
 	List(&books)
 ```
 
+## Converters
+
+Sometimes we may want to store in the database a different representation of the data.
+
+There are two ways of achieveing this.
+
+### The native approach
+
+By leveraging the `sql.Scanner` interface and the `driver.Valuer` interface we can transform to and from the database.
+With this approach we can even use the the types that implement the above interfaces in search criterias.
+
+There a couple of minor disadvantages. With this approach we end up polluting the persistence model making it unusuable as a domain model. Another disadvantage is that we have to the raw data that comes from the database. Text can come as a `string` or as an array of `uint8`.
+
+```go
+type Palette struct {
+	EntityBase
+
+	Code  string
+	Value *Color
+}
+
+type Color struct {
+	Red   int
+	Green int
+	Blue  int
+}
+
+func (c *Color) Value() (driver.Value, error) {
+	return fmt.Sprintf("%d|%d|%d", c.Red, c.Green, c.Blue), nil
+}
+
+func (c *Color) Scan(src interface{}) error {
+	s := src.(string) // Postgres is a string but in MySql is []uint8
+	rgb := strings.Split(s, "|")
+	r, _ := strconv.Atoi(rgb[0])
+	g, _ := strconv.Atoi(rgb[1])
+	b, _ := strconv.Atoi(rgb[2])
+	c.Red = r
+	c.Green = g
+	c.Blue = b
+	return nil
+}
+```
+
+### Converter approach
+
+Another approach is to use the tag `converter:"aName"` on the struct field and register on translator the converter, that implements the `db.Converter` interface.
+
+This approach is less powerful than the previous one because we will not be able to use in search criterias. On the other hand it allows a cleaner model and we don't have to worry about the raw data coming from the database.
+
+```go
+type Palette struct {
+	EntityBase
+
+	Code  string
+	Value *Color `converter:"color"`
+}
+
+type Color struct {
+	Red   int
+	Green int
+	Blue  int
+}
+
+type ColorConverter struct{}
+
+func (cc ColorConverter) ToDb(in interface{}) (interface{}, error) {
+	if in == nil {
+		return in, nil
+	}
+	c := in.(*Color)
+	return fmt.Sprintf("%d|%d|%d", c.Red, c.Green, c.Blue), nil
+}
+
+func (cc ColorConverter) FromDbInstance() interface{} {
+	var s string
+	return &s // NB: we need to return a pointer
+}
+
+func (cc ColorConverter) FromDb(in interface{}) (interface{}, error) {
+	if in == nil {
+		return in, nil
+	}
+
+	s := in.(*string) // NB: we receive a pointer
+	rgb := strings.Split(*s, "|")
+	r, _ := strconv.Atoi(rgb[0])
+	g, _ := strconv.Atoi(rgb[1])
+	b, _ := strconv.Atoi(rgb[2])
+	c := &Color{}
+	c.Red = r
+	c.Green = g
+	c.Blue = b
+	return &c, nil
+}
+```
+
+not forgetting to register the converter
+
+```go
+translator.RegisterConverter("color", ColorConverter{})
+```
+
+## Embeded Structs
+
+If we want to group columns into a complex type (`struct`) we just have to tag the firld as `sql:"embeded"`.
+This is handy when working with Value Objects.
+
+Consider the table
+
+```sql
+CREATE TABLE EMPLOYEE (
+	ID SERIAL,
+	VERSION INTEGER NOT NULL,
+	FIRST_NAME VARCHAR(50),
+	LAST_NAME VARCHAR(50),
+	PRIMARY KEY(ID)
+);
+```
+
+and the structs
+
+```go
+type Supervisor struct {
+	EntityBase
+
+	FullName FullNameVO `sql:"embeded"`
+}
+
+type FullNameVO struct {
+	FirstName string
+	LastName  string
+}
+```
+
+When querying `EMPLOYEE` table into the `Supervisor` the data in the columns `FIRST_NAME` and `LAST_NAME` will be put in the fields of the `FullNameVO` struct. The reverse (`UPDATE` and `INSERT`) is also true.
 
 ## Native SQL
 
