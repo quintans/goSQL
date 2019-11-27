@@ -80,7 +80,12 @@ func makeGetter(previous getter, fieldname string) getter {
 		if instance.Kind() == reflect.Ptr {
 			instance = instance.Elem()
 		}
-		return instance.FieldByName(fieldname)
+		instance = reflect.Indirect(instance).FieldByName(fieldname)
+		if !instance.CanSet() && instance.CanAddr() {
+			// Cheat: writting to unexported fields
+			instance = reflect.NewAt(instance.Type(), unsafe.Pointer(instance.UnsafeAddr())).Elem()
+		}
+		return instance
 	}
 }
 

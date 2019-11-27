@@ -674,8 +674,8 @@ type Supervisor struct {
 }
 
 type FullNameVO struct {
-	FirstName string
-	LastName  string
+	firstName string
+	lastName  string
 }
 
 type Supervisor2 struct {

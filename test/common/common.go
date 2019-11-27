@@ -2061,8 +2061,8 @@ func (tt Tester) RunEmbeded(TM ITransactionManager, t *testing.T) {
 	expectedLast := "Pereira"
 	p := Supervisor{
 		FullName: FullNameVO{
-			FirstName: expectedFirst,
-			LastName:  expectedLast,
+			firstName: expectedFirst,
+			lastName:  expectedLast,
 		},
 	}
 
@@ -2087,8 +2087,8 @@ func (tt Tester) RunEmbeded(TM ITransactionManager, t *testing.T) {
 	}
 
 	fn := FullNameVO{
-		FirstName: expectedFirst,
-		LastName:  expectedLast,
+		firstName: expectedFirst,
+		lastName:  expectedLast,
 	}
 
 	if p2.FullName != fn {
@@ -2116,8 +2116,8 @@ func (tt Tester) RunEmbededPtr(TM ITransactionManager, t *testing.T) {
 	expectedLast := "Pereira"
 	p := Supervisor2{
 		FullName: &FullNameVO{
-			FirstName: expectedFirst,
-			LastName:  expectedLast,
+			firstName: expectedFirst,
+			lastName:  expectedLast,
 		},
 	}
 
@@ -2142,8 +2142,8 @@ func (tt Tester) RunEmbededPtr(TM ITransactionManager, t *testing.T) {
 	}
 
 	fn := FullNameVO{
-		FirstName: expectedFirst,
-		LastName:  expectedLast,
+		firstName: expectedFirst,
+		lastName:  expectedLast,
 	}
 
 	if p2.FullName == nil || *p2.FullName != fn {
