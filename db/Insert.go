@@ -204,7 +204,7 @@ func (this *Insert) Submit(instance interface{}) (int64, error) {
 	}
 
 	column := this.table.GetSingleKeyColumn()
-	if column != nil {
+	if column != nil && !this.HasKeyValue {
 		bp := mappings[column.GetAlias()]
 		bp.Set(elem, reflect.ValueOf(&key))
 	}
