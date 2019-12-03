@@ -60,8 +60,8 @@ func (this *Publisher) PostInsert(store IDb) {
 	logger.Infof("===> PostInsert trigger for Publisher with Id %v", *this.Id)
 }
 
-func (this *Publisher) PostRetrive(store IDb) {
-	logger.Infof("===> PostRetrive trigger for %s", this.String())
+func (this *Publisher) PostRetrieve(store IDb) {
+	logger.Infof("===> PostRetrieve trigger for %s", this.String())
 }
 
 func (this *Publisher) String() string {

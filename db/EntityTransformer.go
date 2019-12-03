@@ -174,8 +174,8 @@ func (this *EntityTransformer) Transform(rows *sql.Rows) (interface{}, error) {
 
 	instance := val.Interface()
 	// post trigger
-	if t, isT := instance.(PostRetriver); isT {
-		t.PostRetrive(this.Query.GetDb())
+	if t, isT := instance.(PostRetriever); isT {
+		t.PostRetrieve(this.Query.GetDb())
 	}
 
 	if this.Returner == nil {

@@ -16,7 +16,7 @@ a ORM like library in Go (golang) that makes SQL easier to use.
 * [Transactions](#transactions)
 * [Quick CRUD](#quick-crud)
 	* [Create](#create)
-	* [Retrive](#retrive)
+	* [Retrieve](#retrieve)
 	* [FindFirst](#findfirst)
 	* [FindAll](#findall)
 	* [Update](#update)
@@ -93,7 +93,7 @@ store.Query(PUBLISHER).
 Short version
 
 ```go
-store.Retrive(&publisher, 2)
+store.Retrieve(&publisher, 2)
 ```
 
 We are not restricted to the use of structs as demonstrated by the next snippet
@@ -236,8 +236,8 @@ func main() {
 	store := TM.Store()
 	// the target entity
 	var publisher Publisher
-	// Retrive
-	_, err := store.Retrive(&publisher, 2)
+	// Retrieve
+	_, err := store.Retrieve(&publisher, 2)
 	if err != nil {
 		panic(err)
 	}
@@ -410,15 +410,15 @@ store.Create(&pub)
 
 More detail on inserting with structs can be found [here](#insert-with-a-struct).
 
-### Retrive
+### Retrieve
 
 ```go
-store.Retrive(&publisher, 2)
+store.Retrieve(&publisher, 2)
 ```
 
 If there are multiple keys for a table, the supplied keys must be in the same order as they were declared in the table definition.
 
-When using `Retrive`, if there is a struct field with the tag `sql:"omit"` its value will not be retrived.
+When using `Retrieve`, if there is a struct field with the tag `sql:"omit"` its value will not be retrieved.
 The strcut `Àuthor` has this tag in the field `Secret`.
 
 More detail on selecting one instance with structs can be found [here](#selectto).
@@ -430,8 +430,8 @@ var book Book
 store.FindFirst(&book, Book{PublisherId: ext.Int64(1)})
 ```
 
-Retrives the first record where `PublisherId` is 1.
-The same rules of `Retrive()` apply.
+Retrieves the first record where `PublisherId` is 1.
+The same rules of `Retrieve()` apply.
 
 ### FindAll
 
@@ -440,8 +440,8 @@ var books []Book
 store.FindAll(&books, Book{PublisherId: ext.Int64(2)})
 ```
 
-Retrives all the records where `PublisherId` is 2.
-The same rules of `Retrive()` apply.
+Retrieves all the records where `PublisherId` is 2.
+The same rules of `Retrieve()` apply.
 
 ### Update
 
@@ -518,7 +518,7 @@ The normal flow for an update would be:
 
 ```go
 var book Book
-store.Retrive(&book, 1)
+store.Retrieve(&book, 1)
 book.SetPrice(book.Price * 0.8) // marked for change
 store.Modify(&book)
 ```
@@ -661,7 +661,7 @@ A shorter version is the quick CRUD operation [Delete](#delete)
 
 The query operation is by far the richest operation of the ones we have seen.
 
-Query operation that start with `Select*` retrive **one** instance, and those that start with `List*` returns **many** instances.
+Query operation that start with `Select*` retrieve **one** instance, and those that start with `List*` returns **many** instances.
 
 ### SelectInto
 
@@ -687,7 +687,7 @@ store.Query(PUBLISHER).
 	SelectTo(&publisher)
 ```
 
-A shorter version is the quick CRUD operation [Retrive](#retrive)
+A shorter version is the quick CRUD operation [Retrieve](#retrieve)
 
 ### SelectTree
 
@@ -1025,7 +1025,7 @@ store.Query(PUBLISHER).
 
 `Fetch()` and `Join()` also reset the path back to the main table, allowing us to declare completly distinct paths.
 
-If we want to retrive data to populate the tree struct `Publisher <- Book -> BookBin`, we would have to use two `Fetch()`, one for each branch, as demonstrated below.
+If we want to retrieve data to populate the tree struct `Publisher <- Book -> BookBin`, we would have to use two `Fetch()`, one for each branch, as demonstrated below.
 
 ```go
 var book Book
@@ -1359,7 +1359,7 @@ PreUpdate(store IDb) error
 PostUpdate(store IDb)
 PreDelete(store IDb) error
 PostDelete(store IDb)
-PostRetrive(store IDb)
+PostRetrieve(store IDb)
 ```
 
 If an error is returned in a Pre trigger the action is not performed.

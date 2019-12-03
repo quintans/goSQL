@@ -125,9 +125,9 @@ func (tt Tester) RunAll(TM ITransactionManager, t *testing.T) {
 	tt.RunEmbeded(TM, t)
 	tt.RunEmbededPtr(TM, t)
 	tt.RunConverter(TM, t)
-	tt.RunRetriveIntoUnexportedFields(TM, t)
+	tt.RunRetrieveIntoUnexportedFields(TM, t)
 	tt.RunSelectUTF8(TM, t)
-	tt.RunRetrive(TM, t)
+	tt.RunRetrieve(TM, t)
 	tt.RunFindFirst(TM, t)
 	tt.RunFindAll(TM, t)
 	tt.RunOmitField(TM, t)
@@ -137,7 +137,7 @@ func (tt Tester) RunAll(TM ITransactionManager, t *testing.T) {
 	tt.RunInsertStructReturningKey(TM, t)
 	tt.RunSimpleUpdate(TM, t)
 	tt.RunStructUpdate(TM, t)
-	tt.RunStructSaveAndRetrive(TM, t)
+	tt.RunStructSaveAndRetrieve(TM, t)
 	tt.RunUpdateSubquery(TM, t)
 	tt.RunSimpleDelete(TM, t)
 	tt.RunStructDelete(TM, t)
@@ -494,30 +494,30 @@ func (tt Tester) RunSelectUTF8(TM ITransactionManager, t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed RunSelectUTF8: %s", err)
 	} else if !ok || *publisher.Id != 2 || publisher.Version != 1 || *publisher.Name != PUBLISHER_UTF8_NAME {
-		t.Fatalf("The record for publisher id 2, was not properly retrived. Retrived %s", publisher)
+		t.Fatalf("The record for publisher id 2, was not properly retrieved. Retrieved %s", publisher)
 	}
 }
 
-func (tt Tester) RunRetrive(TM ITransactionManager, t *testing.T) {
+func (tt Tester) RunRetrieve(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	// get the database context
 	store := TM.Store()
 	// the target entity
 	var author Author
-	ok, err := store.Retrive(&author, 3)
+	ok, err := store.Retrieve(&author, 3)
 	if err != nil {
-		t.Fatalf("Failed RunRetrive: %s", err)
+		t.Fatalf("Failed RunRetrieve: %s", err)
 	}
 	if !ok || *author.Id != 3 || author.Version != 1 || *author.Name != AUTHOR_UTF8_NAME {
-		t.Fatalf("Failed RunRetrive: The record for publisher id 3, was not properly retrived. Retrived %s", author.String())
+		t.Fatalf("Failed RunRetrieve: The record for publisher id 3, was not properly retrieved. Retrieved %s", author.String())
 	}
 	if author.Secret != nil {
-		t.Fatalf("Failed RunRetrive: Expected secret to be nil, found %s", *author.Secret)
+		t.Fatalf("Failed RunRetrieve: Expected secret to be nil, found %s", *author.Secret)
 	}
 }
 
-func (tt Tester) RunRetriveIntoUnexportedFields(TM ITransactionManager, t *testing.T) {
+func (tt Tester) RunRetrieveIntoUnexportedFields(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	// get the database context
@@ -533,10 +533,10 @@ func (tt Tester) RunRetriveIntoUnexportedFields(TM ITransactionManager, t *testi
 		SelectTo(&author)
 
 	if err != nil {
-		t.Fatalf("Failed RunRetriveIntoUnexportedFields: %s", err)
+		t.Fatalf("Failed RunRetrieveIntoUnexportedFields: %s", err)
 	}
 	if !ok || *author.Id != 3 || author.Version != 1 || *author.name != AUTHOR_UTF8_NAME {
-		t.Fatalf("Failed RunRetriveIntoUnexportedFields: The record for publisher id 3, was not properly retrived. Retrived %+v", author)
+		t.Fatalf("Failed RunRetrieveIntoUnexportedFields: The record for publisher id 3, was not properly retrieved. Retrieved %+v", author)
 	}
 }
 
@@ -578,12 +578,12 @@ func (tt Tester) RunOmitField(TM ITransactionManager, t *testing.T) {
 	// get the database context
 	store := TM.Store()
 	var author = Author{}
-	ok, err := store.Retrive(&author, 1)
+	ok, err := store.Retrieve(&author, 1)
 	if !ok || err != nil {
-		t.Fatalf("Failed RunOmitField: Unable to Retrive - %s", err)
+		t.Fatalf("Failed RunOmitField: Unable to Retrieve - %s", err)
 	}
 	if author.Secret != nil {
-		t.Fatal("Failed RunOmitField: Author.Secret was retrived")
+		t.Fatal("Failed RunOmitField: Author.Secret was retrieved")
 	}
 	name := "Paulo Quintans"
 	author.Name = &name
@@ -609,14 +609,14 @@ func (tt Tester) RunModifyField(TM ITransactionManager, t *testing.T) {
 	// get the database context
 	store := TM.Store()
 	var book Book
-	store.Retrive(&book, 1)
+	store.Retrieve(&book, 1)
 	price := book.Price * 0.8
 	book.SetPrice(price)
 	ok, err := store.Modify(&book)
 	if !ok || err != nil {
 		t.Fatalf("Failed RunModifyField: Unable to query - %s", err)
 	}
-	store.Retrive(&book, 1)
+	store.Retrieve(&book, 1)
 	if book.Price != price {
 		t.Fatalf("Failed RunModifyField: Expected price %v, got %v", price, book.Price)
 	}
@@ -651,7 +651,7 @@ func (tt Tester) RunInsertReturningKey(TM ITransactionManager, t *testing.T) {
 		}
 
 		if key == 0 {
-			t.Fatal("The Auto Insert Key for a null ID column was not retrived")
+			t.Fatal("The Auto Insert Key for a null ID column was not retrieved")
 		}
 
 		logger.Debugf("The Auto Insert Key for a null ID column was %v", key)
@@ -667,7 +667,7 @@ func (tt Tester) RunInsertReturningKey(TM ITransactionManager, t *testing.T) {
 		}
 
 		if key == 0 {
-			t.Fatal("The Auto Insert Key for a absent ID column was not retrived")
+			t.Fatal("The Auto Insert Key for a absent ID column was not retrieved")
 		}
 
 		logger.Debugf("The Auto Insert Key for a absent ID column was %v", key)
@@ -691,7 +691,7 @@ func (tt Tester) RunInsertStructReturningKey(TM ITransactionManager, t *testing.
 		}
 
 		if key == 0 {
-			t.Fatal("The Auto Insert Key for the ID column was not retrived")
+			t.Fatal("The Auto Insert Key for the ID column was not retrieved")
 		}
 
 		if key != *pub.Id {
@@ -706,7 +706,7 @@ func (tt Tester) RunInsertStructReturningKey(TM ITransactionManager, t *testing.
 		}
 
 		if key == 0 {
-			t.Fatal("The Auto Insert Key for the ID column was not retrived")
+			t.Fatal("The Auto Insert Key for the ID column was not retrieved")
 		}
 
 		pub = Publisher{}
@@ -799,7 +799,7 @@ func (tt Tester) RunStructUpdate(TM ITransactionManager, t *testing.T) {
 	}
 }
 
-func (tt Tester) RunStructSaveAndRetrive(TM ITransactionManager, t *testing.T) {
+func (tt Tester) RunStructSaveAndRetrieve(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	var err error
@@ -809,7 +809,7 @@ func (tt Tester) RunStructSaveAndRetrive(TM ITransactionManager, t *testing.T) {
 		publisher.Name = ext.String("Super Duper Test")
 		ok, err := store.Save(&publisher)
 		if err != nil {
-			t.Fatalf("Failed RunStructSaveAndRetrive: %s", err)
+			t.Fatalf("Failed RunStructSaveAndRetrieve: %s", err)
 		}
 
 		if !ok {
@@ -822,9 +822,9 @@ func (tt Tester) RunStructSaveAndRetrive(TM ITransactionManager, t *testing.T) {
 
 		// === check insert ===
 		var oldPub Publisher
-		ok, err = store.Retrive(&oldPub, publisher.Id)
+		ok, err = store.Retrieve(&oldPub, publisher.Id)
 		if err != nil {
-			t.Fatalf("Failed RunStructSaveAndRetrive: %s", err)
+			t.Fatalf("Failed RunStructSaveAndRetrieve: %s", err)
 		}
 
 		if !ok {
@@ -839,7 +839,7 @@ func (tt Tester) RunStructSaveAndRetrive(TM ITransactionManager, t *testing.T) {
 		publisher.Name = ext.String("UPDDATE: Super Duper Test")
 		ok, err = store.Save(&publisher)
 		if err != nil {
-			t.Fatalf("Failed RunStructSaveAndRetrive: %s", err)
+			t.Fatalf("Failed RunStructSaveAndRetrieve: %s", err)
 		}
 
 		if !ok {
@@ -852,9 +852,9 @@ func (tt Tester) RunStructSaveAndRetrive(TM ITransactionManager, t *testing.T) {
 
 		// === check update ===
 		oldPub = Publisher{}
-		ok, err = store.Retrive(&oldPub, publisher.Id)
+		ok, err = store.Retrieve(&oldPub, publisher.Id)
 		if err != nil {
-			t.Fatalf("Failed RunStructSaveAndRetrive: %s", err)
+			t.Fatalf("Failed RunStructSaveAndRetrieve: %s", err)
 		}
 
 		if !ok {
@@ -870,7 +870,7 @@ func (tt Tester) RunStructSaveAndRetrive(TM ITransactionManager, t *testing.T) {
 		ok, err = store.Save(&publisher)
 		fail, _ := err.(*dbx.OptimisticLockFail)
 		if fail == nil {
-			t.Fatalf("Failed RunStructSaveAndRetrive: %s", err)
+			t.Fatalf("Failed RunStructSaveAndRetrieve: %s", err)
 		}
 
 		if ok {
@@ -987,7 +987,7 @@ func (tt Tester) RunSelectInto(TM ITransactionManager, t *testing.T) {
 	if err != nil {
 		t.Fatalf("%s", err)
 	} else if !ok || name != PUBLISHER_UTF8_NAME {
-		t.Fatalf("Failed SelectInto. The name for publisher id 2, was not properly retrived. Retrived %s", name)
+		t.Fatalf("Failed SelectInto. The name for publisher id 2, was not properly retrieved. Retrieved %s", name)
 	}
 }
 
@@ -1005,11 +1005,11 @@ func (tt Tester) RunSelectTree(TM ITransactionManager, t *testing.T) {
 	if err != nil {
 		t.Fatalf("%s", err)
 	} else if !ok || publisher.Id == nil {
-		t.Fatal("The record for publisher id 2, was not retrived")
+		t.Fatal("The record for publisher id 2, was not retrieved")
 	} else {
 		// check list size of books
 		if len(publisher.Books) != 2 {
-			t.Fatalf("The list of books for the publisher with id 2 was incorrectly retrived. Expected 2 got %v", len(publisher.Books))
+			t.Fatalf("The list of books for the publisher with id 2 was incorrectly retrieved. Expected 2 got %v", len(publisher.Books))
 		}
 	}
 }
@@ -1029,17 +1029,17 @@ func (tt Tester) RunSelectTreeTwoBranches(TM ITransactionManager, t *testing.T) 
 	if err != nil {
 		t.Fatalf("%s", err)
 	} else if !ok || book.Id == nil {
-		t.Fatal("The record for publisher id 1, was not retrived")
+		t.Fatal("The record for publisher id 1, was not retrieved")
 	} else {
 		// check list size of books
 		if book.Publisher == nil {
-			t.Fatalf("The publisher for book 1 was not retrived")
+			t.Fatalf("The publisher for book 1 was not retrieved")
 		}
 		if book.BookBin == nil {
-			t.Fatalf("The binary for book 1 was not retrived")
+			t.Fatalf("The binary for book 1 was not retrieved")
 		}
 		if len(book.BookBin.Hardcover) == 0 {
-			t.Fatalf("The hardcover for book 1 was not retrived")
+			t.Fatalf("The hardcover for book 1 was not retrieved")
 		}
 	}
 }
@@ -1058,11 +1058,11 @@ func (tt Tester) RunSelectFlatTree(TM ITransactionManager, t *testing.T) {
 	if err != nil {
 		t.Fatalf("%s", err)
 	} else if !ok || publisher.Id == nil {
-		t.Fatal("The record for publisher id 2, was not retrived")
+		t.Fatal("The record for publisher id 2, was not retrieved")
 	} else {
 		// check list size of books
 		if len(publisher.Books) != 1 {
-			t.Fatalf("The list of books for the publisher with id 2 was incorrectly retrived. Expected 1 got %v", len(publisher.Books))
+			t.Fatalf("The list of books for the publisher with id 2 was incorrectly retrieved. Expected 1 got %v", len(publisher.Books))
 		}
 	}
 }
@@ -1087,7 +1087,7 @@ func (tt Tester) RunListInto(TM ITransactionManager, t *testing.T) {
 
 	for _, v := range books {
 		if v.Id == nil {
-			t.Fatalf("A book has invalid Id and therefore was not retrived")
+			t.Fatalf("A book has invalid Id and therefore was not retrieved")
 		}
 	}
 
@@ -1105,7 +1105,7 @@ func (tt Tester) RunListInto(TM ITransactionManager, t *testing.T) {
 
 	for _, v := range bks {
 		if v.Id == nil {
-			t.Fatalf("A book has invalid Id and therefore was not retrived")
+			t.Fatalf("A book has invalid Id and therefore was not retrieved")
 		}
 	}
 }
@@ -1127,7 +1127,7 @@ func (tt Tester) RunListOf(TM ITransactionManager, t *testing.T) {
 		for e := books.Enumerator(); e.HasNext(); {
 			book := e.Next().(*Book)
 			if book.Id == nil {
-				t.Fatalf("A book has invalid Id and therefore was not retrived")
+				t.Fatalf("A book has invalid Id and therefore was not retrieved")
 			}
 		}
 	}
@@ -1151,16 +1151,16 @@ func (tt Tester) RunListFlatTree(TM ITransactionManager, t *testing.T) {
 	}
 
 	if len(publishers) != 2 {
-		t.Fatalf("The record for publisher id 2, was not retrived. Expected collection size of 2, got %v", len(publishers))
+		t.Fatalf("The record for publisher id 2, was not retrieved. Expected collection size of 2, got %v", len(publishers))
 	}
 
 	for _, publisher := range publishers {
 		// check list size of books
 		if publisher.Id == nil {
-			t.Fatalf("A book has invalid Id and therefore was not retrived")
+			t.Fatalf("A book has invalid Id and therefore was not retrieved")
 		}
 		if len(publisher.Books) != 1 {
-			t.Fatalf("The list of books for the publisher with id 2 was incorrectly retrived. Expected 1 got %v", len(publisher.Books))
+			t.Fatalf("The list of books for the publisher with id 2 was incorrectly retrieved. Expected 1 got %v", len(publisher.Books))
 		}
 	}
 
@@ -1179,16 +1179,16 @@ func (tt Tester) RunListFlatTree(TM ITransactionManager, t *testing.T) {
 	}
 
 	if len(publishers) != 2 {
-		t.Fatalf("The record for publisher id 2, was not retrived. Expected collection size of 2, got %v", len(publishers))
+		t.Fatalf("The record for publisher id 2, was not retrieved. Expected collection size of 2, got %v", len(publishers))
 	}
 
 	for _, publisher := range publishers {
 		// check list size of books
 		if publisher.Id == nil {
-			t.Fatalf("A book has invalid Id and therefore was not retrived")
+			t.Fatalf("A book has invalid Id and therefore was not retrieved")
 		}
 		if len(publisher.Books) != 1 {
-			t.Fatalf("The list of books for the publisher with id 2 was incorrectly retrived. Expected 1 got %v", len(publisher.Books))
+			t.Fatalf("The list of books for the publisher with id 2 was incorrectly retrieved. Expected 1 got %v", len(publisher.Books))
 		}
 	}
 
@@ -1207,16 +1207,16 @@ func (tt Tester) RunListTreeOf(TM ITransactionManager, t *testing.T) {
 	if err != nil {
 		t.Fatalf("%s", err)
 	} else if publishers.Size() != 1 {
-		t.Fatalf("The record for publisher id 2, was not retrived. Expected collection size of 1, got %v", publishers.Size())
+		t.Fatalf("The record for publisher id 2, was not retrieved. Expected collection size of 1, got %v", publishers.Size())
 	} else {
 		for e := publishers.Enumerator(); e.HasNext(); {
 			publisher := e.Next().(*Publisher)
 			// check list size of books
 			if publisher.Id == nil {
-				t.Fatalf("A book has invalid Id and therefore was not retrived")
+				t.Fatalf("A book has invalid Id and therefore was not retrieved")
 			}
 			if len(publisher.Books) != 2 {
-				t.Fatalf("The list of books for the publisher with id 2 was incorrectly retrived. Expected 2 got %v", len(publisher.Books))
+				t.Fatalf("The list of books for the publisher with id 2 was incorrectly retrieved. Expected 2 got %v", len(publisher.Books))
 			}
 		}
 	}

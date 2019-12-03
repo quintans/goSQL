@@ -56,8 +56,8 @@ func main() {
 	store := TM.Store()
 	// the target entity
 	var publisher Publisher
-	// Retrive
-	_, err := store.Retrive(&publisher, 2)
+	// Retrieve
+	_, err := store.Retrieve(&publisher, 2)
 	if err != nil {
 		panic(err)
 	}

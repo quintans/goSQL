@@ -52,7 +52,7 @@ func (this *Insert) Alias(alias string) *Insert {
 	return this
 }
 
-//Definies if the auto key should be retrived.
+//Definies if the auto key should be retrieved.
 //Returning an Id could mean one more query execution.
 //It returns the Id by default.
 func (this *Insert) ReturnId(returnId bool) *Insert {

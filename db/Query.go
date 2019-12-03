@@ -20,8 +20,8 @@ type Group struct {
 const OFFSET_PARAM = "OFFSET_PARAM"
 const LIMIT_PARAM = "LIMIT_PARAM"
 
-type PostRetriver interface {
-	PostRetrive(store IDb)
+type PostRetriever interface {
+	PostRetrieve(store IDb)
 }
 
 type Query struct {

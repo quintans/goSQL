@@ -23,7 +23,7 @@ const (
 
 // Interface that a struct must implement to inform what columns where changed
 type Markable interface {
-	// Retrive property names that were changed
+	// Retrieve property names that were changed
 	//
 	// return names of the changed properties
 	Marks() map[string]bool
@@ -61,7 +61,7 @@ type IDb interface {
 	Update(table *Table) *Update
 
 	Create(instance interface{}) error
-	Retrive(instance interface{}, keys ...interface{}) (bool, error)
+	Retrieve(instance interface{}, keys ...interface{}) (bool, error)
 	FindFirst(instance interface{}, example interface{}) (bool, error)
 	FindAll(instance interface{}, example interface{}) error
 	Modify(instance interface{}) (bool, error)
@@ -158,7 +158,7 @@ func (this *Db) Create(instance interface{}) error {
 }
 
 // struct field with `sql:"omit"` should be ignored if value is zero in an update.
-// in a Retrive, this field with this tag is also ignored
+// in a Retrieve, this field with this tag is also ignored
 func (this *Db) acceptColumn(table *Table, t reflect.Type, handler func(*Column)) error {
 	mappings, err := PopulateMapping("", t, this.GetTranslator())
 	if err != nil {
@@ -177,7 +177,7 @@ func (this *Db) acceptColumn(table *Table, t reflect.Type, handler func(*Column)
 	return nil
 }
 
-func (this *Db) Retrive(instance interface{}, keys ...interface{}) (bool, error) {
+func (this *Db) Retrieve(instance interface{}, keys ...interface{}) (bool, error) {
 	table, t, err := structName(instance)
 	if err != nil {
 		return false, err
