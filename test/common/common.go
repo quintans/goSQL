@@ -1,17 +1,22 @@
 package common
 
 import (
+	"context"
+	"database/sql"
+	"fmt"
 	"io/ioutil"
 	"strings"
+	"testing"
+	"time"
 
+	"github.com/jinzhu/gorm"
+	"github.com/jmoiron/sqlx"
+	"github.com/pkg/errors"
 	. "github.com/quintans/goSQL/db"
 	"github.com/quintans/goSQL/dbx"
 	"github.com/quintans/toolkit/ext"
 	"github.com/quintans/toolkit/log"
-
-	"database/sql"
-	"testing"
-	"time"
+	"github.com/stretchr/testify/require"
 )
 
 var logger = log.LoggerFor("github.com/quintans/goSQL/test")
@@ -47,15 +52,17 @@ func init() {
 
 var RAW_SQL string
 
-func InitDB(t *testing.T, driverName, dataSourceName string, translator Translator, initSqlFile string) (ITransactionManager, *sql.DB) {
+func InitDB(driverName, dataSourceName string, translator Translator, initSqlFile string) (ITransactionManager, *sql.DB, error) {
 	translator.RegisterConverter("color", ColorConverter{})
 
 	mydb, err := Connect(driverName, dataSourceName)
 	if err != nil {
-		t.Fatal(err)
+		return nil, nil, err
 	}
 
-	CreateTables(t, mydb, initSqlFile)
+	if err := CreateTables(mydb, initSqlFile); err != nil {
+		return nil, nil, err
+	}
 
 	return NewTransactionManager(
 		// database
@@ -66,7 +73,7 @@ func InitDB(t *testing.T, driverName, dataSourceName string, translator Translat
 		},
 		// statement cache
 		1000,
-	), mydb
+	), mydb, nil
 }
 
 func Connect(driverName, dataSourceName string) (*sql.DB, error) {
@@ -78,17 +85,17 @@ func Connect(driverName, dataSourceName string) (*sql.DB, error) {
 	// wake up the database pool
 	err = mydb.Ping()
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "Unable to Ping DB")
 	}
 	return mydb, nil
 }
 
-func CreateTables(t *testing.T, db *sql.DB, initSqlFile string) {
+func CreateTables(db *sql.DB, initSqlFile string) error {
 	logger.Infof("******* Creating tables *******\n")
 
 	sql, err := ioutil.ReadFile(initSqlFile)
 	if err != nil {
-		t.Fatal(err)
+		return errors.Wrapf(err, "Unable to read file %s", initSqlFile)
 	}
 
 	stmts := strings.Split(string(sql), ";\n")
@@ -99,10 +106,11 @@ func CreateTables(t *testing.T, db *sql.DB, initSqlFile string) {
 		if stmt != "" {
 			_, err := db.Exec(stmt)
 			if err != nil {
-				t.Fatalf("sql: %s\n%s", stmt, err)
+				return errors.Wrapf(err, "sql: %s", stmt)
 			}
 		}
 	}
+	return nil
 }
 
 const (
@@ -122,10 +130,11 @@ type Tester struct {
 }
 
 func (tt Tester) RunAll(TM ITransactionManager, t *testing.T) {
+	tt.RunRetrieveOther(TM, t)
 	tt.RunEmbeded(TM, t)
 	tt.RunEmbededPtr(TM, t)
 	tt.RunConverter(TM, t)
-	tt.RunRetrieveIntoUnexportedFields(TM, t)
+	tt.RunQueryIntoUnexportedFields(TM, t)
 	tt.RunSelectUTF8(TM, t)
 	tt.RunRetrieve(TM, t)
 	tt.RunFindFirst(TM, t)
@@ -478,6 +487,88 @@ func ResetDB3(TM ITransactionManager) {
 	}
 }
 
+func (tt Tester) RunBench(TM ITransactionManager, driver string, dns string, b *testing.B) {
+	ResetDB(TM)
+
+	const maxRows = 10000
+	type Employee struct {
+		Id        *int
+		FirstName *string
+		LastName  *string
+	}
+
+	err := TM.Transaction(func(DB IDb) error {
+		for i := 1; i <= maxRows; i++ {
+			err := DB.Create(&Employee{
+				Id:        ext.Int(i),
+				FirstName: ext.String("Paulo"),
+				LastName:  ext.String("Pereira"),
+			})
+
+			require.NoError(b, err)
+		}
+		return nil
+	})
+
+	require.NoError(b, err)
+
+	store := TM.Store()
+	for n := 10; n <= maxRows; n *= 10 {
+		query := fmt.Sprintf("SELECT * FROM employee ORDER BY id ASC LIMIT %d", n)
+
+		b.Run(fmt.Sprintf("sqlx_%d", n), func(b *testing.B) {
+			b.StopTimer()
+			db, err := sqlx.Connect(driver, dns)
+			require.NoError(b, err)
+			db = db.Unsafe()
+			defer db.Close()
+
+			for i := 0; i < b.N; i++ {
+				var emps []*Employee
+				b.StartTimer()
+				err := db.SelectContext(context.Background(), &emps, query)
+				b.StopTimer()
+				require.NoError(b, err)
+				require.Len(b, emps, n)
+			}
+		})
+
+		b.Run(fmt.Sprintf("gosql_%d", n), func(b *testing.B) {
+			b.StopTimer()
+
+			for i := 0; i < b.N; i++ {
+				var emps []*Employee
+				b.StartTimer()
+				err := store.Query(EMPLOYEE).
+					Column(EMPLOYEE_C_FIRST_NAME, EMPLOYEE_C_LAST_NAME).
+					OrderBy(EMPLOYEE_C_ID).Asc().
+					Limit(int64(n)).
+					ListFlatTree(&emps)
+				b.StopTimer()
+				require.NoError(b, err)
+				require.Len(b, emps, n)
+			}
+		})
+
+		b.Run(fmt.Sprintf("gorm_%d", n), func(b *testing.B) {
+			b.StopTimer()
+			db, err := gorm.Open(driver, dns)
+			db = db.Order("id asc").Limit(n)
+			db.SingularTable(true)
+			require.NoError(b, err)
+			defer db.Close()
+
+			for i := 0; i < b.N; i++ {
+				var emps []*Employee
+				b.StartTimer()
+				db.Find(&emps)
+				b.StopTimer()
+				require.Len(b, emps, n)
+			}
+		})
+	}
+}
+
 func (tt Tester) RunSelectUTF8(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
@@ -517,7 +608,34 @@ func (tt Tester) RunRetrieve(TM ITransactionManager, t *testing.T) {
 	}
 }
 
-func (tt Tester) RunRetrieveIntoUnexportedFields(TM ITransactionManager, t *testing.T) {
+type NotAuthor struct {
+	EntityBase
+	Name *string
+}
+
+func (t *NotAuthor) TableName() string {
+	return AUTHOR.Alias
+}
+
+func (tt Tester) RunRetrieveOther(TM ITransactionManager, t *testing.T) {
+	ResetDB(TM)
+
+	// get the database context
+	store := TM.Store()
+	// the target entity
+
+	author := NotAuthor{}
+
+	ok, err := store.Retrieve(&author, 3)
+	if err != nil {
+		t.Fatalf("Failed RunRetrieveOther: %s", err)
+	}
+	if !ok || *author.Id != 3 || author.Version != 1 || *author.Name != AUTHOR_UTF8_NAME {
+		t.Fatalf("Failed RunRetrieveOther: The record for publisher id 3, was not properly retrieved. Retrieved %+v", author)
+	}
+}
+
+func (tt Tester) RunQueryIntoUnexportedFields(TM ITransactionManager, t *testing.T) {
 	ResetDB(TM)
 
 	// get the database context

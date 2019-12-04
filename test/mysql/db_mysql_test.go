@@ -14,9 +14,7 @@ import (
 
 var logger = log.LoggerFor("github.com/quintans/goSQL/test")
 
-func TestMySQL5(t *testing.T) {
-	logger.Infof("******* Using MySQL5 *******\n")
-
+func StartContainer() (func(), ITransactionManager, *sql.DB, error) {
 	expPort := "3306/tcp"
 	ctx, server, port, err := common.Container(
 		"mysql:5.7",
@@ -27,18 +25,37 @@ func TestMySQL5(t *testing.T) {
 		1,
 	)
 
-	defer server.Terminate(ctx)
 	if err != nil {
-		t.Error(err)
+		return nil, nil, nil, err
 	}
 
-	tm, theDB := InitMySQL5(t, port.Port())
+	closer := func() {
+		server.Terminate(ctx)
+	}
+
+	tm, theDB, err := InitMySQL5(port.Port())
+	if err != nil {
+		closer()
+		return nil, nil, nil, err
+	}
+	return closer, tm, theDB, nil
+}
+
+func TestMySQL5(t *testing.T) {
+	logger.Infof("******* Using MySQL5 *******\n")
+
+	closer, tm, theDB, err := StartContainer()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closer()
+
 	tester := common.Tester{DbName: common.MySQL}
 	tester.RunAll(tm, t)
 	theDB.Close()
 }
 
-func InitMySQL5(t *testing.T, port string) (ITransactionManager, *sql.DB) {
+func InitMySQL5(port string) (ITransactionManager, *sql.DB, error) {
 	common.RAW_SQL = "SELECT `NAME` FROM `BOOK` WHERE `NAME` LIKE ?"
 
 	translator := trx.NewMySQL5Translator()
@@ -59,7 +76,6 @@ func InitMySQL5(t *testing.T, port string) (ITransactionManager, *sql.DB) {
 	)
 
 	return common.InitDB(
-		t,
 		"mysql",
 		fmt.Sprintf("root:secret@tcp(localhost:%s)/mysql?parseTime=true", port),
 		translator,

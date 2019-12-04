@@ -203,16 +203,20 @@ func (this *Insert) Submit(instance interface{}) (int64, error) {
 		return 0, err
 	}
 
-	column := this.table.GetSingleKeyColumn()
-	if column != nil && !this.HasKeyValue {
-		bp := mappings[column.GetAlias()]
-		bp.Set(elem, reflect.ValueOf(&key))
+	if !this.HasKeyValue {
+		column := this.table.GetSingleKeyColumn()
+		if column != nil {
+			bp := mappings[column.GetAlias()]
+			bp.Set(elem, reflect.ValueOf(&key))
+		}
 	}
 
-	column = this.table.GetVersionColumn()
+	column := this.table.GetVersionColumn()
 	if column != nil {
 		bp := mappings[column.GetAlias()]
-		bp.Set(elem, reflect.ValueOf(&version))
+		if bp != nil {
+			bp.Set(elem, reflect.ValueOf(&version))
+		}
 	}
 
 	// post trigger

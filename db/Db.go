@@ -51,6 +51,10 @@ func (this *Marker) Unmark() {
 	this.changes = nil
 }
 
+type TableNamer interface {
+	TableName() string
+}
+
 type IDb interface {
 	GetTranslator() Translator
 	GetConnection() dbx.IConnection
@@ -132,13 +136,23 @@ func structName(instance interface{}) (*Table, reflect.Type, error) {
 	if typ.Kind() == reflect.Ptr {
 		typ = typ.Elem()
 	}
-	tab, ok := Tables.Get(Str(typ.Name()))
-	if !ok {
-		// tries to find using also the strcut package.
-		// The package correspondes to the database schema
-		tab, ok = Tables.Get(Str(typ.PkgPath() + "." + typ.Name()))
+
+	var tab interface{}
+	var ok bool
+	if t, isT := instance.(TableNamer); isT {
+		tab, ok = Tables.Get(Str(t.TableName()))
 		if !ok {
-			return nil, nil, errors.Errorf("There is no table mapped to %s", typ.Name())
+			return nil, nil, errors.Errorf("There is no table mapped to TableName %s", t.TableName())
+		}
+	} else {
+		tab, ok = Tables.Get(Str(typ.Name()))
+		if !ok {
+			// tries to find using also the strcut package.
+			// The package correspondes to the database schema
+			tab, ok = Tables.Get(Str(typ.PkgPath() + "." + typ.Name()))
+			if !ok {
+				return nil, nil, errors.Errorf("There is no table mapped to Struct Type %s", typ.Name())
+			}
 		}
 	}
 

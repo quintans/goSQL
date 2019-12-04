@@ -15,9 +15,7 @@ import (
 
 var logger = log.LoggerFor("github.com/quintans/goSQL/test")
 
-func TestFirebirdSQL(t *testing.T) {
-	logger.Infof("******* Using FirebirdSQL *******\n")
-
+func StartContainer() (func(), ITransactionManager, *sql.DB, error) {
 	expPort := "3050/tcp"
 	ctx, server, port, err := common.Container(
 		"jacobalberty/firebird:3.0.4",
@@ -32,17 +30,36 @@ func TestFirebirdSQL(t *testing.T) {
 		1,
 	)
 
-	defer server.Terminate(ctx)
 	if err != nil {
-		t.Error(err)
+		return nil, nil, nil, err
 	}
-	tm, theDB := InitFirebirdSQL(t, port.Port())
+	closer := func() {
+		server.Terminate(ctx)
+	}
+
+	tm, theDB, err := InitFirebirdSQL(port.Port())
+	if err != nil {
+		closer()
+		return nil, nil, nil, err
+	}
+	return closer, tm, theDB, nil
+}
+
+func TestFirebirdSQL(t *testing.T) {
+	logger.Infof("******* Using FirebirdSQL *******\n")
+
+	closer, tm, theDB, err := StartContainer()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closer()
+
 	tester := common.Tester{DbName: common.Firebird}
 	tester.RunAll(tm, t)
 	theDB.Close()
 }
 
-func InitFirebirdSQL(t *testing.T, port string) (ITransactionManager, *sql.DB) {
+func InitFirebirdSQL(port string) (ITransactionManager, *sql.DB, error) {
 
 	common.RAW_SQL = "SELECT name FROM book WHERE name LIKE ?"
 
@@ -60,7 +77,6 @@ func InitFirebirdSQL(t *testing.T, port string) (ITransactionManager, *sql.DB) {
 	)
 
 	return common.InitDB(
-		t,
 		"firebirdsql",
 		fmt.Sprintf("gosql:secret@localhost:%s//firebird/data/gosql.fdb", port),
 		translator,

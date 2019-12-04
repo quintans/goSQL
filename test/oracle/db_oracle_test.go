@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/docker/go-connections/nat"
+	"github.com/pkg/errors"
 	. "github.com/quintans/goSQL/db"
 	"github.com/quintans/goSQL/test/common"
 	trx "github.com/quintans/goSQL/translators"
@@ -19,11 +20,9 @@ import (
 
 var logger = log.LoggerFor("github.com/quintans/goSQL/test")
 
-func TestOracle(t *testing.T) {
-	logger.Infof("******* Using Oracle *******\n")
-
-	port := "1521"
+func StartContainer(port string) (func(), ITransactionManager, *sql.DB, error) {
 	// check if there is an already running db instance
+	closer := func() {}
 	_, err := common.Connect("goracle", "gosql/gosql@localhost:1521/xe")
 	if err != nil {
 		expPort := "1521/tcp"
@@ -44,24 +43,43 @@ func TestOracle(t *testing.T) {
 			Started:          true,
 		})
 		if err != nil {
-			t.Log("To connect to Oracle, Instant Client is needed.")
-			t.Error(err)
+			return nil, nil, nil, errors.Wrap(err, "To connect to Oracle, Instant Client is needed.")
 		}
-		defer db.Terminate(ctx)
+
+		closer = func() { db.Terminate(ctx) }
+
 		pt, err := db.MappedPort(ctx, nat.Port(expPort))
 		if err != nil {
-			t.Error(err)
+			return nil, nil, nil, err
 		}
 		port = pt.Port()
 	}
 
-	tm, theDB := InitOracle(t, port)
+	tm, theDB, err := InitOracle(port)
+	if err != nil {
+		closer()
+		return nil, nil, nil, err
+	}
+	return closer, tm, theDB, nil
+
+}
+
+func TestOracle(t *testing.T) {
+	logger.Infof("******* Using Oracle *******\n")
+
+	port := "1521"
+	closer, tm, theDB, err := StartContainer(port)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closer()
+
 	tester := common.Tester{DbName: common.Oracle}
 	tester.RunAll(tm, t)
 	theDB.Close()
 }
 
-func InitOracle(t *testing.T, port string) (ITransactionManager, *sql.DB) {
+func InitOracle(port string) (ITransactionManager, *sql.DB, error) {
 	common.RAW_SQL = "SELECT name FROM book WHERE name LIKE :1"
 
 	translator := trx.NewOracleTranslator()
@@ -78,7 +96,6 @@ func InitOracle(t *testing.T, port string) (ITransactionManager, *sql.DB) {
 	)
 
 	return common.InitDB(
-		t,
 		"goracle",
 		fmt.Sprintf("gosql/gosql@localhost:%s/xe", port),
 		translator,

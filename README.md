@@ -419,7 +419,9 @@ store.Retrieve(&publisher, 2)
 If there are multiple keys for a table, the supplied keys must be in the same order as they were declared in the table definition.
 
 When using `Retrieve`, if there is a struct field with the tag `sql:"omit"` its value will not be retrieved.
-The strcut `Àuthor` has this tag in the field `Secret`.
+The strcut `Author` has this tag in the field `Secret`.
+
+It is possible to change the associated table name by implemententing the `TableNamer` interface.
 
 More detail on selecting one instance with structs can be found [here](#selectto).
 
