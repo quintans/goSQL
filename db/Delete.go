@@ -2,9 +2,9 @@ package db
 
 import (
 	"github.com/quintans/goSQL/dbx"
+	"github.com/quintans/toolkit/faults"
 
 	"fmt"
-	"github.com/pkg/errors"
 	"reflect"
 	"time"
 )
@@ -70,7 +70,7 @@ func (this *Delete) Submit(value interface{}) (int64, error) {
 
 			if column.IsKey() {
 				if !val.IsValid() || (val.Kind() == reflect.Ptr && val.IsNil()) {
-					return 0, errors.Errorf("goSQL: Value for key property '%s' cannot be nil.", alias)
+					return 0, faults.New("goSQL: Value for key property '%s' cannot be nil.", alias)
 				}
 
 				if val.Kind() == reflect.Ptr {
@@ -105,7 +105,7 @@ func (this *Delete) Submit(value interface{}) (int64, error) {
 	}
 
 	if !hasId {
-		return 0, errors.Errorf("goSQL: No key field was identified in %s.", typ.String())
+		return 0, faults.New("goSQL: No key field was identified in %s.", typ.String())
 	}
 
 	if criterias != nil {

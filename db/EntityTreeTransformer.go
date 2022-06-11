@@ -4,11 +4,10 @@ import (
 	tk "github.com/quintans/toolkit"
 	coll "github.com/quintans/toolkit/collections"
 	. "github.com/quintans/toolkit/ext"
+	"github.com/quintans/toolkit/faults"
 
 	"database/sql"
 	"reflect"
-
-	"github.com/pkg/errors"
 )
 
 //extends EntityTransformer
@@ -202,7 +201,7 @@ func (this *EntityTreeTransformer) transformEntity(
 				}
 			}
 			if noKey {
-				return nil, errors.Errorf(
+				return nil, faults.New(
 					"Key columns not found for %s."+
 						" When transforming to a object tree and reusing previous entities, "+
 						"the key columns must be declared in the select.",

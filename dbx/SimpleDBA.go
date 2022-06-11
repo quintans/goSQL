@@ -5,7 +5,8 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/pkg/errors"
+	"errors"
+
 	tk "github.com/quintans/toolkit"
 	coll "github.com/quintans/toolkit/collections"
 	"github.com/quintans/toolkit/log"

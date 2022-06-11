@@ -4,10 +4,10 @@ import (
 	"github.com/quintans/goSQL/dbx"
 	tk "github.com/quintans/toolkit"
 	coll "github.com/quintans/toolkit/collections"
+	"github.com/quintans/toolkit/faults"
 
 	"database/sql"
 	"fmt"
-	"github.com/pkg/errors"
 	"reflect"
 	"time"
 )
@@ -790,7 +790,7 @@ func (this *Query) ListTreeOf(template tk.Hasher) (coll.Collection, error) {
 func (this *Query) List(target interface{}) error {
 	caller, typ, isStruct, ok := checkSlice(target)
 	if !ok {
-		return errors.Errorf("goSQL: Expected a slice of type *[]*struct. Got %s", typ.String())
+		return faults.New("goSQL: Expected a slice of type *[]*struct. Got %s", typ.String())
 	}
 
 	if isStruct {
@@ -925,7 +925,7 @@ func (this *Query) ListFlatTree(target interface{}) error {
 	if !ok || !isStruct {
 		caller, typ, ok = checkCollector(target)
 		if !ok {
-			return errors.Errorf("goSQL: Expected a slice of type *[]<*>struct or a function with the signature func(<<*>struct>). got %s", typ.String())
+			return faults.New("goSQL: Expected a slice of type *[]<*>struct or a function with the signature func(<<*>struct>). got %s", typ.String())
 		}
 	}
 
@@ -961,7 +961,7 @@ func (this *Query) selectTree(typ interface{}, reuse bool) (interface{}, error) 
 	if reuse {
 		_, ok := typ.(tk.Hasher)
 		if !ok {
-			return nil, errors.Errorf("When reuse is true, the type %T must implement toolkit.Hasher", typ)
+			return nil, faults.New("When reuse is true, the type %T must implement toolkit.Hasher", typ)
 		}
 
 		list, err := this.list(NewEntityTreeTransformer(this, true, typ))

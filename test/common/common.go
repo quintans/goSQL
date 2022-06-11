@@ -9,9 +9,10 @@ import (
 	"testing"
 	"time"
 
+	"errors"
+
 	"github.com/jinzhu/gorm"
 	"github.com/jmoiron/sqlx"
-	"github.com/pkg/errors"
 	. "github.com/quintans/goSQL/db"
 	"github.com/quintans/goSQL/dbx"
 	"github.com/quintans/toolkit/ext"

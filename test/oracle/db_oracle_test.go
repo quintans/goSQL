@@ -7,8 +7,9 @@ import (
 	"testing"
 	"time"
 
+	"errors"
+
 	"github.com/docker/go-connections/nat"
-	"github.com/pkg/errors"
 	. "github.com/quintans/goSQL/db"
 	"github.com/quintans/goSQL/test/common"
 	trx "github.com/quintans/goSQL/translators"

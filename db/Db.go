@@ -3,10 +3,9 @@ package db
 import (
 	"reflect"
 
-	"github.com/pkg/errors"
-
 	"github.com/quintans/goSQL/dbx"
 	. "github.com/quintans/toolkit/ext"
+	"github.com/quintans/toolkit/faults"
 	"github.com/quintans/toolkit/log"
 )
 
@@ -142,7 +141,7 @@ func structName(instance interface{}) (*Table, reflect.Type, error) {
 	if t, isT := instance.(TableNamer); isT {
 		tab, ok = Tables.Get(Str(t.TableName()))
 		if !ok {
-			return nil, nil, errors.Errorf("There is no table mapped to TableName %s", t.TableName())
+			return nil, nil, faults.New("There is no table mapped to TableName %s", t.TableName())
 		}
 	} else {
 		tab, ok = Tables.Get(Str(typ.Name()))
@@ -151,7 +150,7 @@ func structName(instance interface{}) (*Table, reflect.Type, error) {
 			// The package correspondes to the database schema
 			tab, ok = Tables.Get(Str(typ.PkgPath() + "." + typ.Name()))
 			if !ok {
-				return nil, nil, errors.Errorf("There is no table mapped to Struct Type %s", typ.Name())
+				return nil, nil, faults.New("There is no table mapped to Struct Type %s", typ.Name())
 			}
 		}
 	}
@@ -360,7 +359,7 @@ func (this *Db) Save(instance interface{}) (bool, error) {
 
 	verColumn := table.GetVersionColumn()
 	if verColumn == nil {
-		return false, errors.Errorf("The mapped table %s, must have a mapped version column.", table.GetName())
+		return false, faults.New("The mapped table %s, must have a mapped version column.", table.GetName())
 	}
 
 	// find column

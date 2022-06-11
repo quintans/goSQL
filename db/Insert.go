@@ -4,7 +4,7 @@ import (
 	coll "github.com/quintans/toolkit/collections"
 
 	"database/sql/driver"
-	"github.com/pkg/errors"
+	"errors"
 	"reflect"
 	"time"
 )

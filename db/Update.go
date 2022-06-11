@@ -3,10 +3,11 @@ package db
 import (
 	"github.com/quintans/goSQL/dbx"
 	coll "github.com/quintans/toolkit/collections"
+	"github.com/quintans/toolkit/faults"
 
 	"database/sql/driver"
+	"errors"
 	"fmt"
-	"github.com/pkg/errors"
 	"reflect"
 	"time"
 )
@@ -113,7 +114,7 @@ func (this *Update) Submit(instance interface{}) (int64, error) {
 
 			if column.IsKey() {
 				if !val.IsValid() || (val.Kind() == reflect.Ptr && val.IsNil()) {
-					return 0, errors.Errorf("goSQL: Value for key property '%s' cannot be nil.", alias)
+					return 0, faults.New("goSQL: Value for key property '%s' cannot be nil.", alias)
 				}
 
 				if val.Kind() == reflect.Ptr {
