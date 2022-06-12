@@ -143,7 +143,7 @@ Besides the examples in this page there are a lot more examples in the
  - MariaDB 5.5
  - PostgreSQL 9.2
  - FirebirdSQL 2.5
- - Oracle XE 11g
+ - Oracle XE 11g - [read this](./test/oracle/readme-oci.txt)
 
 ## Dependencies
 go 1.1+

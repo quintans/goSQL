@@ -25,6 +25,7 @@ func NewFirebirdSQLTranslator() *FirebirdSQLTranslator {
 }
 
 func (f *FirebirdSQLTranslator) GetAutoKeyStrategy() db.AutoKeyStrategy {
+	// we could use autoincrement but for test purposes we are using sequences
 	return db.AUTOKEY_BEFORE
 }
 

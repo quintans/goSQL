@@ -1,6 +1,8 @@
 package db
 
 import (
+	"fmt"
+
 	"github.com/quintans/faults"
 	coll "github.com/quintans/toolkit/collections"
 
@@ -159,6 +161,7 @@ func (i *Insert) Submit(instance interface{}) (int64, error) {
 	var version int64 = 1
 	for e := i.table.GetColumns().Enumerator(); e.HasNext(); {
 		column := e.Next().(*Column)
+		fmt.Println("===>", column.name)
 		if column.IsVersion() {
 			i.Set(column, version)
 		} else {
@@ -217,12 +220,13 @@ func (i *Insert) Submit(instance interface{}) (int64, error) {
 		}
 	}
 
+	hadKeyValue := i.HasKeyValue
 	key, err := i.Execute()
 	if err != nil {
 		return 0, err
 	}
 
-	if !i.HasKeyValue {
+	if !hadKeyValue {
 		column := i.table.GetSingleKeyColumn()
 		if column != nil {
 			bp := mappings[column.GetAlias()]
@@ -275,14 +279,8 @@ func (i *Insert) Execute() (int64, error) {
 	strategy := i.db.GetTranslator().GetAutoKeyStrategy()
 	singleKeyColumn := i.table.GetSingleKeyColumn()
 
-	rsql := i.getCachedSql()
-	i.debugSQL(rsql.OriSql, 1)
-	now = time.Now()
-	params, err := rsql.BuildValues(i.parameters)
-	if err != nil {
-		return 0, err
-	}
-
+	var sql string
+	var params []interface{}
 	switch strategy {
 	case AUTOKEY_BEFORE:
 		if i.returnId && !i.HasKeyValue && singleKeyColumn != nil {
@@ -291,17 +289,32 @@ func (i *Insert) Execute() (int64, error) {
 			}
 			i.Set(singleKeyColumn, lastId)
 		}
-		_, err = i.dba.Insert(rsql.Sql, params...)
+		sql, params, err = i.prepareSQL()
+		if err != nil {
+			return 0, err
+		}
+		now = time.Now()
+		_, err = i.dba.Insert(sql, params...)
 		i.debugTime(now, 1)
 	case AUTOKEY_RETURNING:
+		sql, params, err = i.prepareSQL()
+		if err != nil {
+			return 0, err
+		}
+		now = time.Now()
 		if i.HasKeyValue || singleKeyColumn == nil {
-			_, err = i.dba.Insert(rsql.Sql, params...)
+			_, err = i.dba.Insert(sql, params...)
 		} else {
-			lastId, err = i.dba.InsertReturning(rsql.Sql, params...)
+			lastId, err = i.dba.InsertReturning(sql, params...)
 		}
 		i.debugTime(now, 1)
 	case AUTOKEY_AFTER:
-		_, err = i.dba.Insert(rsql.Sql, params...)
+		sql, params, err = i.prepareSQL()
+		if err != nil {
+			return 0, err
+		}
+		now = time.Now()
+		_, err = i.dba.Insert(sql, params...)
 		if err != nil {
 			return 0, err
 		}
@@ -315,6 +328,17 @@ func (i *Insert) Execute() (int64, error) {
 
 	logger.Debugf("The inserted Id was: %v", lastId)
 	return lastId, err
+}
+
+func (i *Insert) prepareSQL() (string, []interface{}, error) {
+	rsql := i.getCachedSql()
+	i.debugSQL(rsql.OriSql, 1)
+	params, err := rsql.BuildValues(i.parameters)
+	if err != nil {
+		return "", nil, err
+	}
+
+	return rsql.Sql, params, nil
 }
 
 func (i *Insert) getAutoNumber(column *Column) (int64, error) {
