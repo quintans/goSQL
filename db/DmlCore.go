@@ -1,6 +1,7 @@
 package db
 
 import (
+	"github.com/quintans/faults"
 	coll "github.com/quintans/toolkit/collections"
 
 	"reflect"
@@ -22,43 +23,48 @@ type DmlCore struct {
 // param col: The column
 // param value: The value to set
 // return this
-func (this *DmlCore) set(col *Column, value interface{}) interface{} {
+func (d *DmlCore) set(col *Column, value interface{}) (interface{}, error) {
 	token := tokenizeOne(value)
-	this.replaceRaw(token)
-	token.SetTableAlias(this.tableAlias)
+	d.replaceRaw(token)
+	token.SetTableAlias(d.tableAlias)
 	// if the column was not yet defined, the sql changed
-	val, ok := this.defineParameter(col, token)
-	if ok {
-		this.rawSQL = nil
+	val, ok, err := d.defineParameter(col, token)
+	if err != nil {
+		return nil, err
 	}
-	return val
+	if ok {
+		d.rawSQL = nil
+	}
+	return val, nil
 }
 
-func (this *DmlCore) values(vals ...interface{}) {
-	if len(this.cols) == 0 {
-		panic("Column set is not yet defined!")
+func (d *DmlCore) values(vals ...interface{}) error {
+	if len(d.cols) == 0 {
+		return faults.New("Column set is not yet defined!")
 	}
 
-	if len(this.cols) != len(vals) {
-		panic("The number of defined cols is diferent from the number of passed vals!")
+	if len(d.cols) != len(vals) {
+		return faults.New("The number of defined cols is diferent from the number of passed vals!")
 	}
 
-	for k, col := range this.cols {
-		this.set(col, vals[k])
+	for k, col := range d.cols {
+		d.set(col, vals[k])
 	}
+
+	return nil
 }
 
 // defines a new value for column returning if the column should provoque a new sql
-func (this *DmlCore) defineParameter(col *Column, value Tokener) (interface{}, bool) {
-	if col.GetTable().GetName() != this.table.GetName() {
-		panic(col.String() + " does not belong to table " + this.table.String())
+func (d *DmlCore) defineParameter(col *Column, value Tokener) (interface{}, bool, error) {
+	if col.GetTable().GetName() != d.table.GetName() {
+		return nil, false, faults.Errorf("%s does not belong to table %s", col, d.table)
 	}
 
-	if this.vals == nil {
-		this.vals = coll.NewLinkedHashMap()
+	if d.vals == nil {
+		d.vals = coll.NewLinkedHashMap()
 	}
 
-	old := this.vals.Put(col, value)
+	old := d.vals.Put(col, value)
 	// if it is a parameter remove it
 	if old != nil {
 		tok := old.(Tokener)
@@ -70,21 +76,21 @@ func (this *DmlCore) defineParameter(col *Column, value Tokener) (interface{}, b
 			key := value.GetValue().(string)
 			// change the new param name to the old param name
 			value.SetValue(tok.GetValue())
-			val := this.parameters[oldKey]
+			val := d.parameters[oldKey]
 			// update the old value to the new one
-			this.parameters[oldKey] = this.parameters[key]
+			d.parameters[oldKey] = d.parameters[key]
 			// remove the new token
-			delete(this.parameters, key)
+			delete(d.parameters, key)
 			// The replace of one param by another should not trigger a new SQL string
-			return val, false
+			return val, false, nil
 		} else if tok.GetOperator() == TOKEN_PARAM {
 			// removes the previous token
-			delete(this.parameters, tok.GetValue().(string))
+			delete(d.parameters, tok.GetValue().(string))
 		}
 	}
-	return nil, true
+	return nil, true, nil
 }
 
-func (this *DmlCore) GetValues() coll.Map {
-	return this.vals
+func (d *DmlCore) GetValues() coll.Map {
+	return d.vals
 }

@@ -1,10 +1,10 @@
 package db
 
 import (
+	"github.com/quintans/faults"
 	"github.com/quintans/goSQL/dbx"
 
 	"fmt"
-	"github.com/pkg/errors"
 	"reflect"
 	"time"
 )
@@ -27,12 +27,12 @@ func NewDelete(db IDb, table *Table) *Delete {
 	return this
 }
 
-func (this *Delete) Alias(alias string) *Delete {
-	this.alias(alias)
-	return this
+func (d *Delete) Alias(alias string) *Delete {
+	d.alias(alias)
+	return d
 }
 
-func (this *Delete) Submit(value interface{}) (int64, error) {
+func (d *Delete) Submit(value interface{}) (int64, error) {
 	var mappings map[string]*EntityProperty
 	var criterias []*Criteria
 
@@ -41,24 +41,24 @@ func (this *Delete) Submit(value interface{}) (int64, error) {
 		typ = typ.Elem()
 	}
 
-	if typ == this.lastType {
-		mappings = this.lastMappings
+	if typ == d.lastType {
+		mappings = d.lastMappings
 	} else {
 		var err error
-		mappings, err = PopulateMapping("", typ, this.GetDb().GetTranslator())
+		mappings, err = PopulateMapping("", typ, d.GetDb().GetTranslator())
 		if err != nil {
 			return 0, err
 		}
 		criterias = make([]*Criteria, 0)
-		this.criteria = nil
-		this.lastMappings = mappings
-		this.lastType = typ
+		d.criteria = nil
+		d.lastMappings = mappings
+		d.lastType = typ
 	}
 
 	var mustSucceed bool
 	var hasId bool
 	var ver int64
-	for e := this.table.GetColumns().Enumerator(); e.HasNext(); {
+	for e := d.table.GetColumns().Enumerator(); e.HasNext(); {
 		column := e.Next().(*Column)
 		alias := column.GetAlias()
 		bp := mappings[alias]
@@ -70,7 +70,7 @@ func (this *Delete) Submit(value interface{}) (int64, error) {
 
 			if column.IsKey() {
 				if !val.IsValid() || (val.Kind() == reflect.Ptr && val.IsNil()) {
-					return 0, errors.Errorf("goSQL: Value for key property '%s' cannot be nil.", alias)
+					return 0, faults.Errorf("goSQL: Value for key property '%s' cannot be nil.", alias)
 				}
 
 				if val.Kind() == reflect.Ptr {
@@ -81,11 +81,11 @@ func (this *Delete) Submit(value interface{}) (int64, error) {
 				if criterias != nil {
 					criterias = append(criterias, column.Matches(Param(alias)))
 				}
-				this.SetParameter(alias, id)
+				d.SetParameter(alias, id)
 				hasId = true
 			} else if column.IsVersion() {
 				if !val.IsValid() || (val.Kind() == reflect.Ptr && val.IsNil()) {
-					panic(fmt.Sprintf("goSQL: Value for version property '%s' cannot be nil.", alias))
+					return 0, faults.Errorf("value for version property '%s' cannot be nil.", alias)
 				}
 
 				if val.Kind() == reflect.Ptr {
@@ -97,7 +97,7 @@ func (this *Delete) Submit(value interface{}) (int64, error) {
 					if criterias != nil {
 						criterias = append(criterias, column.Matches(Param(alias)))
 					}
-					this.SetParameter(alias, ver)
+					d.SetParameter(alias, ver)
 					mustSucceed = true
 				}
 			}
@@ -105,23 +105,23 @@ func (this *Delete) Submit(value interface{}) (int64, error) {
 	}
 
 	if !hasId {
-		return 0, errors.Errorf("goSQL: No key field was identified in %s.", typ.String())
+		return 0, faults.Errorf("goSQL: No key field was identified in %s.", typ.String())
 	}
 
 	if criterias != nil {
-		this.Where(criterias...)
-		this.rawSQL = nil
+		d.Where(criterias...)
+		d.rawSQL = nil
 	}
 
 	// pre trigger
 	if t, isT := value.(PreDeleter); isT {
-		err := t.PreDelete(this.GetDb())
+		err := t.PreDelete(d.GetDb())
 		if err != nil {
 			return 0, err
 		}
 	}
 
-	affectedRows, err := this.Execute()
+	affectedRows, err := d.Execute()
 	if err != nil {
 		return 0, err
 	}
@@ -131,23 +131,27 @@ func (this *Delete) Submit(value interface{}) (int64, error) {
 
 	// post trigger
 	if t, isT := value.(PostDeleter); isT {
-		t.PostDelete(this.GetDb())
+		t.PostDelete(d.GetDb())
 	}
 	return affectedRows, nil
 }
 
-func (this *Delete) Execute() (int64, error) {
-	table := this.GetTable()
+func (d *Delete) Execute() (int64, error) {
+	table := d.GetTable()
 	if table.PreDeleteTrigger != nil {
-		table.PreDeleteTrigger(this)
+		table.PreDeleteTrigger(d)
 	}
 
-	rsql := this.getCachedSql()
-	this.debugSQL(rsql.OriSql, 1)
+	rsql := d.getCachedSql()
+	d.debugSQL(rsql.OriSql, 1)
 
 	now := time.Now()
-	affectedRows, e := this.DmlBase.dba.Delete(rsql.Sql, rsql.BuildValues(this.DmlBase.parameters)...)
-	this.debugTime(now, 1)
+	params, err := rsql.BuildValues(d.DmlBase.parameters)
+	if err != nil {
+		return 0, err
+	}
+	affectedRows, e := d.DmlBase.dba.Delete(rsql.Sql, params...)
+	d.debugTime(now, 1)
 	if e != nil {
 		return 0, e
 	}
@@ -155,25 +159,25 @@ func (this *Delete) Execute() (int64, error) {
 	return affectedRows, nil
 }
 
-func (this *Delete) getCachedSql() *RawSql {
-	if this.rawSQL == nil {
+func (d *Delete) getCachedSql() *RawSql {
+	if d.rawSQL == nil {
 		// if the discriminator conditions have not yet been processed, apply them now
-		if this.discriminatorCriterias != nil && this.criteria == nil {
-			this.DmlBase.where(nil)
+		if d.discriminatorCriterias != nil && d.criteria == nil {
+			d.DmlBase.where(nil)
 		}
 
-		sql := this.db.GetTranslator().GetSqlForDelete(this)
-		this.rawSQL = ToRawSql(sql, this.db.GetTranslator())
+		sql := d.db.GetTranslator().GetSqlForDelete(d)
+		d.rawSQL = ToRawSql(sql, d.db.GetTranslator())
 	}
 
-	return this.rawSQL
+	return d.rawSQL
 }
 
 //// WHERE ===
 
-func (this *Delete) Where(restriction ...*Criteria) *Delete {
+func (d *Delete) Where(restriction ...*Criteria) *Delete {
 	if len(restriction) > 0 {
-		this.DmlBase.where(restriction)
+		d.DmlBase.where(restriction)
 	}
-	return this
+	return d
 }

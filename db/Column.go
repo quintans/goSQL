@@ -1,8 +1,9 @@
 package db
 
 import (
-	tk "github.com/quintans/toolkit"
 	"strings"
+
+	tk "github.com/quintans/toolkit"
 )
 
 type Column struct {
@@ -14,35 +15,37 @@ type Column struct {
 	version   bool
 	deletion  bool
 	hash      int
+
+	err error
 }
 
 // Param alias: The alias of the column
 // return
-func (this *Column) As(alias string) *Column {
-	this.alias = alias
-	return this
+func (c *Column) As(alias string) *Column {
+	c.alias = alias
+	return c
 }
 
 // Defines the table alias for this column in the SQL
-func (this *Column) For(tableAlias string) *ColumnHolder {
-	return NewColumnHolder(this).For(tableAlias)
+func (c *Column) For(tableAlias string) *ColumnHolder {
+	return NewColumnHolder(c).For(tableAlias)
 }
 
 // set this as a key column
 //
 // return
-func (this *Column) Key() *Column {
-	this.key = true
-	this.table.addKey(this)
-	return this
+func (c *Column) Key() *Column {
+	c.key = true
+	c.table.addKey(c)
+	return c
 }
 
 // set this as a mandatory column
 //
 // return
-func (this *Column) Mandatory() *Column {
-	this.mandatory = true
-	return this
+func (c *Column) Mandatory() *Column {
+	c.mandatory = true
+	return c
 }
 
 //	/**
@@ -50,10 +53,10 @@ func (this *Column) Mandatory() *Column {
 //	 *
 //	 * @return
 //	 */
-func (this *Column) Version() *Column {
-	this.version = true
-	this.table.setVersion(this)
-	return this
+func (c *Column) Version() *Column {
+	c.version = true
+	c.table.setVersion(c)
+	return c
 }
 
 //	/**
@@ -61,21 +64,21 @@ func (this *Column) Version() *Column {
 //	 *
 //	 * @return
 //	 */
-func (this *Column) Deletion() *Column {
-	this.deletion = true
-	this.table.setDeletion(this)
-	return this
+func (c *Column) Deletion() *Column {
+	c.deletion = true
+	c.table.setDeletion(c)
+	return c
 }
 
 //	Gets the table that this column belongs to
 //
 //	returns the table
-func (this *Column) GetTable() *Table {
-	return this.table
+func (c *Column) GetTable() *Table {
+	return c.table
 }
 
-func (this *Column) GetAlias() string {
-	return this.alias
+func (c *Column) GetAlias() string {
+	return c.alias
 }
 
 //	/**
@@ -83,8 +86,8 @@ func (this *Column) GetAlias() string {
 //	 *
 //	 * @return nome da coluna
 //	 */
-func (this *Column) GetName() string {
-	return this.name
+func (c *Column) GetName() string {
+	return c.name
 }
 
 //	/**
@@ -92,20 +95,20 @@ func (this *Column) GetName() string {
 //	 *
 //	 * @return se é coluna chave
 //	 */
-func (this *Column) IsKey() bool {
-	return this.key
+func (c *Column) IsKey() bool {
+	return c.key
 }
 
-func (this *Column) IsMandatory() bool {
-	return this.mandatory
+func (c *Column) IsMandatory() bool {
+	return c.mandatory
 }
 
-func (this *Column) IsVersion() bool {
-	return this.version
+func (c *Column) IsVersion() bool {
+	return c.version
 }
 
-func (this *Column) IsDeletion() bool {
-	return this.deletion
+func (c *Column) IsDeletion() bool {
+	return c.deletion
 }
 
 //	/**
@@ -113,79 +116,79 @@ func (this *Column) IsDeletion() bool {
 //	 *
 //	 * @return devolve string com o formato 'table.coluna'
 //	 */
-func (this *Column) String() string {
-	return this.table.String() + "." + this.name
+func (c *Column) String() string {
+	return c.table.String() + "." + c.name
 }
 
-func (this *Column) Equals(o interface{}) bool {
+func (c *Column) Equals(o interface{}) bool {
 	switch t := o.(type) { //type switch
 	case *Column:
-		return (t.table.Equals(this.table) &&
-			strings.ToUpper(this.name) == strings.ToUpper(t.name))
+		return (t.table.Equals(c.table) &&
+			strings.EqualFold(c.name, t.name))
 	}
 	return false
 }
 
-func (this *Column) HashCode() int {
-	if this.hash == 0 {
-		result := tk.HashType(tk.HASH_SEED, this)
-		result = tk.HashString(result, this.table.String()+"."+this.name)
-		this.hash = result
+func (c *Column) HashCode() int {
+	if c.hash == 0 {
+		result := tk.HashType(tk.HASH_SEED, c)
+		result = tk.HashString(result, c.table.String()+"."+c.name)
+		c.hash = result
 	}
 
-	return this.hash
+	return c.hash
 }
 
-func (this *Column) Clone() interface{} {
+func (c *Column) Clone() interface{} {
 	panic("Clone for Column is not implemented")
 }
 
 // CONDITION ===========================
 
-func (this *Column) Greater(value interface{}) *Criteria {
-	return Greater(this, value)
+func (c *Column) Greater(value interface{}) *Criteria {
+	return Greater(c, value)
 }
 
-func (this *Column) GreaterOrMatch(value interface{}) *Criteria {
-	return GreaterOrMatch(this, value)
+func (c *Column) GreaterOrMatch(value interface{}) *Criteria {
+	return GreaterOrMatch(c, value)
 }
 
-func (this *Column) Lesser(value interface{}) *Criteria {
-	return Lesser(this, value)
+func (c *Column) Lesser(value interface{}) *Criteria {
+	return Lesser(c, value)
 }
 
-func (this *Column) LesserOrMatch(value interface{}) *Criteria {
-	return LesserOrMatch(this, value)
+func (c *Column) LesserOrMatch(value interface{}) *Criteria {
+	return LesserOrMatch(c, value)
 }
 
-func (this *Column) Matches(value interface{}) *Criteria {
-	return Matches(this, value)
+func (c *Column) Matches(value interface{}) *Criteria {
+	return Matches(c, value)
 }
 
-func (this *Column) IMatches(value interface{}) *Criteria {
-	return IMatches(this, value)
+func (c *Column) IMatches(value interface{}) *Criteria {
+	return IMatches(c, value)
 }
 
-func (this *Column) Like(right interface{}) *Criteria {
-	return Like(this, right)
+func (c *Column) Like(right interface{}) *Criteria {
+	return Like(c, right)
 }
 
-func (this *Column) ILike(right interface{}) *Criteria {
-	return ILike(this, right)
+func (c *Column) ILike(right interface{}) *Criteria {
+	return ILike(c, right)
 }
 
-func (this *Column) Different(value interface{}) *Criteria {
-	return Different(this, value)
+func (c *Column) Different(value interface{}) *Criteria {
+	return Different(c, value)
 }
 
-func (this *Column) IsNull() *Criteria {
-	return IsNull(NewColumnHolder(this))
+func (c *Column) IsNull() *Criteria {
+	return IsNull(NewColumnHolder(c))
 }
 
-func (this *Column) In(value ...interface{}) *Criteria {
-	return In(this, value...)
+func (c *Column) In(value ...interface{}) *Criteria {
+	return In(c, value...)
 }
 
-func (this *Column) Range(left, right interface{}) *Criteria {
-	return Range(this, left, right)
+func (c *Column) Range(left, right interface{}) *Criteria {
+	return Range(c, left, right)
 }

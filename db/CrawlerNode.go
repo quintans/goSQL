@@ -9,27 +9,27 @@ type CrawlerNode struct {
 	branches   []*CrawlerNode
 }
 
-func (this *CrawlerNode) String() string {
-	if this.ForeignKey != nil {
-		return this.ForeignKey.Alias
+func (c *CrawlerNode) String() string {
+	if c.ForeignKey != nil {
+		return c.ForeignKey.Alias
 	}
 
 	return "."
 }
 
-func (this *CrawlerNode) GetBranches() []*CrawlerNode {
-	return this.branches
+func (c *CrawlerNode) GetBranches() []*CrawlerNode {
+	return c.branches
 }
 
 // To guarantee that the several joins are chained and assessed correctly
 // a tree is built only for validation
-func (this *CrawlerNode) BuildTree(fks []*Association, table *HoldTable) {
-	if this.branches == nil {
-		this.branches = make([]*CrawlerNode, 0)
+func (c *CrawlerNode) BuildTree(fks []*Association, table *HoldTable) {
+	if c.branches == nil {
+		c.branches = make([]*CrawlerNode, 0)
 	}
 
 	var found *CrawlerNode
-	for _, node := range this.branches {
+	for _, node := range c.branches {
 		if fks[0].Path() == node.ForeignKey.Path() {
 			found = node
 			break
@@ -40,28 +40,28 @@ func (this *CrawlerNode) BuildTree(fks []*Association, table *HoldTable) {
 		// new branche
 		found = new(CrawlerNode)
 		found.ForeignKey = fks[0]
-		this.branches = append(this.branches, found)
+		c.branches = append(c.branches, found)
 		table.what = fks[0].GetTableTo()
 	}
 
 	if len(fks) > 1 {
-		found.BuildTree(this.dropFirst(fks), table)
+		found.BuildTree(c.dropFirst(fks), table)
 	}
 }
 
-// builds an array with all the tree nodes by entry order 
+// builds an array with all the tree nodes by entry order
 // param: flat
-func (this *CrawlerNode) FlatenTree(flat []*CrawlerNode) []*CrawlerNode {
-	nodes := append(flat, this)
-	if this.branches != nil {
-		for _, node := range this.branches {
+func (c *CrawlerNode) FlatenTree(flat []*CrawlerNode) []*CrawlerNode {
+	nodes := append(flat, c)
+	if c.branches != nil {
+		for _, node := range c.branches {
 			nodes = node.FlatenTree(nodes)
 		}
 	}
 	return nodes
 }
 
-func (this *CrawlerNode) dropFirst(fks []*Association) []*Association {
+func (c *CrawlerNode) dropFirst(fks []*Association) []*Association {
 	length := len(fks)
 	if length == 0 {
 		return fks

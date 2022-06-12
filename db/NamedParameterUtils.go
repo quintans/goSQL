@@ -3,7 +3,7 @@ package db
 import (
 	tk "github.com/quintans/toolkit"
 	coll "github.com/quintans/toolkit/collections"
-	. "github.com/quintans/toolkit/ext"
+	"github.com/quintans/toolkit/ext"
 
 	"unicode"
 )
@@ -19,7 +19,7 @@ var START_SKIP = []string{"'", "\"", "--", "/*"}
 var STOP_SKIP = []string{"'", "\"", "\n", "*/"}
 
 // Parse the SQL statement and locate any placeholders or named parameters.
-// Named parameters are substituted for a JDBC placeholder.
+// Named parameters are substituted for a native placeholder.
 //
 // param statement: the SQL statement
 // return: the parsed statement, represented as ParsedSql instance
@@ -28,7 +28,8 @@ func ParseSqlStatement(statement string) *ParsedSql {
 	parsedSql := NewParsedSql(statement)
 
 	length := len(statement)
-	for i, c := range statement {
+	for i := 0; i < length; i++ {
+		c := statement[i]
 		if c == ':' || c == '&' {
 			j := i + 1
 			if j < length && statement[j] == ':' && c == ':' {
@@ -40,7 +41,7 @@ func ParseSqlStatement(statement string) *ParsedSql {
 				j++
 			}
 			if (j - i) > 1 {
-				parameter := Str(statement[i+1 : j])
+				parameter := ext.Str(statement[i+1 : j])
 				if !namedParameters.Contains(parameter) {
 					namedParameters.Add(parameter)
 				}
@@ -48,58 +49,8 @@ func ParseSqlStatement(statement string) *ParsedSql {
 			}
 			i = j - 1
 		}
-		i++
 	}
 	return parsedSql
-}
-
-// Skip over comments and quoted names present in an SQL statement
-//
-// param statement
-//            character array containing SQL statement
-// param position
-//            current position of statement
-// return next position to process after any comments or quotes are skipped
-func skipCommentsAndQuotes(statement string, position int) int {
-	for i := 0; i < len(START_SKIP); i++ {
-		if statement[position] == START_SKIP[i][0] {
-			match := true
-			for j := 1; j < len(START_SKIP[i]); j++ {
-				if statement[position+j] != START_SKIP[i][j] {
-					match = false
-					break
-				}
-			}
-			if match {
-				offset := len(START_SKIP[i])
-				for m := position + offset; m < len(statement); m++ {
-					if statement[m] == STOP_SKIP[i][0] {
-						endMatch := true
-						endPos := m
-						for n := 1; n < len(STOP_SKIP[i]); n++ {
-							if (m + n) >= len(statement) {
-								// last comment not closed properly
-								return len(statement)
-							}
-							if statement[m+n] != STOP_SKIP[i][n] {
-								endMatch = false
-								break
-							}
-							endPos = m + n
-						}
-						if endMatch {
-							// found character sequence ending comment or quote
-							return endPos + 1
-						}
-					}
-				}
-				// character sequence ending comment or quote not found
-				return len(statement)
-			}
-
-		}
-	}
-	return position
 }
 
 // Determine whether a parameter name ends at the current position,

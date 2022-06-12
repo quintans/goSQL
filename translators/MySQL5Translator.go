@@ -35,30 +35,31 @@ type MySQL5DeleteBuilder struct {
 	DeleteBuilder
 }
 
-func (this *MySQL5DeleteBuilder) From(del *db.Delete) {
+func (m *MySQL5DeleteBuilder) From(del *db.Delete) error {
 	table := del.GetTable()
 	alias := del.GetTableAlias()
 	// Multiple-table syntax:
-	this.tablePart.AddAsOne(alias, " USING ", this.translator.TableName(table), " AS ", alias)
+	m.tablePart.AddAsOne(alias, " USING ", m.translator.TableName(table), " AS ", alias)
+	return nil
 }
 
-func (this *MySQL5Translator) GetAutoKeyStrategy() db.AutoKeyStrategy {
+func (m *MySQL5Translator) GetAutoKeyStrategy() db.AutoKeyStrategy {
 	return db.AUTOKEY_AFTER
 }
 
-func (this *MySQL5Translator) GetAutoNumberQuery(column *db.Column) string {
+func (m *MySQL5Translator) GetAutoNumberQuery(column *db.Column) string {
 	return "select LAST_INSERT_ID()"
 }
 
-func (this *MySQL5Translator) TableName(table *db.Table) string {
+func (m *MySQL5Translator) TableName(table *db.Table) string {
 	return "`" + strings.ToUpper(table.GetName()) + "`"
 }
 
-func (this *MySQL5Translator) ColumnName(column *db.Column) string {
+func (m *MySQL5Translator) ColumnName(column *db.Column) string {
 	return "`" + strings.ToUpper(column.GetName()) + "`"
 }
 
-func (this *MySQL5Translator) PaginateSQL(query *db.Query, sql string) string {
+func (m *MySQL5Translator) PaginateSQL(query *db.Query, sql string) string {
 	sb := tk.NewStrBuffer()
 	if query.GetLimit() > 0 {
 		sb.Add(sql, " LIMIT :", db.OFFSET_PARAM, ", :", db.LIMIT_PARAM)

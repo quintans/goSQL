@@ -1,13 +1,12 @@
 package db
 
 import (
+	"github.com/quintans/faults"
 	"github.com/quintans/goSQL/dbx"
 	tk "github.com/quintans/toolkit"
 	coll "github.com/quintans/toolkit/collections"
 
 	"database/sql"
-	"fmt"
-	"github.com/pkg/errors"
 	"reflect"
 	"time"
 )
@@ -41,6 +40,8 @@ type Query struct {
 	limit     int64
 	lastToken Tokener
 	lastOrder *Order
+
+	err error
 }
 
 func NewQuery(db IDb, table *Table) *Query {
@@ -49,9 +50,9 @@ func NewQuery(db IDb, table *Table) *Query {
 	return this
 }
 
-func (this *Query) Alias(alias string) *Query {
-	this.alias(alias)
-	return this
+func (q *Query) Alias(alias string) *Query {
+	q.alias(alias)
+	return q
 }
 
 func NewQueryQuery(subquery *Query) *Query {
@@ -70,185 +71,232 @@ func NewQueryQueryAs(subquery *Query, subQueryAlias string) *Query {
 	return this
 }
 
-func (this *Query) All() *Query {
-	if this.table != nil {
-		for it := this.table.columns.Enumerator(); it.HasNext(); {
-			this.Column(it.Next().(*Column))
+func (q *Query) All() *Query {
+	if q.err != nil {
+		return q
+	}
+
+	if q.table != nil {
+		for it := q.table.columns.Enumerator(); it.HasNext(); {
+			q.Column(it.Next().(*Column))
 		}
 	}
-	return this
+	return q
 }
 
-func (this *Query) Copy(other *Query) {
-	this.table = other.table
-	this.tableAlias = other.tableAlias
+func (q *Query) Copy(other *Query) {
+	q.table = other.table
+	q.tableAlias = other.tableAlias
 
 	if other.GetJoins() != nil {
-		this.joins = make([]*Join, len(other.joins))
-		copy(this.joins, other.joins)
+		q.joins = make([]*Join, len(other.joins))
+		copy(q.joins, other.joins)
 	}
 	if other.criteria != nil {
-		this.criteria, _ = other.criteria.Clone().(*Criteria)
+		q.criteria, _ = other.criteria.Clone().(*Criteria)
 	}
-	if this.parameters != nil {
+	if q.parameters != nil {
 		for k, v := range other.parameters {
-			this.parameters[k] = v
+			q.parameters[k] = v
 		}
 	}
 
 	if other.subQuery != nil {
-		q := other.subQuery
-		this.subQuery = NewQuery(this.db, q.table)
-		this.subQuery.Copy(q)
-		this.subQueryAlias = other.subQueryAlias
+		sq := other.subQuery
+		q.subQuery = NewQuery(q.db, sq.table)
+		q.subQuery.Copy(sq)
+		q.subQueryAlias = other.subQueryAlias
 	}
 
-	this.distinct = other.distinct
+	q.distinct = other.distinct
 	if other.Columns != nil {
-		this.Columns = make([]Tokener, len(other.Columns))
-		copy(this.Columns, other.Columns)
+		q.Columns = make([]Tokener, len(other.Columns))
+		copy(q.Columns, other.Columns)
 	}
 	if other.orders != nil {
-		this.orders = make([]*Order, len(other.orders))
-		copy(this.orders, other.orders)
+		q.orders = make([]*Order, len(other.orders))
+		copy(q.orders, other.orders)
 	}
 	if other.unions != nil {
-		this.unions = make([]*Union, len(other.unions))
-		copy(this.unions, other.unions)
+		q.unions = make([]*Union, len(other.unions))
+		copy(q.unions, other.unions)
 	}
 	// saves position of columnHolder
 	if other.groupBy != nil {
-		this.groupBy = make([]int, len(other.groupBy))
-		copy(this.groupBy, other.groupBy)
+		q.groupBy = make([]int, len(other.groupBy))
+		copy(q.groupBy, other.groupBy)
 	}
 
-	this.skip = other.skip
-	this.limit = other.limit
+	q.skip = other.skip
+	q.limit = other.limit
 
-	this.rawSQL = other.rawSQL
+	q.rawSQL = other.rawSQL
 }
 
-func (this *Query) GetSkip() int64 {
-	return this.skip
+func (q *Query) GetSkip() int64 {
+	return q.skip
 }
 
-func (this *Query) Skip(skip int64) *Query {
+func (q *Query) Skip(skip int64) *Query {
+	if q.err != nil {
+		return q
+	}
+
 	if skip < 0 {
-		this.skip = 0
+		q.skip = 0
 	} else {
-		this.skip = skip
+		q.skip = skip
 	}
-	return this
+	return q
 }
 
-func (this *Query) GetLimit() int64 {
-	return this.limit
+func (q *Query) GetLimit() int64 {
+	return q.limit
 }
 
-func (this *Query) Limit(limit int64) *Query {
+func (q *Query) Limit(limit int64) *Query {
+	if q.err != nil {
+		return q
+	}
+
 	if limit < 0 {
-		this.limit = 0
+		q.limit = 0
 	} else {
-		this.limit = limit
+		q.limit = limit
 	}
-	return this
+	return q
 }
 
-func (this *Query) GetSubQuery() *Query {
-	return this.subQuery
+func (q *Query) GetSubQuery() *Query {
+	return q.subQuery
 }
 
-func (this *Query) GetSubQueryAlias() string {
-	return this.subQueryAlias
+func (q *Query) GetSubQueryAlias() string {
+	return q.subQueryAlias
 }
 
-func (this *Query) Distinct() *Query {
-	this.distinct = true
-	this.rawSQL = nil
-	return this
+func (q *Query) Distinct() *Query {
+	if q.err != nil {
+		return q
+	}
+
+	q.distinct = true
+	q.rawSQL = nil
+	return q
 }
 
-func (this *Query) IsDistinct() bool {
-	return this.distinct
+func (q *Query) IsDistinct() bool {
+	return q.distinct
 }
 
 // COL ===
 
-func (this *Query) ColumnsReset() {
-	this.Columns = nil
+func (q *Query) ColumnsReset() {
+	q.Columns = nil
 }
 
-func (this *Query) CountAll() *Query {
-	return this.Column(Count(nil))
+func (q *Query) CountAll() *Query {
+	if q.err != nil {
+		return q
+	}
+	return q.Column(Count(nil))
 }
 
-func (this *Query) Count(column interface{}) *Query {
-	return this.Column(Count(column))
-}
-
-func (this *Query) Column(columns ...interface{}) *Query {
-	for _, column := range columns {
-		this.lastToken = tokenizeOne(column)
-		this.replaceRaw(this.lastToken)
-
-		this.lastToken.SetTableAlias(this.tableAlias)
-		this.Columns = append(this.Columns, this.lastToken)
+func (q *Query) Count(column interface{}) *Query {
+	if q.err != nil {
+		return q
 	}
 
-	this.rawSQL = nil
+	return q.Column(Count(column))
+}
 
-	return this
+func (q *Query) Column(columns ...interface{}) *Query {
+	if q.err != nil {
+		return q
+	}
+
+	for _, column := range columns {
+		q.lastToken = tokenizeOne(column)
+		q.replaceRaw(q.lastToken)
+
+		q.lastToken.SetTableAlias(q.tableAlias)
+		q.Columns = append(q.Columns, q.lastToken)
+	}
+
+	q.rawSQL = nil
+
+	return q
 }
 
 // Defines the alias of the last column
 // param alias: The Alias
 // return: The query
-func (this *Query) As(alias string) *Query {
-	if this.lastToken != nil {
-		this.lastToken.SetAlias(alias)
-	} else if this.path != nil {
-		this.path[len(this.path)-1].PreferredAlias = alias
+func (q *Query) As(alias string) *Query {
+	if q.err != nil {
+		return q
 	}
 
-	this.rawSQL = nil
+	if q.lastToken != nil {
+		q.lastToken.SetAlias(alias)
+	} else if q.path != nil {
+		q.path[len(q.path)-1].PreferredAlias = alias
+	}
 
-	return this
+	q.rawSQL = nil
+
+	return q
 }
 
 // WHERE ===
-func (this *Query) Where(restriction ...*Criteria) *Query {
-	if len(restriction) > 0 {
-		this.DmlBase.where(restriction)
+func (q *Query) Where(restriction ...*Criteria) *Query {
+	if q.err != nil {
+		return q
 	}
-	return this
+
+	if len(restriction) > 0 {
+		q.DmlBase.where(restriction)
+	}
+	return q
 }
 
 // ===
 
 // ORDER ===
-func (this *Query) OrdersReset() {
-	this.orders = nil
+func (q *Query) OrdersReset() {
+	q.orders = nil
 }
 
 // Order by a column for a specific table alias.
 //
 // use: query.OrderAs(Column.For("x"))
-func (this *Query) OrderAs(columnHolder *ColumnHolder) *Query {
-	this.lastOrder = NewOrder(columnHolder)
-	this.orders = append(this.orders, this.lastOrder)
+func (q *Query) OrderAs(columnHolder *ColumnHolder) *Query {
+	if q.err != nil {
+		return q
+	}
 
-	this.rawSQL = nil
+	q.lastOrder = NewOrder(columnHolder)
+	q.orders = append(q.orders, q.lastOrder)
 
-	return this
+	q.rawSQL = nil
+
+	return q
 }
 
 // Order by a column belonging to the driving table.
-func (this *Query) Order(column *Column) *Query {
-	return this.OrderAs(column.For(this.tableAlias))
+func (q *Query) Order(column *Column) *Query {
+	if q.err != nil {
+		return q
+	}
+
+	return q.OrderAs(column.For(q.tableAlias))
 }
 
 // Order by a column belonging to the table targeted by the supplyied association list.
-func (this *Query) OrderOn(column *Column, associations ...*Association) *Query {
+func (q *Query) OrderOn(column *Column, associations ...*Association) *Query {
+	if q.err != nil {
+		return q
+	}
+
 	pathElements := make([]*PathElement, len(associations))
 	for k, association := range associations {
 		pe := new(PathElement)
@@ -257,97 +305,121 @@ func (this *Query) OrderOn(column *Column, associations ...*Association) *Query 
 		pathElements[k] = pe
 	}
 
-	return this.orderFor(column, pathElements...)
-}
+	// Defines the column, belonging to the table targeted by the association, to order by
+	pes := pathElements
 
-// Defines the column, belonging to the table targeted by the association, to order by.
-func (this *Query) orderFor(column *Column, pathElements ...*PathElement) *Query {
-	var pes []*PathElement
-	pes = pathElements
-
-	common := DeepestCommonPath(this.cachedAssociation, pes)
+	common := DeepestCommonPath(q.cachedAssociation, pes)
 	if len(common) == len(pes) {
-		return this.OrderAs(column.For(pathElementAlias(common[len(common)-1])))
+		return q.OrderAs(column.For(pathElementAlias(common[len(common)-1])))
 	}
 
-	panic("The path specified in the order is not valid")
+	return &Query{
+		err: faults.New("the path specified in the order is not valid"),
+	}
 }
 
 //Defines the column to order by.
 //The column belongs to the table targeted by the last defined association.
 //If there is no last association, the column belongs to the driving table
-func (this *Query) OrderBy(column *Column) *Query {
-	if this.path != nil {
-		last := this.path[len(this.path)-1]
+func (q *Query) OrderBy(column *Column) *Query {
+	if q.err != nil {
+		return q
+	}
+
+	if q.path != nil {
+		last := q.path[len(q.path)-1]
 		if last.Orders == nil {
 			last.Orders = make([]*Order, 0)
 		}
 		// delay adding order
-		this.lastOrder = NewOrder(NewColumnHolder(column))
-		last.Orders = append(last.Orders, this.lastOrder)
-		return this
-	} else if this.lastJoin != nil {
-		//return this.orderFor(column, this.lastJoin.GetPathElements()...)
-		return this.OrderAs(column.For(this.lastFkAlias))
+		q.lastOrder = NewOrder(NewColumnHolder(column))
+		last.Orders = append(last.Orders, q.lastOrder)
+		return q
+	} else if q.lastJoin != nil {
+		return q.OrderAs(column.For(q.lastFkAlias))
 	} else {
-		return this.OrderAs(column.For(this.tableAlias))
+		return q.OrderAs(column.For(q.tableAlias))
 	}
 }
 
 //Defines the column alias to order by.
-func (this *Query) OrderByAs(column string) *Query {
-	this.lastOrder = NewOrderAs(column).Asc(true)
-	this.orders = append(this.orders, this.lastOrder)
+func (q *Query) OrderByAs(column string) *Query {
+	if q.err != nil {
+		return q
+	}
 
-	this.rawSQL = nil
+	q.lastOrder = NewOrderAs(column).Asc(true)
+	q.orders = append(q.orders, q.lastOrder)
 
-	return this
+	q.rawSQL = nil
+
+	return q
 }
 
-func (this *Query) Asc() *Query {
-	return this.Dir(true)
+func (q *Query) Asc() *Query {
+	if q.err != nil {
+		return q
+	}
+
+	return q.Dir(true)
 }
 
-func (this *Query) Desc() *Query {
-	return this.Dir(false)
+func (q *Query) Desc() *Query {
+	if q.err != nil {
+		return q
+	}
+
+	return q.Dir(false)
 }
 
 // Sets the order direction for the last order by command. true=asc, false=desc
-func (this *Query) Dir(asc bool) *Query {
-	if this.lastOrder != nil {
-		this.lastOrder.Asc(asc)
-
-		this.rawSQL = nil
+func (q *Query) Dir(asc bool) *Query {
+	if q.err != nil {
+		return q
 	}
-	return this
+
+	if q.lastOrder != nil {
+		q.lastOrder.Asc(asc)
+
+		q.rawSQL = nil
+	}
+	return q
 }
 
-func (this *Query) GetOrders() []*Order {
-	return this.orders
+func (q *Query) GetOrders() []*Order {
+	return q.orders
 }
 
 // JOINS ===
 
 // includes the associations as inner joins to the current path
 //
-// param: associations
-// return this query
-func (this *Query) Inner(associations ...*Association) *Query {
-	this.DmlBase.inner(true, associations...)
-	this.lastToken = nil
+//   param: associations
+//   return this query
+func (q *Query) Inner(associations ...*Association) *Query {
+	if q.err != nil {
+		return q
+	}
 
-	return this
+	q.DmlBase.inner(true, associations...)
+	q.lastToken = nil
+
+	return q
 }
 
 // includes the associations as outer joins to the current path
 //
-// param associations
-// return
-func (this *Query) Outer(associations ...*Association) *Query {
-	this.DmlBase.inner(false, associations...)
-	this.lastToken = nil
+//   param associations
+//   return
+func (q *Query) Outer(associations ...*Association) *Query {
+	if q.err != nil {
+		return q
+	}
 
-	return this
+	q.DmlBase.inner(false, associations...)
+	q.lastToken = nil
+
+	return q
 }
 
 //This will trigger a result that can be dumped in a tree object
@@ -355,59 +427,65 @@ func (this *Query) Outer(associations ...*Association) *Query {
 //
 //It will includes all the columns of all the tables referred by the association path,
 // except where columns were explicitly included.
-func (this *Query) Fetch() *Query {
-	if this.path != nil {
-		for _, pe := range this.path {
-			this.includeInPath(pe) // includes all columns
+func (q *Query) Fetch() *Query {
+	if q.err != nil {
+		return q
+	}
+
+	if q.path != nil {
+		for _, pe := range q.path {
+			q.includeInPath(pe) // includes all columns
 		}
 	}
 
-	this.join(true)
+	q.join(true)
 
-	return this
+	return q
 }
 
 //indicates that the path should be used to join only
-func (this *Query) Join() *Query {
-	this.join(false)
-	return this
+func (q *Query) Join() *Query {
+	if q.err != nil {
+		return q
+	}
+
+	q.join(false)
+	return q
 }
 
-func (this *Query) join(fetch bool) {
-	if this.path != nil {
+func (q *Query) join(fetch bool) {
+	if q.path != nil {
 		tokens := make([]Tokener, 0)
-		for _, pe := range this.path {
+		for _, pe := range q.path {
 			funs := pe.Columns
-			if funs != nil {
-				for _, fun := range funs {
-					tokens = append(tokens, fun)
-					if !fetch {
-						fun.SetPseudoTableAlias(this.tableAlias)
-					}
+			for _, fun := range funs {
+				tokens = append(tokens, fun)
+				if !fetch {
+					fun.SetPseudoTableAlias(q.tableAlias)
 				}
 			}
 		}
 
-		this.Columns = append(this.Columns, tokens...)
+		q.Columns = append(q.Columns, tokens...)
 	}
 
 	// only after this the joins will have the proper join table alias
-	this.DmlBase.joinTo(this.path, fetch)
+	q.DmlBase.joinTo(q.path, fetch)
 
 	// process pending orders
-	if this.path != nil {
-		for _, pe := range this.path {
+	if q.path != nil {
+		for _, pe := range q.path {
 			if pe.Orders != nil {
 				for _, o := range pe.Orders {
 					o.column.SetTableAlias(pathElementAlias(pe))
-					this.orders = append(this.orders, o)
+					q.orders = append(q.orders, o)
 				}
 			}
 		}
 	}
 
-	this.path = nil
-	this.rawSQL = nil
+	q.path = nil
+	q.rawSQL = nil
 }
 
 func pathElementAlias(pe *PathElement) string {
@@ -420,20 +498,26 @@ func pathElementAlias(pe *PathElement) string {
 }
 
 //adds tokens refering the last defined association
-func (this *Query) Include(columns ...interface{}) *Query {
-	lenPath := len(this.path)
-	if lenPath > 0 {
-		lastPath := this.path[lenPath-1]
-		this.includeInPath(lastPath, columns...)
-
-		this.rawSQL = nil
-	} else {
-		panic("There is no current join")
+func (q *Query) Include(columns ...interface{}) *Query {
+	if q.err != nil {
+		return q
 	}
-	return this
+
+	lenPath := len(q.path)
+	if lenPath > 0 {
+		lastPath := q.path[lenPath-1]
+		q.includeInPath(lastPath, columns...)
+
+		q.rawSQL = nil
+	} else {
+		return &Query{
+			err: faults.New("there is no current join"),
+		}
+	}
+	return q
 }
 
-func (this *Query) includeInPath(lastPath *PathElement, columns ...interface{}) {
+func (q *Query) includeInPath(lastPath *PathElement, columns ...interface{}) {
 	if len(columns) > 0 || len(lastPath.Columns) == 0 {
 		if len(columns) == 0 {
 			// use all columns of the targeted table
@@ -443,175 +527,215 @@ func (this *Query) includeInPath(lastPath *PathElement, columns ...interface{}) 
 			lastPath.Columns = make([]Tokener, 0)
 		}
 		for _, c := range columns {
-			this.lastToken = tokenizeOne(c)
-			lastPath.Columns = append(lastPath.Columns, this.lastToken)
+			q.lastToken = tokenizeOne(c)
+			lastPath.Columns = append(lastPath.Columns, q.lastToken)
 		}
 	}
 }
 
 //Restriction to apply to the previous association
-func (this *Query) On(criteria ...*Criteria) *Query {
-	if len(this.path) > 0 {
+func (q *Query) On(criteria ...*Criteria) *Query {
+	if q.err != nil {
+		return q
+	}
+
+	if len(q.path) > 0 {
 		var retriction *Criteria
 		if len(criteria) > 1 {
 			retriction = And(criteria...)
 		} else if len(criteria) == 1 {
 			retriction = criteria[0]
 		} else {
-			panic("nil or empty criterias was passed")
+			return &Query{
+				err: faults.New("nil or empty criterias was passed"),
+			}
 		}
-		this.path[len(this.path)-1].Criteria = retriction
+		q.path[len(q.path)-1].Criteria = retriction
 
-		this.rawSQL = nil
+		q.rawSQL = nil
 	} else {
-		panic("There is no current join")
+		return &Query{
+			err: faults.New("there is no current join"),
+		}
 	}
-	return this
+	return q
 }
 
 // UNIONS ===
-func (this *Query) Union(query *Query) *Query {
-	return this.unite(query, false)
+func (q *Query) Union(query *Query) *Query {
+	if q.err != nil {
+		return q
+	}
+
+	return q.unite(query, false)
 }
 
-func (this *Query) UnionAll(query *Query) *Query {
-	return this.unite(query, true)
+func (q *Query) UnionAll(query *Query) *Query {
+	if q.err != nil {
+		return q
+	}
+
+	return q.unite(query, true)
 }
 
-func (this *Query) unite(query *Query, all bool) *Query {
+func (q *Query) unite(query *Query, all bool) *Query {
 	// copy the parameters of the subquery to the main query
 	for k, v := range query.GetParameters() {
-		this.SetParameter(k, v)
+		q.SetParameter(k, v)
 	}
-	this.unions = append(this.unions, &Union{query, all})
+	q.unions = append(q.unions, &Union{query, all})
 
-	this.rawSQL = nil
+	q.rawSQL = nil
 
-	return this
+	return q
 }
 
-func (this *Query) GetUnions() []*Union {
-	return this.unions
+func (q *Query) GetUnions() []*Union {
+	return q.unions
 }
 
 // GROUP BY ===
-func (this *Query) GroupByUntil(untilPos int) *Query {
-	this.groupBy = make([]int, untilPos)
-	for i := 0; i < untilPos; i++ {
-		this.groupBy[i] = i + 1
+func (q *Query) GroupByUntil(untilPos int) *Query {
+	if q.err != nil {
+		return q
 	}
 
-	this.rawSQL = nil
+	q.groupBy = make([]int, untilPos)
+	for i := 0; i < untilPos; i++ {
+		q.groupBy[i] = i + 1
+	}
 
-	return this
+	q.rawSQL = nil
+
+	return q
 }
 
-func (this *Query) GroupByPos(pos ...int) *Query {
-	this.groupBy = pos
+func (q *Query) GroupByPos(pos ...int) *Query {
+	if q.err != nil {
+		return q
+	}
 
-	this.rawSQL = nil
+	q.groupBy = pos
 
-	return this
+	q.rawSQL = nil
+
+	return q
 }
 
-func (this *Query) GetGroupBy() []int {
-	return this.groupBy
+func (q *Query) GetGroupBy() []int {
+	return q.groupBy
 }
 
-func (this *Query) GetGroupByTokens() []Group {
+func (q *Query) GetGroupByTokens() []Group {
 	var groups []Group
-	length := len(this.groupBy)
+	length := len(q.groupBy)
 	if length > 0 {
 		groups = make([]Group, length)
-		for k, idx := range this.groupBy {
+		for k, idx := range q.groupBy {
 			groups[k].Position = idx - 1
-			groups[k].Token = this.Columns[idx-1]
+			groups[k].Token = q.Columns[idx-1]
 		}
 	}
 	return groups
 }
 
-func (this *Query) GroupBy(cols ...*Column) *Query {
-	this.rawSQL = nil
+func (q *Query) GroupBy(cols ...*Column) *Query {
+	if q.err != nil {
+		return q
+	}
+
+	q.rawSQL = nil
 
 	length := len(cols)
 	if length == 0 {
-		this.groupBy = nil
-		return this
+		q.groupBy = nil
+		return q
 	}
 
-	this.groupBy = make([]int, length)
+	q.groupBy = make([]int, length)
 
 	pos := 1
 	for i := 0; i < length; i++ {
-		for _, token := range this.Columns {
+		for _, token := range q.Columns {
 			if ch, ok := token.(*ColumnHolder); ok {
 				if ch.GetColumn().Equals(cols[i]) {
-					this.groupBy[i] = pos
+					q.groupBy[i] = pos
 					break
 				}
 			}
 		}
 		pos++
 
-		if this.groupBy[i] == 0 {
-			panic(fmt.Sprintf("Column alias '%' was not found", cols[i]))
+		if q.groupBy[i] == 0 {
+			return &Query{
+				err: faults.Errorf("column alias '%s' was not found", cols[i]),
+			}
 		}
 	}
 
-	return this
+	return q
 }
 
-func (this *Query) GroupByAs(aliases ...string) *Query {
-	this.rawSQL = nil
+func (q *Query) GroupByAs(aliases ...string) *Query {
+	if q.err != nil {
+		return q
+	}
+
+	q.rawSQL = nil
 
 	length := len(aliases)
 	if length == 0 {
-		this.groupBy = nil
-		return this
+		q.groupBy = nil
+		return q
 	}
 
-	this.groupBy = make([]int, length)
+	q.groupBy = make([]int, length)
 
 	pos := 1
 	for i := 0; i < length; i++ {
-		for _, token := range this.Columns {
+		for _, token := range q.Columns {
 			if aliases[i] == token.GetAlias() {
-				this.groupBy[i] = pos
+				q.groupBy[i] = pos
 				break
 			}
 		}
 		pos++
 
-		if this.groupBy[i] == 0 {
-			panic(fmt.Sprintf("Column alias '%' was not found", aliases[i]))
+		if q.groupBy[i] == 0 {
+			return &Query{
+				err: faults.Errorf("column alias '%s' was not found", aliases[i]),
+			}
 		}
 	}
 
-	return this
+	return q
 }
 
 //Adds a Having clause to the query.
 //The tokens are not processed. You will have to explicitly set all table alias.
-func (this *Query) Having(having ...*Criteria) *Query {
-	if len(having) > 0 {
-		this.having = And(having...)
-		this.replaceAlias(this.having)
+func (q *Query) Having(having ...*Criteria) *Query {
+	if q.err != nil {
+		return q
 	}
 
-	return this
+	if len(having) > 0 {
+		q.having = And(having...)
+		q.replaceAlias(q.having)
+	}
+
+	return q
 }
 
-func (this *Query) GetHaving() *Criteria {
-	return this.having
+func (q *Query) GetHaving() *Criteria {
+	return q.having
 }
 
 // replaces ALIAS with the respective select parcel
-func (this *Query) replaceAlias(token Tokener) {
+func (q *Query) replaceAlias(token Tokener) {
 	members := token.GetMembers()
 	if token.GetOperator() == TOKEN_ALIAS {
 		alias := token.GetValue().(string)
-		for _, v := range this.Columns {
+		for _, v := range q.Columns {
 			// full copies the matching
 			if v.GetAlias() == alias {
 				token.SetAlias(alias)
@@ -624,17 +748,15 @@ func (this *Query) replaceAlias(token Tokener) {
 		}
 		return
 	} else {
-		if members != nil {
-			for _, t := range members {
-				if t != nil {
-					this.replaceAlias(t)
-				}
+		for _, t := range members {
+			if t != nil {
+				q.replaceAlias(t)
 			}
 		}
 	}
 }
 
-// ======== RETRIVE ==============
+// ======== RETRIEVE ==============
 
 //List simple variables.
 //A closure is used to build the result list.
@@ -647,8 +769,12 @@ func (this *Query) replaceAlias(token Tokener) {
 //  q.ListSimple(func() {
 //  	roles = append(roles, role)
 //  }, &role)
-func (this *Query) ListSimple(closure func(), instances ...interface{}) error {
-	return this.listClosure(func(rows *sql.Rows) error {
+func (q *Query) ListSimple(closure func(), instances ...interface{}) error {
+	if q.err != nil {
+		return q.err
+	}
+
+	return q.listClosure(func(rows *sql.Rows) error {
 		err := rows.Scan(instances...)
 		if err != nil {
 			return err
@@ -671,38 +797,46 @@ func (this *Query) ListSimple(closure func(), instances ...interface{}) error {
 //  q.ListInto(func(role *string) {
 //	  roles = append(roles, *role)
 //  })
-func (this *Query) ListInto(closure interface{}) ([]interface{}, error) {
+func (q *Query) ListInto(closure interface{}) ([]interface{}, error) {
+	if q.err != nil {
+		return nil, q.err
+	}
+
 	// determine types and instanciate them
 	ftype := reflect.TypeOf(closure)
 	if ftype.Kind() != reflect.Func {
-		return nil, fmt.Errorf("goSQL: Expected a function with the signature func(*struct) [*struct] or func(primitive1, ..., primitiveN) [anything]. Got %s.", ftype.String())
+		return nil, faults.Errorf("expected a function with the signature func(*struct) [*struct] or func(primitive1, ..., primitiveN) [anything]. Got %s.", ftype)
 	}
 
 	caller, typ, ok := checkCollector(closure)
 	if ok {
-		coll, err := this.list(NewEntityFactoryTransformer(this, typ, caller))
+		coll, err := q.list(NewEntityFactoryTransformer(q, typ, caller))
 		if err != nil {
 			return nil, err
 		}
 		return coll.Elements(), nil
 	} else {
-		return this.listIntoClosure(closure)
+		return q.listIntoClosure(closure)
 	}
 }
 
 // the transformer will be responsible for creating  the result list
-func (this *Query) listIntoClosure(transformer interface{}) ([]interface{}, error) {
+func (q *Query) listIntoClosure(transformer interface{}) ([]interface{}, error) {
 	// if no columns were added, add all columns of the driving table
-	if len(this.Columns) == 0 {
-		this.All()
+	if len(q.Columns) == 0 {
+		q.All()
 	}
 
-	rsql := this.getCachedSql()
-	this.debugSQL(rsql.OriSql, 2)
+	rsql := q.getCachedSql()
+	q.debugSQL(rsql.OriSql, 2)
 
 	now := time.Now()
-	r, e := this.DmlBase.dba.QueryInto(rsql.Sql, transformer, rsql.BuildValues(this.DmlBase.parameters)...)
-	this.debugTime(now, 2)
+	params, err := rsql.BuildValues(q.DmlBase.parameters)
+	if err != nil {
+		return nil, err
+	}
+	r, e := q.DmlBase.dba.QueryInto(rsql.Sql, transformer, params...)
+	q.debugTime(now, 2)
 	if e != nil {
 		return nil, e
 	}
@@ -710,56 +844,46 @@ func (this *Query) listIntoClosure(transformer interface{}) ([]interface{}, erro
 }
 
 // the transformer will be responsible for creating  the result list
-func (this *Query) listClosure(transformer func(rows *sql.Rows) error) error {
+func (q *Query) listClosure(transformer func(rows *sql.Rows) error) error {
 	// if no columns were added, add all columns of the driving table
-	if len(this.Columns) == 0 {
-		this.All()
+	if len(q.Columns) == 0 {
+		q.All()
 	}
 
-	rsql := this.getCachedSql()
-	this.debugSQL(rsql.OriSql, 2)
+	rsql := q.getCachedSql()
+	q.debugSQL(rsql.OriSql, 2)
 
 	now := time.Now()
-	e := this.DmlBase.dba.QueryClosure(rsql.Sql, transformer, rsql.BuildValues(this.DmlBase.parameters)...)
-	this.debugTime(now, 2)
+	params, err := rsql.BuildValues(q.DmlBase.parameters)
+	if err != nil {
+		return err
+	}
+	e := q.DmlBase.dba.QueryClosure(rsql.Sql, transformer, params...)
+	q.debugTime(now, 2)
 	if e != nil {
 		return e
 	}
 	return nil
 }
 
-func (this *Query) listSimpleTransformer(transformer func(rows *sql.Rows) (interface{}, error)) ([]interface{}, error) {
-	// if no columns were added, add all columns of the driving table
-	if len(this.Columns) == 0 {
-		this.All()
-	}
-
-	rsql := this.getCachedSql()
-	this.debugSQL(rsql.OriSql, 2)
-
-	now := time.Now()
-	list, e := this.DmlBase.dba.Query(rsql.Sql, transformer, rsql.BuildValues(this.DmlBase.parameters)...)
-	this.debugTime(now, 2)
-	if e != nil {
-		return nil, e
-	}
-	return list, nil
-}
-
 //Executes a query and transform the results according to the transformer
 //Accepts a row transformer and returns a collection of transformed results
-func (this *Query) list(rowMapper dbx.IRowTransformer) (coll.Collection, error) {
+func (q *Query) list(rowMapper dbx.IRowTransformer) (coll.Collection, error) {
 	// if no columns were added, add all columns of the driving table
-	if len(this.Columns) == 0 {
-		this.All()
+	if len(q.Columns) == 0 {
+		q.All()
 	}
 
-	rsql := this.getCachedSql()
-	this.debugSQL(rsql.OriSql, 2)
+	rsql := q.getCachedSql()
+	q.debugSQL(rsql.OriSql, 2)
 
 	now := time.Now()
-	list, e := this.DmlBase.dba.QueryCollection(rsql.Sql, rowMapper, rsql.BuildValues(this.DmlBase.parameters)...)
-	this.debugTime(now, 2)
+	params, err := rsql.BuildValues(q.DmlBase.parameters)
+	if err != nil {
+		return nil, err
+	}
+	list, e := q.DmlBase.dba.QueryCollection(rsql.Sql, rowMapper, params...)
+	q.debugTime(now, 2)
 	if e != nil {
 		return nil, e
 	}
@@ -770,8 +894,11 @@ func (this *Query) list(rowMapper dbx.IRowTransformer) (coll.Collection, error) 
 //matching the alias with struct property name. If no alias is supplied, it is used the default column alias.
 //
 //Accepts as parameter the struct type and returns a collection of structs (needs cast)
-func (this *Query) ListOf(template interface{}) (coll.Collection, error) {
-	return this.list(NewEntityTransformer(this, template))
+func (q *Query) ListOf(template interface{}) (coll.Collection, error) {
+	if q.err != nil {
+		return nil, q.err
+	}
+	return q.list(NewEntityTransformer(q, template))
 }
 
 // Executes a query and transform the results into a tree with the passed struct type as the head.
@@ -779,26 +906,33 @@ func (this *Query) ListOf(template interface{}) (coll.Collection, error) {
 // If the transformed data matches a previous converted entity the previous one is reused.
 //
 // Receives a template instance and returns a collection of structs.
-func (this *Query) ListTreeOf(template tk.Hasher) (coll.Collection, error) {
-	return this.list(NewEntityTreeTransformer(this, true, template))
+func (q *Query) ListTreeOf(template tk.Hasher) (coll.Collection, error) {
+	if q.err != nil {
+		return nil, q.err
+	}
+	return q.list(NewEntityTreeTransformer(q, true, template))
 }
 
 //Executes a query, putting the result in a slice, passed as an argument.
 // The slice element slice can be a struct or a primitive (ex: string).
 //
 //This method does not create a tree of related instances.
-func (this *Query) List(target interface{}) error {
+func (q *Query) List(target interface{}) error {
+	if q.err != nil {
+		return q.err
+	}
+
 	caller, typ, isStruct, ok := checkSlice(target)
 	if !ok {
-		return errors.Errorf("goSQL: Expected a slice of type *[]*struct. Got %s", typ.String())
+		return faults.Errorf("goSQL: Expected a slice of type *[]*struct. Got %s", typ.String())
 	}
 
 	if isStruct {
-		_, err := this.list(NewEntityFactoryTransformer(this, typ, caller))
+		_, err := q.list(NewEntityFactoryTransformer(q, typ, caller))
 		return err
 	} else {
 		holder := reflect.New(typ).Interface()
-		return this.listClosure(func(rows *sql.Rows) error {
+		return q.listClosure(func(rows *sql.Rows) error {
 			if err := rows.Scan(holder); err != nil {
 				return err
 			}
@@ -912,41 +1046,56 @@ func checkCollector(collector interface{}) (func(val reflect.Value) reflect.Valu
 //There is no reuse of previous converted entites.
 //
 //Receives a template instance and returns a collection of structs.
-func (this *Query) ListFlatTreeOf(template interface{}) (coll.Collection, error) {
-	return this.list(NewEntityTreeTransformer(this, false, template))
+func (q *Query) ListFlatTreeOf(template interface{}) (coll.Collection, error) {
+	if q.err != nil {
+		return nil, q.err
+	}
+	return q.list(NewEntityTreeTransformer(q, false, template))
 }
 
 //Executes a query, putting the result in a slice, passed as an argument or
 //delegating the responsability of building the result to a processor function.
 //The argument must be a function with the signature func(<<*>struct>) or a slice like *[]<*>struct.
 //See also List.
-func (this *Query) ListFlatTree(target interface{}) error {
+func (q *Query) ListFlatTree(target interface{}) error {
+	if q.err != nil {
+		return q.err
+	}
+
 	caller, typ, isStruct, ok := checkSlice(target)
 	if !ok || !isStruct {
 		caller, typ, ok = checkCollector(target)
 		if !ok {
-			return errors.Errorf("goSQL: Expected a slice of type *[]<*>struct or a function with the signature func(<<*>struct>). got %s", typ.String())
+			return faults.Errorf("goSQL: Expected a slice of type *[]<*>struct or a function with the signature func(<<*>struct>). got %s", typ.String())
 		}
 	}
 
-	_, err := this.list(NewEntityTreeFactoryTransformer(this, typ, caller))
+	_, err := q.list(NewEntityTreeFactoryTransformer(q, typ, caller))
 	return err
 }
 
 // the result of the query is put in the passed interface array.
 // returns true if a result was found, false if no result
-func (this *Query) SelectInto(dest ...interface{}) (bool, error) {
-	// if no columns were added, add all columns of the driving table
-	if len(this.Columns) == 0 {
-		this.All()
+func (q *Query) SelectInto(dest ...interface{}) (bool, error) {
+	if q.err != nil {
+		return false, q.err
 	}
 
-	rsql := this.getCachedSql()
-	this.debugSQL(rsql.OriSql, 1)
+	// if no columns were added, add all columns of the driving table
+	if len(q.Columns) == 0 {
+		q.All()
+	}
+
+	rsql := q.getCachedSql()
+	q.debugSQL(rsql.OriSql, 1)
 
 	now := time.Now()
-	found, e := this.dba.QueryRow(rsql.Sql, rsql.BuildValues(this.DmlBase.parameters), dest...)
-	this.debugTime(now, 1)
+	params, err := rsql.BuildValues(q.DmlBase.parameters)
+	if err != nil {
+		return false, err
+	}
+	found, e := q.dba.QueryRow(rsql.Sql, params, dest...)
+	q.debugTime(now, 1)
 	if e != nil {
 		return false, e
 	}
@@ -957,14 +1106,18 @@ func (this *Query) SelectInto(dest ...interface{}) (bool, error) {
 //the toolkit.Hasher interface.
 //
 //This is pretty much the same as SelectTreeTo.
-func (this *Query) selectTree(typ interface{}, reuse bool) (interface{}, error) {
+func (q *Query) selectTree(typ interface{}, reuse bool) (interface{}, error) {
+	if q.err != nil {
+		return nil, q.err
+	}
+
 	if reuse {
 		_, ok := typ.(tk.Hasher)
 		if !ok {
-			return nil, errors.Errorf("When reuse is true, the type %T must implement toolkit.Hasher", typ)
+			return nil, faults.Errorf("When reuse is true, the type %T must implement toolkit.Hasher", typ)
 		}
 
-		list, err := this.list(NewEntityTreeTransformer(this, true, typ))
+		list, err := q.list(NewEntityTreeTransformer(q, true, typ))
 		if err != nil {
 			return nil, err
 		}
@@ -976,13 +1129,17 @@ func (this *Query) selectTree(typ interface{}, reuse bool) (interface{}, error) 
 		}
 	}
 
-	return this.selectTransformer(NewEntityTreeTransformer(this, false, typ))
+	return q.selectTransformer(NewEntityTreeTransformer(q, false, typ))
 }
 
 //The first result of the query is put in the passed struct.
 //Returns true if a result was found, false if no result
-func (this *Query) SelectTo(instance interface{}) (bool, error) {
-	res, err := this.selectTransformer(NewEntityTransformer(this, instance))
+func (q *Query) SelectTo(instance interface{}) (bool, error) {
+	if q.err != nil {
+		return false, q.err
+	}
+
+	res, err := q.selectTransformer(NewEntityTransformer(q, instance))
 	if err != nil {
 		return false, err
 	}
@@ -1003,16 +1160,24 @@ func (this *Query) SelectTo(instance interface{}) (bool, error) {
 //participating in the result tree implement the toolkit.Hasher interface.
 //Returns true if a result was found, false if no result.
 //See also SelectFlatTree.
-func (this *Query) SelectTree(instance tk.Hasher) (bool, error) {
-	return this.selectTreeTo(instance, true)
+func (q *Query) SelectTree(instance tk.Hasher) (bool, error) {
+	if q.err != nil {
+		return false, q.err
+	}
+
+	return q.selectTreeTo(instance, true)
 }
 
 //Executes the query and builds a flat struct tree putting the first element in the supplied struct pointer.
 //Since the struct instances are not going to be reused it is not mandatory that the structs implement the toolkit.Hasher interface.
 //Returns true if a result was found, false if no result.
 //See also SelectTree.
-func (this *Query) SelectFlatTree(instance interface{}) (bool, error) {
-	return this.selectTreeTo(instance, false)
+func (q *Query) SelectFlatTree(instance interface{}) (bool, error) {
+	if q.err != nil {
+		return false, q.err
+	}
+
+	return q.selectTreeTo(instance, false)
 }
 
 //Executes the query and builds a struct tree putting the first element in the supplied struct pointer.
@@ -1029,8 +1194,8 @@ func (this *Query) SelectFlatTree(instance interface{}) (bool, error) {
 //
 //The first result of the query is put in the passed struct.
 //Returns true if a result was found, false if no result
-func (this *Query) selectTreeTo(instance interface{}, reuse bool) (bool, error) {
-	res, err := this.selectTree(instance, reuse)
+func (q *Query) selectTreeTo(instance interface{}, reuse bool) (bool, error) {
+	res, err := q.selectTree(instance, reuse)
 	if err != nil {
 		return false, err
 	}
@@ -1045,12 +1210,12 @@ func (this *Query) selectTreeTo(instance interface{}, reuse bool) (bool, error) 
 	return false, nil
 }
 
-func (this *Query) selectTransformer(rowMapper dbx.IRowTransformer) (interface{}, error) {
-	oldMax := this.limit
-	this.Limit(1)
-	defer this.Limit(oldMax)
+func (q *Query) selectTransformer(rowMapper dbx.IRowTransformer) (interface{}, error) {
+	oldMax := q.limit
+	q.Limit(1)
+	defer q.Limit(oldMax)
 
-	list, err := this.list(rowMapper)
+	list, err := q.list(rowMapper)
 	if err != nil {
 		return nil, err
 	}
@@ -1062,16 +1227,16 @@ func (this *Query) selectTransformer(rowMapper dbx.IRowTransformer) (interface{}
 }
 
 // SQL String. It is cached for multiple access
-func (this *Query) getCachedSql() *RawSql {
-	if this.rawSQL == nil {
+func (q *Query) getCachedSql() *RawSql {
+	if q.rawSQL == nil {
 		// if the discriminator conditions have not yet been processed, apply them now
-		if this.discriminatorCriterias != nil && this.criteria == nil {
-			this.DmlBase.where(nil)
+		if q.discriminatorCriterias != nil && q.criteria == nil {
+			q.DmlBase.where(nil)
 		}
 
-		sql := this.db.GetTranslator().GetSqlForQuery(this)
-		this.rawSQL = ToRawSql(sql, this.db.GetTranslator())
+		sql := q.db.GetTranslator().GetSqlForQuery(q)
+		q.rawSQL = ToRawSql(sql, q.db.GetTranslator())
 	}
 
-	return this.rawSQL
+	return q.rawSQL
 }

@@ -8,7 +8,7 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	. "github.com/quintans/goSQL/db"
 	"github.com/quintans/goSQL/test/common"
-	trx "github.com/quintans/goSQL/translators"
+	"github.com/quintans/goSQL/translators"
 	"github.com/quintans/toolkit/log"
 )
 
@@ -50,28 +50,32 @@ func TestMySQL5(t *testing.T) {
 	}
 	defer closer()
 
-	tester := common.Tester{DbName: common.MySQL}
-	tester.RunAll(tm, t)
+	tester := common.Tester{DbName: common.MySQL, Tm: tm}
+	tester.RunAll(t)
 	theDB.Close()
 }
 
 func InitMySQL5(port string) (ITransactionManager, *sql.DB, error) {
 	common.RAW_SQL = "SELECT `NAME` FROM `BOOK` WHERE `NAME` LIKE ?"
 
-	translator := trx.NewMySQL5Translator()
+	translator := translators.NewMySQL5Translator()
 	/*
 		registering custom function.
 		A custom translator could be created instead.
 	*/
 	translator.RegisterTranslation(
 		common.TOKEN_SECONDSDIFF,
-		func(dmlType DmlType, token Tokener, tx Translator) string {
+		func(dmlType DmlType, token Tokener, tx Translator) (string, error) {
 			m := token.GetMembers()
+			args, err := translators.Translate(tx.Translate, dmlType, m...)
+			if err != nil {
+				return "", err
+			}
 			return fmt.Sprintf(
 				"TIME_TO_SEC(TIMEDIFF(%s, %s))",
-				tx.Translate(dmlType, m[0]),
-				tx.Translate(dmlType, m[1]),
-			)
+				args[0],
+				args[1],
+			), nil
 		},
 	)
 

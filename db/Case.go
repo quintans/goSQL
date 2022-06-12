@@ -38,7 +38,6 @@ type SearchedWhen struct {
 type SearchedCase struct {
 	whens []*SearchedWhen
 	other interface{}
-	alias string
 }
 
 func NewSearchedCase() *SearchedCase {
@@ -47,31 +46,31 @@ func NewSearchedCase() *SearchedCase {
 	return this
 }
 
-func (this *SearchedCase) If(criteria *Criteria) *SearchedWhen {
+func (s *SearchedCase) If(criteria *Criteria) *SearchedWhen {
 	when := new(SearchedWhen)
-	when.parent = this
+	when.parent = s
 	when.criteria = criteria
-	this.whens = append(this.whens, when)
+	s.whens = append(s.whens, when)
 	return when
 }
 
-func (this *SearchedWhen) Then(value interface{}) *SearchedCase {
-	this.result = value
-	return this.parent
+func (s *SearchedWhen) Then(value interface{}) *SearchedCase {
+	s.result = value
+	return s.parent
 }
 
-func (this *SearchedCase) Else(value interface{}) *SearchedCase {
-	this.other = value
-	return this
+func (s *SearchedCase) Else(value interface{}) *SearchedCase {
+	s.other = value
+	return s
 }
 
-func (this *SearchedCase) End() *Token {
+func (s *SearchedCase) End() *Token {
 	vals := make([]interface{}, 0)
-	for _, v := range this.whens {
+	for _, v := range s.whens {
 		vals = append(vals, NewToken(TOKEN_CASE_WHEN, v.criteria, v.result))
 	}
-	if this.other != nil {
-		vals = append(vals, NewToken(TOKEN_CASE_ELSE, this.other))
+	if s.other != nil {
+		vals = append(vals, NewToken(TOKEN_CASE_ELSE, s.other))
 	}
 	return NewToken(TOKEN_CASE, vals...)
 }
@@ -86,7 +85,6 @@ type SimpleCase struct {
 	expression interface{}
 	whens      []*SimpleWhen
 	other      interface{}
-	alias      string
 }
 
 func NewSimpleCase(expression interface{}) *SimpleCase {
@@ -96,34 +94,34 @@ func NewSimpleCase(expression interface{}) *SimpleCase {
 	return this
 }
 
-func (this *SimpleCase) When(expression interface{}) *SimpleWhen {
+func (s *SimpleCase) When(expression interface{}) *SimpleWhen {
 	when := new(SimpleWhen)
-	when.parent = this
+	when.parent = s
 	when.expression = expression
-	this.whens = append(this.whens, when)
+	s.whens = append(s.whens, when)
 	return when
 }
 
-func (this *SimpleWhen) Then(value interface{}) *SimpleCase {
-	this.result = value
-	return this.parent
+func (s *SimpleWhen) Then(value interface{}) *SimpleCase {
+	s.result = value
+	return s.parent
 }
 
-func (this *SimpleCase) Else(value interface{}) *SimpleCase {
-	this.other = value
-	return this
+func (s *SimpleCase) Else(value interface{}) *SimpleCase {
+	s.other = value
+	return s
 }
 
-func (this *SimpleCase) End() *Token {
+func (s *SimpleCase) End() *Token {
 	vals := make([]interface{}, 0)
-	if this.expression != nil {
-		vals = append(vals, this.expression)
+	if s.expression != nil {
+		vals = append(vals, s.expression)
 	}
-	for _, v := range this.whens {
+	for _, v := range s.whens {
 		vals = append(vals, NewToken(TOKEN_CASE_WHEN, v.expression, v.result))
 	}
-	if this.other != nil {
-		vals = append(vals, NewToken(TOKEN_CASE_ELSE, this.other))
+	if s.other != nil {
+		vals = append(vals, NewToken(TOKEN_CASE_ELSE, s.other))
 	}
 	return NewToken(TOKEN_CASE, vals...)
 }

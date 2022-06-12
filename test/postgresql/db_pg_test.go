@@ -8,7 +8,7 @@ import (
 	"github.com/docker/go-connections/nat"
 	. "github.com/quintans/goSQL/db"
 	"github.com/quintans/goSQL/test/common"
-	trx "github.com/quintans/goSQL/translators"
+	"github.com/quintans/goSQL/translators"
 	"github.com/quintans/toolkit/log"
 
 	_ "github.com/lib/pq"
@@ -51,8 +51,8 @@ func TestPostgreSQL(t *testing.T) {
 	}
 	defer closer()
 
-	tester := common.Tester{DbName: common.Postgres}
-	tester.RunAll(tm, t)
+	tester := common.Tester{DbName: common.Postgres, Tm: tm}
+	tester.RunAll(t)
 	theDB.Close()
 }
 
@@ -65,24 +65,28 @@ func BenchmarkLoadValues(b *testing.B) {
 	}
 	defer closer()
 
-	tester := common.Tester{DbName: common.Postgres}
-	tester.RunBench(tm, "postgres", fmt.Sprintf("dbname=postgres user=postgres password=secret port=%s sslmode=disable", port.Port()), b)
+	tester := common.Tester{DbName: common.Postgres, Tm: tm}
+	tester.RunBench("postgres", fmt.Sprintf("dbname=postgres user=postgres password=secret port=%s sslmode=disable", port.Port()), b)
 	theDB.Close()
 }
 
 func InitPostgreSQL(port string) (ITransactionManager, *sql.DB, error) {
 	common.RAW_SQL = "SELECT name FROM book WHERE name LIKE $1"
 
-	translator := trx.NewPostgreSQLTranslator()
+	translator := translators.NewPostgreSQLTranslator()
 	translator.RegisterTranslation(
 		common.TOKEN_SECONDSDIFF,
-		func(dmlType DmlType, token Tokener, tx Translator) string {
+		func(dmlType DmlType, token Tokener, tx Translator) (string, error) {
 			m := token.GetMembers()
+			args, err := translators.Translate(tx.Translate, dmlType, m...)
+			if err != nil {
+				return "", err
+			}
 			return fmt.Sprintf(
 				"EXTRACT(EPOCH FROM (%s - %s))",
-				tx.Translate(dmlType, m[0]),
-				tx.Translate(dmlType, m[1]),
-			)
+				args[0],
+				args[1],
+			), nil
 		},
 	)
 

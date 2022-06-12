@@ -2,11 +2,11 @@ package common
 
 import (
 	"context"
-	"github.com/pkg/errors"
 	"strings"
 	"time"
 
 	"github.com/docker/go-connections/nat"
+	"github.com/quintans/faults"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
@@ -60,8 +60,8 @@ func (ws *DbStrategy) WaitUntilReady(ctx context.Context, target wait.StrategyTa
 	ctx, cancelContext := context.WithTimeout(ctx, ws.startupTimeout)
 	defer cancelContext()
 
-	if strings.Index(ws.dataSourceName, "<port>") < 0 {
-		return errors.Errorf("Missing placeholder <port> in %s", ws.dataSourceName)
+	if !strings.Contains(ws.dataSourceName, "<port>") {
+		return faults.Errorf("missing placeholder <port> in %s", ws.dataSourceName)
 	}
 
 	var ds string

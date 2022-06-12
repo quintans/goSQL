@@ -17,21 +17,21 @@ type Crawler struct {
 	firstNode *CrawlerNode
 }
 
-func (this *Crawler) GetBranches() []*CrawlerNode {
-	if this.nodes == nil || this.depth >= len(this.nodes) {
+func (c *Crawler) GetBranches() []*CrawlerNode {
+	if c.nodes == nil || c.depth >= len(c.nodes) {
 		return nil
 	}
 
-	return this.nodes[this.depth].GetBranches()
+	return c.nodes[c.depth].GetBranches()
 }
 
-func (this *Crawler) Dispose() {
-	this.depth = 0
-	this.nodes = nil
-	this.firstNode = nil
+func (c *Crawler) Dispose() {
+	c.depth = 0
+	c.nodes = nil
+	c.firstNode = nil
 }
 
-func (this *Crawler) Prepare(query *Query) {
+func (c *Crawler) Prepare(query *Query) {
 	table := query.GetTable()
 	var includes [][]*Association
 	for _, join := range query.GetJoins() {
@@ -41,21 +41,21 @@ func (this *Crawler) Prepare(query *Query) {
 	}
 
 	// reset
-	this.depth = 0
-	this.firstNode = new(CrawlerNode)
+	c.depth = 0
+	c.firstNode = new(CrawlerNode)
 	// holds the last table
 	holder := &HoldTable{table}
 	for _, fks := range includes {
-		this.firstNode.BuildTree(fks, holder)
+		c.firstNode.BuildTree(fks, holder)
 	}
 
-	this.nodes = this.firstNode.FlatenTree(make([]*CrawlerNode, 0))
+	c.nodes = c.firstNode.FlatenTree(make([]*CrawlerNode, 0))
 }
 
-func (this *Crawler) Forward() {
-	this.depth++
+func (c *Crawler) Forward() {
+	c.depth++
 }
 
-func (this *Crawler) Rewind() {
-	this.depth = 0
+func (c *Crawler) Rewind() {
+	c.depth = 0
 }

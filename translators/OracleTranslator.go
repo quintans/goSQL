@@ -26,23 +26,23 @@ func NewOracleTranslator() *OracleTranslator {
 	return this
 }
 
-func (this *OracleTranslator) GetAutoKeyStrategy() db.AutoKeyStrategy {
+func (o *OracleTranslator) GetAutoKeyStrategy() db.AutoKeyStrategy {
 	return db.AUTOKEY_BEFORE
 }
 
-func (this *OracleTranslator) GetAutoNumberQuery(column *db.Column) string {
+func (o *OracleTranslator) GetAutoNumberQuery(column *db.Column) string {
 	return "select " + strings.ToUpper(column.GetTable().GetName()) + "_SEQ.nextval from dual"
 }
 
-func (this *OracleTranslator) TableName(table *db.Table) string {
+func (o *OracleTranslator) TableName(table *db.Table) string {
 	return "\"" + strings.ToUpper(table.GetName()) + "\""
 }
 
-func (this *OracleTranslator) ColumnName(column *db.Column) string {
+func (o *OracleTranslator) ColumnName(column *db.Column) string {
 	return "\"" + strings.ToUpper(column.GetName()) + "\""
 }
 
-func (this *OracleTranslator) PaginateSQL(query *db.Query, sql string) string {
+func (o *OracleTranslator) PaginateSQL(query *db.Query, sql string) string {
 	if query.GetSkip() > 0 {
 		query.SetParameter(db.OFFSET_PARAM, query.GetSkip()+1)
 		query.SetParameter(db.LIMIT_PARAM, query.GetSkip()+query.GetLimit())
@@ -56,6 +56,6 @@ func (this *OracleTranslator) PaginateSQL(query *db.Query, sql string) string {
 	return sql
 }
 
-func (this *OracleTranslator) GetPlaceholder(index int, name string) string {
+func (o *OracleTranslator) GetPlaceholder(index int, name string) string {
 	return ":" + strconv.Itoa(index+1)
 }

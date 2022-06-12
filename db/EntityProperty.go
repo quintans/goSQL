@@ -5,7 +5,7 @@ import (
 	"strings"
 	"unsafe"
 
-	"github.com/quintans/toolkit/faults"
+	"github.com/quintans/faults"
 )
 
 type EntityProperty struct {
@@ -20,12 +20,12 @@ type EntityProperty struct {
 	setter    setter
 }
 
-func (this *EntityProperty) New() interface{} {
-	return reflect.New(this.Type).Interface()
+func (e *EntityProperty) New() interface{} {
+	return reflect.New(e.Type).Interface()
 }
 
-func (this *EntityProperty) IsMany() bool {
-	return this.InnerType != nil
+func (e *EntityProperty) IsMany() bool {
+	return e.InnerType != nil
 }
 
 type setter func(instance reflect.Value) reflect.Value
@@ -55,10 +55,10 @@ func makeSetter(previous setter, fieldname string) setter {
 
 // Do not set nil values.
 // If value is nil it will return false, otherwise returns true
-func (this *EntityProperty) Set(instance reflect.Value, value reflect.Value) bool {
+func (e *EntityProperty) Set(instance reflect.Value, value reflect.Value) bool {
 	// do not set nil values
 	if value.Kind() != reflect.Ptr || !value.IsNil() {
-		field := this.setter(instance)
+		field := e.setter(instance)
 
 		if field.Kind() == reflect.Ptr || field.Kind() == reflect.Slice || field.Kind() == reflect.Array {
 			field.Set(value)
@@ -89,8 +89,8 @@ func makeGetter(previous getter, fieldname string) getter {
 	}
 }
 
-func (this *EntityProperty) Get(instance reflect.Value) reflect.Value {
-	return this.getter(instance)
+func (e *EntityProperty) Get(instance reflect.Value) reflect.Value {
+	return e.getter(instance)
 }
 
 func PopulateMappingOf(prefix string, m interface{}, translator Translator) (map[string]*EntityProperty, error) {
@@ -138,7 +138,7 @@ func walkTreeStruct(prefix string, typ reflect.Type, attrs map[string]*EntityPro
 						cn := v[len(converterTag):]
 						converter = translator.GetConverter(cn)
 						if converter == nil {
-							return faults.New("Converter %s is not registered", cn)
+							return faults.Errorf("Converter %s is not registered", cn)
 						}
 					}
 				}

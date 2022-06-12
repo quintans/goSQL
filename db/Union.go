@@ -5,10 +5,6 @@ type Union struct {
 	All   bool
 }
 
-func (this *Union) Equals(o interface{}) bool {
-	if this == o {
-		return true
-	}
-
-	return false
+func (u *Union) Equals(o interface{}) bool {
+	return u == o
 }
