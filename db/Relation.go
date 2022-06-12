@@ -12,6 +12,6 @@ func NewRelation(from *Column, to *Column) Relation {
 	return this
 }
 
-func (this Relation) String() string {
-	return this.From.String() + " -> " + this.To.String()
+func (r Relation) String() string {
+	return r.From.String() + " -> " + r.To.String()
 }

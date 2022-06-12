@@ -3,7 +3,7 @@ package firebird
 import (
 	. "github.com/quintans/goSQL/db"
 	"github.com/quintans/goSQL/test/common"
-	trx "github.com/quintans/goSQL/translators"
+	"github.com/quintans/goSQL/translators"
 	"github.com/quintans/toolkit/log"
 
 	_ "github.com/nakagami/firebirdsql" // float64 was fixed acording to issue #5
@@ -54,8 +54,8 @@ func TestFirebirdSQL(t *testing.T) {
 	}
 	defer closer()
 
-	tester := common.Tester{DbName: common.Firebird}
-	tester.RunAll(tm, t)
+	tester := common.Tester{DbName: common.Firebird, Tm: tm}
+	tester.RunAll(t)
 	theDB.Close()
 }
 
@@ -63,16 +63,20 @@ func InitFirebirdSQL(port string) (ITransactionManager, *sql.DB, error) {
 
 	common.RAW_SQL = "SELECT name FROM book WHERE name LIKE ?"
 
-	translator := trx.NewFirebirdSQLTranslator()
+	translator := translators.NewFirebirdSQLTranslator()
 	translator.RegisterTranslation(
 		common.TOKEN_SECONDSDIFF,
-		func(dmlType DmlType, token Tokener, tx Translator) string {
+		func(dmlType DmlType, token Tokener, tx Translator) (string, error) {
 			m := token.GetMembers()
+			args, err := translators.Translate(tx.Translate, dmlType, m...)
+			if err != nil {
+				return "", err
+			}
 			return fmt.Sprintf(
 				"DATEDIFF(SECOND, %s, %s)",
-				tx.Translate(dmlType, m[1]),
-				tx.Translate(dmlType, m[0]),
-			)
+				args[1],
+				args[0],
+			), nil
 		},
 	)
 

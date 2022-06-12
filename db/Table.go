@@ -1,12 +1,13 @@
 package db
 
 import (
+	"github.com/quintans/faults"
 	coll "github.com/quintans/toolkit/collections"
-	. "github.com/quintans/toolkit/ext"
+	"github.com/quintans/toolkit/ext"
 
-	"fmt"
-	"github.com/quintans/goSQL/dbx"
 	"strings"
+
+	"github.com/quintans/goSQL/dbx"
 )
 
 type Table struct {
@@ -24,11 +25,15 @@ type Table struct {
 	PreInsertTrigger func(*Insert)
 	PreUpdateTrigger func(*Update)
 	PreDeleteTrigger func(*Delete)
+
+	err error
 }
 
 func TABLE(name string) *Table {
 	if name == "" {
-		panic("Null for table name is not allowed.")
+		return &Table{
+			err: faults.New("empty for table name is not allowed"),
+		}
 	}
 	this := new(Table).As(dbx.ToCamelCase(name))
 	this.columnsMap = coll.NewLinkedHashMap()
@@ -40,102 +45,133 @@ func TABLE(name string) *Table {
 	return this
 }
 
-func (this *Table) As(alias string) *Table {
+func (t *Table) As(alias string) *Table {
 	if alias == "" {
-		panic("Null for table alias is not allowed.")
+		return &Table{
+			err: faults.New("empty for table alias is not allowed"),
+		}
 	}
-	this.Alias = alias
-	return this
+	t.Alias = alias
+	return t
 }
 
 // gets the table name
-func (this *Table) GetName() string {
-	return this.name
+func (t *Table) GetName() string {
+	return t.name
 }
 
-func (this *Table) COLUMN(name string) *Column {
+func (t *Table) COLUMN(name string) *Column {
+	if t.err != nil {
+		return &Column{
+			err: t.err,
+		}
+	}
+
 	col := new(Column)
 	col.name = name
 	col.alias = dbx.ToCamelCase(name)
 
-	col.table = this
-	if !this.columns.Contains(col) {
-		this.columns.Add(col)
+	col.table = t
+	if !t.columns.Contains(col) {
+		t.columns.Add(col)
 
 		// checks if this column alias uniqueness
-		if _, ok := this.columnsMap.Get(Str(col.GetAlias())); ok {
-			panic(fmt.Sprintf("The alias '%s' for the column '%s' is not unique!", col.GetAlias(), col.String()))
+		if _, ok := t.columnsMap.Get(ext.Str(col.GetAlias())); ok {
+			return &Column{
+				err: faults.Errorf("The alias '%s' for the column '%s' is not unique!", col.GetAlias(), col.String()),
+			}
 		} else {
-			this.columnsMap.Put(Str(col.GetAlias()), col)
+			t.columnsMap.Put(ext.Str(col.GetAlias()), col)
 		}
 	}
 	return col
 }
 
-func (this *Table) KEY(name string) *Column {
-	return this.COLUMN(name).Key()
+func (t *Table) KEY(name string) *Column {
+	return t.COLUMN(name).Key()
 }
 
-func (this *Table) VERSION(name string) *Column {
-	return this.COLUMN(name).Version()
+func (t *Table) VERSION(name string) *Column {
+	return t.COLUMN(name).Version()
 }
 
-func (this *Table) DELETION(name string) *Column {
-	return this.COLUMN(name).Deletion()
+func (t *Table) DELETION(name string) *Column {
+	return t.COLUMN(name).Deletion()
 }
 
-func (this *Table) addKey(col *Column) {
-	this.keys.Add(col)
-	if this.keys.Size() == 1 {
-		this.singleKey = col
+func (t *Table) addKey(col *Column) {
+	if t.err != nil {
+		return
+	}
+
+	t.keys.Add(col)
+	if t.keys.Size() == 1 {
+		t.singleKey = col
 	} else {
 		// it is only allowed one single key column
-		this.singleKey = nil
+		t.singleKey = nil
 	}
 }
 
-func (this *Table) setVersion(col *Column) {
-	this.version = col
+func (t *Table) setVersion(col *Column) {
+	t.version = col
 }
 
-func (this *Table) setDeletion(col *Column) {
-	this.deletion = col
+func (t *Table) setDeletion(col *Column) {
+	t.deletion = col
 }
 
-func (this *Table) With(column string, value interface{}) *Table {
-	if this.discriminators == nil {
-		this.discriminators = make([]Discriminator, 0)
+func (t *Table) With(column string, value interface{}) *Table {
+	if t.err != nil {
+		return t
+	}
+
+	if t.discriminators == nil {
+		t.discriminators = make([]Discriminator, 0)
 	}
 	token := tokenizeOne(value)
-	discriminator := NewDiscriminator(this.COLUMN(column), token)
-	this.discriminators = append(this.discriminators, discriminator)
-	return this
+	discriminator := NewDiscriminator(t.COLUMN(column), token)
+	t.discriminators = append(t.discriminators, discriminator)
+	return t
 }
 
-func (this *Table) ASSOCIATE(from ...*Column) ColGroup {
+func (t *Table) ASSOCIATE(from ...*Column) ColGroup {
+	if t.err != nil {
+		return ColGroup{err: t.err}
+	}
 	// all columns must be from this table.
 	for _, source := range from {
-		if !this.Equals(source.GetTable()) {
-			panic(source.String() + " does not belong to " + this.String())
+		if !t.Equals(source.GetTable()) {
+			return ColGroup{
+				err: faults.New(source.String() + " does not belong to " + t.String()),
+			}
 		}
 	}
 
-	return from
+	return ColGroup{
+		cols: from,
+	}
 }
 
-func (this *Table) ASSOCIATION(from *Column, to *Column) *Association {
-	if !this.Equals(from.GetTable()) {
-		panic(from.String() + " does not belong to " + this.String())
+func (t *Table) ASSOCIATION(from *Column, to *Column) *Association {
+	if t.err != nil {
+		return &Association{err: t.err}
+	}
+
+	if !t.Equals(from.GetTable()) {
+		return &Association{
+			err: faults.New(from.String() + " does not belong to " + t.String()),
+		}
 	}
 	return NewAssociation(NewRelation(from, to))
 }
 
 // gets column list
-func (this *Table) GetColumns() coll.Collection {
-	return this.columns
+func (t *Table) GetColumns() coll.Collection {
+	return t.columns
 }
 
-func (this *Table) GetBasicColumns() coll.Collection {
+func (t *Table) GetBasicColumns() coll.Collection {
 	list := coll.NewArrayList()
 	for e := list.Enumerator(); e.HasNext(); {
 		if column, ok := e.Next().(*Column); ok && !column.IsKey() && !column.IsVersion() && !column.IsDeletion() {
@@ -145,64 +181,68 @@ func (this *Table) GetBasicColumns() coll.Collection {
 	return list
 }
 
-func (this *Table) String() string {
-	return this.name
+func (t *Table) String() string {
+	return t.name
 }
 
-func (this *Table) GetKeyColumns() coll.Collection {
-	return this.keys
+func (t *Table) GetKeyColumns() coll.Collection {
+	return t.keys
 }
 
-func (this *Table) GetSingleKeyColumn() *Column {
-	return this.singleKey
+func (t *Table) GetSingleKeyColumn() *Column {
+	return t.singleKey
 }
 
-func (this *Table) GetVersionColumn() *Column {
-	return this.version
+func (t *Table) GetVersionColumn() *Column {
+	return t.version
 }
 
-func (this *Table) GetDeletionColumn() *Column {
-	return this.deletion
+func (t *Table) GetDeletionColumn() *Column {
+	return t.deletion
 }
 
-func (this *Table) Equals(obj interface{}) bool {
-	if this == obj {
+func (t *Table) Equals(obj interface{}) bool {
+	if t == obj {
 		return true
 	}
 
-	switch t := obj.(type) { //type switch
+	switch tp := obj.(type) { //type switch
 	case *Table:
-		return this.Alias == t.Alias &&
-			strings.ToUpper(this.name) == strings.ToUpper(t.GetName())
+		return t.Alias == tp.Alias &&
+			strings.EqualFold(t.name, tp.GetName())
 	}
 
 	return false
 }
 
-func (this *Table) AddAssociation(fk *Association) *Association {
-	return this.AddAssociationAs(fk.Alias, fk)
+func (t *Table) AddAssociation(fk *Association) *Association {
+	return t.AddAssociationAs(fk.Alias, fk)
 }
 
-func (this *Table) AddAssociationAs(name string, fk *Association) *Association {
-	key := Str(name)
+func (t *Table) AddAssociationAs(name string, fk *Association) *Association {
+	if t.err != nil {
+		return &Association{err: t.err}
+	}
 
-	if this.associationMap == nil {
-		this.associationMap = coll.NewLinkedHashMap()
+	key := ext.Str(name)
+
+	if t.associationMap == nil {
+		t.associationMap = coll.NewLinkedHashMap()
 	} else {
-		if value, ok := this.associationMap.Get(key); ok {
-			panic(
-				fmt.Sprintf("An association %s is already mapped to this table (%s) with the key %s",
-					value, this.Alias, name))
+		if value, ok := t.associationMap.Get(key); ok {
+			return &Association{
+				err: faults.Errorf("An association %s is already mapped to this table (%s) with the key %s", value, t.Alias, name),
+			}
 		}
 	}
 
-	this.associationMap.Put(key, fk)
+	t.associationMap.Put(key, fk)
 	return fk
 }
 
-func (this *Table) GetAssociations() []*Association {
-	if this.associationMap != nil {
-		values := this.associationMap.Values()
+func (t *Table) GetAssociations() []*Association {
+	if t.associationMap != nil {
+		values := t.associationMap.Values()
 		associations := make([]*Association, len(values))
 		for k, v := range values {
 			associations[k], _ = v.(*Association)
@@ -212,14 +252,14 @@ func (this *Table) GetAssociations() []*Association {
 	return nil
 }
 
-func (this *Table) GetDiscriminators() []Discriminator {
-	return this.discriminators
+func (t *Table) GetDiscriminators() []Discriminator {
+	return t.discriminators
 }
 
-func (this *Table) GetCriterias() []*Criteria {
-	if len(this.discriminators) > 0 {
-		criterias := make([]*Criteria, len(this.discriminators))
-		for k, v := range this.discriminators {
+func (t *Table) GetCriterias() []*Criteria {
+	if len(t.discriminators) > 0 {
+		criterias := make([]*Criteria, len(t.discriminators))
+		for k, v := range t.discriminators {
 			criterias[k] = v.Criteria()
 		}
 		return criterias

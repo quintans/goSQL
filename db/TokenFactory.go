@@ -1,6 +1,6 @@
 package db
 
-import ()
+import "github.com/quintans/faults"
 
 func Col(column *Column) *ColumnHolder {
 	return NewColumnHolder(column)
@@ -61,7 +61,9 @@ func Range(receiver, bottom, top interface{}) *Criteria {
 		return LesserOrMatch(receiver, top)
 	}
 
-	panic("Invalid Range Tokenization")
+	return &Criteria{
+		err: faults.New("invalid range tokenization"),
+	}
 }
 
 func ValueRange(bottom, top interface{}, value Tokener) *Criteria {

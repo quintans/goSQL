@@ -1,10 +1,10 @@
 package db
 
 import (
+	"github.com/quintans/faults"
 	coll "github.com/quintans/toolkit/collections"
 
 	"database/sql/driver"
-	"errors"
 	"reflect"
 	"time"
 )
@@ -28,9 +28,10 @@ type PostInserter interface {
 
 type Insert struct {
 	DmlCore
-	returnId        bool
-	autoKeyStrategy AutoKeyStrategy
-	HasKeyValue     bool
+	returnId    bool
+	HasKeyValue bool
+
+	err error
 }
 
 func NewInsert(db IDb, table *Table) *Insert {
@@ -47,56 +48,74 @@ func NewInsert(db IDb, table *Table) *Insert {
 	return this
 }
 
-func (this *Insert) Alias(alias string) *Insert {
-	this.alias(alias)
-	return this
+func (i *Insert) Alias(alias string) *Insert {
+	i.alias(alias)
+	return i
 }
 
 //Definies if the auto key should be retrieved.
 //Returning an Id could mean one more query execution.
 //It returns the Id by default.
-func (this *Insert) ReturnId(returnId bool) *Insert {
-	this.returnId = returnId
-	return this
+func (i *Insert) ReturnId(returnId bool) *Insert {
+	i.returnId = returnId
+	return i
 }
 
-func (this *Insert) Set(col *Column, value interface{}) *Insert {
-	this.DmlCore.set(col, value)
-	if this.GetTable().GetSingleKeyColumn() != nil && col.IsKey() {
-		this.HasKeyValue = (value != nil)
+func (i *Insert) Set(col *Column, value interface{}) *Insert {
+	if i.err != nil {
+		return i
 	}
-	return this
+	i.DmlCore.set(col, value)
+	if i.GetTable().GetSingleKeyColumn() != nil && col.IsKey() {
+		i.HasKeyValue = (value != nil)
+	}
+	return i
 }
 
-func (this *Insert) Columns(columns ...*Column) *Insert {
-	this.cols = columns
-	return this
+func (i *Insert) Columns(columns ...*Column) *Insert {
+	if i.err != nil {
+		return i
+	}
+
+	i.cols = columns
+	return i
 }
 
-func (this *Insert) Values(vals ...interface{}) *Insert {
+func (i *Insert) Values(vals ...interface{}) *Insert {
+	if i.err != nil {
+		return i
+	}
 	/*
 		allmost repeating DmlCore because I need to call this.Set
 	*/
-	if len(this.cols) == 0 {
-		panic("Column set is not yet defined!")
+	if len(i.cols) == 0 {
+		return &Insert{
+			err: faults.New("column set is empty"),
+		}
 	}
 
-	if len(this.cols) != len(vals) {
-		panic("The number of defined cols is diferent from the number of passed vals!")
+	if len(i.cols) != len(vals) {
+		return &Insert{
+			err: faults.Errorf("the number of defined columns (%d) is diferent from the number of passed values (%d)", len(i.cols), len(vals)),
+		}
 	}
 
-	for k, col := range this.cols {
-		this.Set(col, vals[k])
+	for k, col := range i.cols {
+		i.Set(col, vals[k])
 	}
 
-	return this
+	return i
 }
 
 // Loads sets all the columns of the table to matching bean property
 //
 // param instance: The instance to match
 // return this
-func (this *Insert) Submit(instance interface{}) (int64, error) {
+func (i *Insert) Submit(instance interface{}) (int64, error) {
+	if i.err != nil {
+		return 0, i.err
+	}
+
 	var invalid bool
 	typ := reflect.TypeOf(instance)
 	if typ.Kind() == reflect.Ptr {
@@ -109,20 +128,20 @@ func (this *Insert) Submit(instance interface{}) (int64, error) {
 	}
 
 	if invalid {
-		return 0, errors.New("The argument must be a struct pointer")
+		return 0, faults.New("The argument must be a struct pointer")
 	}
 
 	var mappings map[string]*EntityProperty
-	if typ == this.lastType {
-		mappings = this.lastMappings
+	if typ == i.lastType {
+		mappings = i.lastMappings
 	} else {
 		var err error
-		mappings, err = PopulateMapping("", typ, this.GetDb().GetTranslator())
+		mappings, err = PopulateMapping("", typ, i.GetDb().GetTranslator())
 		if err != nil {
 			return 0, err
 		}
-		this.lastMappings = mappings
-		this.lastType = typ
+		i.lastMappings = mappings
+		i.lastType = typ
 	}
 
 	elem := reflect.ValueOf(instance)
@@ -138,10 +157,10 @@ func (this *Insert) Submit(instance interface{}) (int64, error) {
 	useMarks := len(marks) > 0
 
 	var version int64 = 1
-	for e := this.table.GetColumns().Enumerator(); e.HasNext(); {
+	for e := i.table.GetColumns().Enumerator(); e.HasNext(); {
 		column := e.Next().(*Column)
 		if column.IsVersion() {
-			this.Set(column, version)
+			i.Set(column, version)
 		} else {
 			bp := mappings[column.GetAlias()]
 			if bp != nil {
@@ -153,7 +172,7 @@ func (this *Insert) Submit(instance interface{}) (int64, error) {
 						if err != nil {
 							return 0, err
 						}
-						this.Set(column, value)
+						i.Set(column, value)
 					} else {
 						val := v.Interface()
 						var value interface{}
@@ -168,7 +187,7 @@ func (this *Insert) Submit(instance interface{}) (int64, error) {
 							if err != nil {
 								return 0, err
 							}
-							this.Set(column, value)
+							i.Set(column, value)
 						default:
 							value, err = bp.ConvertToDb(val)
 							if err != nil {
@@ -179,9 +198,9 @@ func (this *Insert) Submit(instance interface{}) (int64, error) {
 							// to be included
 							if !column.IsKey() ||
 								value != reflect.Zero(reflect.TypeOf(value)).Interface() {
-								this.Set(column, value)
+								i.Set(column, value)
 							} else {
-								this.Set(column, nil)
+								i.Set(column, nil)
 							}
 						}
 					}
@@ -192,26 +211,26 @@ func (this *Insert) Submit(instance interface{}) (int64, error) {
 
 	// pre trigger
 	if t, isT := instance.(PreInserter); isT {
-		err := t.PreInsert(this.GetDb())
+		err := t.PreInsert(i.GetDb())
 		if err != nil {
 			return 0, err
 		}
 	}
 
-	key, err := this.Execute()
+	key, err := i.Execute()
 	if err != nil {
 		return 0, err
 	}
 
-	if !this.HasKeyValue {
-		column := this.table.GetSingleKeyColumn()
+	if !i.HasKeyValue {
+		column := i.table.GetSingleKeyColumn()
 		if column != nil {
 			bp := mappings[column.GetAlias()]
 			bp.Set(elem, reflect.ValueOf(&key))
 		}
 	}
 
-	column := this.table.GetVersionColumn()
+	column := i.table.GetVersionColumn()
 	if column != nil {
 		bp := mappings[column.GetAlias()]
 		if bp != nil {
@@ -221,7 +240,7 @@ func (this *Insert) Submit(instance interface{}) (int64, error) {
 
 	// post trigger
 	if t, isT := instance.(PostInserter); isT {
-		t.PostInsert(this.GetDb())
+		t.PostInsert(i.GetDb())
 	}
 
 	if isMarkable {
@@ -231,61 +250,64 @@ func (this *Insert) Submit(instance interface{}) (int64, error) {
 	return key, nil
 }
 
-func (this *Insert) getCachedSql() *RawSql {
-	if this.rawSQL == nil {
-		sql := this.db.GetTranslator().GetSqlForInsert(this)
-		this.rawSQL = ToRawSql(sql, this.db.GetTranslator())
+func (i *Insert) getCachedSql() *RawSql {
+	if i.rawSQL == nil {
+		sql := i.db.GetTranslator().GetSqlForInsert(i)
+		i.rawSQL = ToRawSql(sql, i.db.GetTranslator())
 	}
-	return this.rawSQL
+	return i.rawSQL
 }
 
 // returns the last inserted id
-func (this *Insert) Execute() (int64, error) {
-	table := this.GetTable()
+func (i *Insert) Execute() (int64, error) {
+	if i.err != nil {
+		return 0, i.err
+	}
+
+	table := i.GetTable()
 	if table.PreInsertTrigger != nil {
-		table.PreInsertTrigger(this)
+		table.PreInsertTrigger(i)
 	}
 
 	var err error
 	var lastId int64
 	var now time.Time
-	strategy := this.db.GetTranslator().GetAutoKeyStrategy()
-	singleKeyColumn := this.table.GetSingleKeyColumn()
+	strategy := i.db.GetTranslator().GetAutoKeyStrategy()
+	singleKeyColumn := i.table.GetSingleKeyColumn()
+
+	rsql := i.getCachedSql()
+	i.debugSQL(rsql.OriSql, 1)
+	now = time.Now()
+	params, err := rsql.BuildValues(i.parameters)
+	if err != nil {
+		return 0, err
+	}
+
 	switch strategy {
 	case AUTOKEY_BEFORE:
-		if this.returnId && !this.HasKeyValue && singleKeyColumn != nil {
-			if lastId, err = this.getAutoNumber(singleKeyColumn); err != nil {
+		if i.returnId && !i.HasKeyValue && singleKeyColumn != nil {
+			if lastId, err = i.getAutoNumber(singleKeyColumn); err != nil {
 				return 0, err
 			}
-			this.Set(singleKeyColumn, lastId)
+			i.Set(singleKeyColumn, lastId)
 		}
-		rsql := this.getCachedSql()
-		this.debugSQL(rsql.OriSql, 1)
-		now = time.Now()
-		_, err = this.dba.Insert(rsql.Sql, rsql.BuildValues(this.parameters)...)
-		this.debugTime(now, 1)
+		_, err = i.dba.Insert(rsql.Sql, params...)
+		i.debugTime(now, 1)
 	case AUTOKEY_RETURNING:
-		rsql := this.getCachedSql()
-		this.debugSQL(rsql.OriSql, 1)
-		now = time.Now()
-		if this.HasKeyValue || singleKeyColumn == nil {
-			_, err = this.dba.Insert(rsql.Sql, rsql.BuildValues(this.parameters)...)
+		if i.HasKeyValue || singleKeyColumn == nil {
+			_, err = i.dba.Insert(rsql.Sql, params...)
 		} else {
-			params := rsql.BuildValues(this.parameters)
-			lastId, err = this.dba.InsertReturning(rsql.Sql, params...)
+			lastId, err = i.dba.InsertReturning(rsql.Sql, params...)
 		}
-		this.debugTime(now, 1)
+		i.debugTime(now, 1)
 	case AUTOKEY_AFTER:
-		rsql := this.getCachedSql()
-		this.debugSQL(rsql.OriSql, 1)
-		now = time.Now()
-		_, err = this.dba.Insert(rsql.Sql, rsql.BuildValues(this.parameters)...)
+		_, err = i.dba.Insert(rsql.Sql, params...)
 		if err != nil {
 			return 0, err
 		}
-		this.debugTime(now, 1)
-		if this.returnId && !this.HasKeyValue && singleKeyColumn != nil {
-			if lastId, err = this.getAutoNumber(singleKeyColumn); err != nil {
+		i.debugTime(now, 1)
+		if i.returnId && !i.HasKeyValue && singleKeyColumn != nil {
+			if lastId, err = i.getAutoNumber(singleKeyColumn); err != nil {
 				return 0, err
 			}
 		}
@@ -295,16 +317,16 @@ func (this *Insert) Execute() (int64, error) {
 	return lastId, err
 }
 
-func (this *Insert) getAutoNumber(column *Column) (int64, error) {
-	sql := this.db.GetTranslator().GetAutoNumberQuery(column)
+func (i *Insert) getAutoNumber(column *Column) (int64, error) {
+	sql := i.db.GetTranslator().GetAutoNumberQuery(column)
 	if sql == "" {
-		return 0, errors.New("Auto Number Query is undefined")
+		return 0, faults.New("auto Number Query is undefined")
 	}
 	var id int64
-	this.debugSQL(sql, 2)
+	i.debugSQL(sql, 2)
 	now := time.Now()
-	_, err := this.dba.QueryRow(sql, []interface{}{}, &id)
-	this.debugTime(now, 2)
+	_, err := i.dba.QueryRow(sql, []interface{}{}, &id)
+	i.debugTime(now, 2)
 	if err != nil {
 		return 0, err
 	}

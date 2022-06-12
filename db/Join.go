@@ -1,7 +1,5 @@
 package db
 
-import ()
-
 type PathElement struct {
 	Base           *Association
 	Derived        *Association
@@ -19,25 +17,23 @@ type Join struct {
 
 func NewJoin(associations []*PathElement, fetch bool) *Join {
 	this := new(Join)
-	length := len(associations)
-	this.associations = make([]*PathElement, length, length)
+	this.associations = make([]*PathElement, len(associations))
 	copy(this.associations, associations)
 	this.fetch = fetch
 	return this
 }
 
-func (this Join) IsFetch() bool {
-	return this.fetch
+func (j Join) IsFetch() bool {
+	return j.fetch
 }
 
-func (this Join) GetPathElements() []*PathElement {
-	return this.associations
+func (j Join) GetPathElements() []*PathElement {
+	return j.associations
 }
 
-func (this Join) GetAssociations() []*Association {
-	length := len(this.associations)
-	derived := make([]*Association, length, length)
-	for i, pe := range this.associations {
+func (j Join) GetAssociations() []*Association {
+	derived := make([]*Association, len(j.associations))
+	for i, pe := range j.associations {
 		derived[i] = pe.Derived
 	}
 	return derived

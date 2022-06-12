@@ -25,23 +25,23 @@ func NewAliasBag(prefix string) *AliasBag {
 	return ab
 }
 
-func (this *AliasBag) SetAlias(fk *Association, alias string) {
-	this.bag.Put(fk, alias)
+func (a *AliasBag) SetAlias(fk *Association, alias string) {
+	a.bag.Put(fk, alias)
 }
 
-func (this *AliasBag) GetAlias(fk *Association) string {
-	alias, ok := this.bag.Get(fk)
+func (a *AliasBag) GetAlias(fk *Association) string {
+	alias, ok := a.bag.Get(fk)
 	if !ok {
-		this.counter++
-		a := this.prefix + strconv.Itoa(this.counter)
-		this.bag.Put(fk, a)
-		return a
+		a.counter++
+		s := a.prefix + strconv.Itoa(a.counter)
+		a.bag.Put(fk, s)
+		return s
 	}
 
 	return alias.(string)
 }
 
-func (this *AliasBag) Has(fk *Association) bool {
-	_, ok := this.bag.Get(fk)
+func (a *AliasBag) Has(fk *Association) bool {
+	_, ok := a.bag.Get(fk)
 	return ok
 }

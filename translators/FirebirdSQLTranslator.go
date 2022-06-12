@@ -1,9 +1,10 @@
 package translators
 
 import (
+	"strings"
+
 	"github.com/quintans/goSQL/db"
 	tk "github.com/quintans/toolkit"
-	"strings"
 )
 
 type FirebirdSQLTranslator struct {
@@ -23,26 +24,26 @@ func NewFirebirdSQLTranslator() *FirebirdSQLTranslator {
 	return this
 }
 
-func (this *FirebirdSQLTranslator) GetAutoKeyStrategy() db.AutoKeyStrategy {
+func (f *FirebirdSQLTranslator) GetAutoKeyStrategy() db.AutoKeyStrategy {
 	return db.AUTOKEY_BEFORE
 }
 
-func (this *FirebirdSQLTranslator) GetAutoNumberQuery(column *db.Column) string {
+func (f *FirebirdSQLTranslator) GetAutoNumberQuery(column *db.Column) string {
 	return "select GEN_ID(" + column.GetTable().GetName() + "_GEN, 1) from RDB$DATABASE"
 }
 
 // INSERT
 // 2013-06-15: available odbc drivers do not implement RETURNING
 
-func (this *FirebirdSQLTranslator) TableName(table *db.Table) string {
+func (f *FirebirdSQLTranslator) TableName(table *db.Table) string {
 	return "\"" + strings.ToUpper(table.GetName()) + "\""
 }
 
-func (this *FirebirdSQLTranslator) ColumnName(column *db.Column) string {
+func (f *FirebirdSQLTranslator) ColumnName(column *db.Column) string {
 	return "\"" + strings.ToUpper(column.GetName()) + "\""
 }
 
-func (this *FirebirdSQLTranslator) PaginateSQL(query *db.Query, sql string) string {
+func (f *FirebirdSQLTranslator) PaginateSQL(query *db.Query, sql string) string {
 	sb := tk.NewStrBuffer()
 	if query.GetLimit() > 0 {
 		sb.Add(sql, " ROWS ")

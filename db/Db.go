@@ -3,9 +3,9 @@ package db
 import (
 	"reflect"
 
+	"github.com/quintans/faults"
 	"github.com/quintans/goSQL/dbx"
-	. "github.com/quintans/toolkit/ext"
-	"github.com/quintans/toolkit/faults"
+	"github.com/quintans/toolkit/ext"
 	"github.com/quintans/toolkit/log"
 )
 
@@ -35,19 +35,19 @@ type Marker struct {
 
 var _ Markable = &Marker{}
 
-func (this *Marker) Mark(mark string) {
-	if this.changes == nil {
-		this.changes = make(map[string]bool)
+func (m *Marker) Mark(mark string) {
+	if m.changes == nil {
+		m.changes = make(map[string]bool)
 	}
-	this.changes[mark] = true
+	m.changes[mark] = true
 }
 
-func (this *Marker) Marks() map[string]bool {
-	return this.changes
+func (m *Marker) Marks() map[string]bool {
+	return m.changes
 }
 
-func (this *Marker) Unmark() {
-	this.changes = nil
+func (m *Marker) Unmark() {
+	m.changes = nil
 }
 
 type TableNamer interface {
@@ -94,32 +94,32 @@ type Db struct {
 	attributes map[string]interface{}
 }
 
-func (this *Db) GetTranslator() Translator {
-	return this.Translator
+func (d *Db) GetTranslator() Translator {
+	return d.Translator
 }
 
-func (this *Db) GetConnection() dbx.IConnection {
-	return this.Connection
-}
-
-// the idea is to centralize the query creation so that future customization could be made
-func (this *Db) Query(table *Table) *Query {
-	return NewQuery(this, table)
+func (d *Db) GetConnection() dbx.IConnection {
+	return d.Connection
 }
 
 // the idea is to centralize the query creation so that future customization could be made
-func (this *Db) Insert(table *Table) *Insert {
-	return NewInsert(this, table)
+func (d *Db) Query(table *Table) *Query {
+	return NewQuery(d, table)
 }
 
 // the idea is to centralize the query creation so that future customization could be made
-func (this *Db) Delete(table *Table) *Delete {
-	return NewDelete(this, table)
+func (d *Db) Insert(table *Table) *Insert {
+	return NewInsert(d, table)
 }
 
 // the idea is to centralize the query creation so that future customization could be made
-func (this *Db) Update(table *Table) *Update {
-	return NewUpdate(this, table)
+func (d *Db) Delete(table *Table) *Delete {
+	return NewDelete(d, table)
+}
+
+// the idea is to centralize the query creation so that future customization could be made
+func (d *Db) Update(table *Table) *Update {
+	return NewUpdate(d, table)
 }
 
 // finds the registered table for the passed struct
@@ -139,18 +139,18 @@ func structName(instance interface{}) (*Table, reflect.Type, error) {
 	var tab interface{}
 	var ok bool
 	if t, isT := instance.(TableNamer); isT {
-		tab, ok = Tables.Get(Str(t.TableName()))
+		tab, ok = Tables.Get(ext.Str(t.TableName()))
 		if !ok {
-			return nil, nil, faults.New("There is no table mapped to TableName %s", t.TableName())
+			return nil, nil, faults.Errorf("There is no table mapped to TableName %s", t.TableName())
 		}
 	} else {
-		tab, ok = Tables.Get(Str(typ.Name()))
+		tab, ok = Tables.Get(ext.Str(typ.Name()))
 		if !ok {
 			// tries to find using also the strcut package.
 			// The package correspondes to the database schema
-			tab, ok = Tables.Get(Str(typ.PkgPath() + "." + typ.Name()))
+			tab, ok = Tables.Get(ext.Str(typ.PkgPath() + "." + typ.Name()))
 			if !ok {
-				return nil, nil, faults.New("There is no table mapped to Struct Type %s", typ.Name())
+				return nil, nil, faults.Errorf("There is no table mapped to Struct Type %s", typ.Name())
 			}
 		}
 	}
@@ -158,13 +158,13 @@ func structName(instance interface{}) (*Table, reflect.Type, error) {
 	return tab.(*Table), typ, nil
 }
 
-func (this *Db) Create(instance interface{}) error {
+func (d *Db) Create(instance interface{}) error {
 	table, _, err := structName(instance)
 	if err != nil {
 		return err
 	}
 
-	var dml = this.Overrider.Insert(table)
+	var dml = d.Overrider.Insert(table)
 
 	_, err = dml.Submit(instance)
 	return err
@@ -172,8 +172,8 @@ func (this *Db) Create(instance interface{}) error {
 
 // struct field with `sql:"omit"` should be ignored if value is zero in an update.
 // in a Retrieve, this field with this tag is also ignored
-func (this *Db) acceptColumn(table *Table, t reflect.Type, handler func(*Column)) error {
-	mappings, err := PopulateMapping("", t, this.GetTranslator())
+func (d *Db) acceptColumn(table *Table, t reflect.Type, handler func(*Column)) error {
+	mappings, err := PopulateMapping("", t, d.GetTranslator())
 	if err != nil {
 		return err
 	}
@@ -190,14 +190,14 @@ func (this *Db) acceptColumn(table *Table, t reflect.Type, handler func(*Column)
 	return nil
 }
 
-func (this *Db) Retrieve(instance interface{}, keys ...interface{}) (bool, error) {
+func (d *Db) Retrieve(instance interface{}, keys ...interface{}) (bool, error) {
 	table, t, err := structName(instance)
 	if err != nil {
 		return false, err
 	}
 
-	var dml = this.Overrider.Query(table)
-	if err := this.acceptColumn(table, t, func(c *Column) {
+	var dml = d.Overrider.Query(table)
+	if err := d.acceptColumn(table, t, func(c *Column) {
 		dml.Column(c)
 	}); err != nil {
 		return false, err
@@ -236,12 +236,12 @@ func acceptField(omit bool, v interface{}) bool {
 	return !omit || !isZero(v)
 }
 
-func (this *Db) buildCriteria(table *Table, example interface{}) ([]*Criteria, error) {
+func (d *Db) buildCriteria(table *Table, example interface{}) ([]*Criteria, error) {
 	criterias := make([]*Criteria, 0)
 
 	s := reflect.ValueOf(example)
 	t := reflect.TypeOf(example)
-	mappings, err := PopulateMapping("", t, this.GetTranslator())
+	mappings, err := PopulateMapping("", t, d.GetTranslator())
 	if err != nil {
 		return nil, err
 	}
@@ -259,20 +259,20 @@ func (this *Db) buildCriteria(table *Table, example interface{}) ([]*Criteria, e
 	return criterias, nil
 }
 
-func (this *Db) find(instance interface{}, example interface{}) (*Query, error) {
+func (d *Db) find(instance interface{}, example interface{}) (*Query, error) {
 	table, t, err := structName(instance)
 	if err != nil {
 		return nil, err
 	}
 
-	query := this.Overrider.Query(table)
-	if err := this.acceptColumn(table, t, func(c *Column) {
+	query := d.Overrider.Query(table)
+	if err := d.acceptColumn(table, t, func(c *Column) {
 		query.Column(c)
 	}); err != nil {
 		return nil, err
 	}
 
-	criterias, err := this.buildCriteria(table, example)
+	criterias, err := d.buildCriteria(table, example)
 	if err != nil {
 		return nil, err
 	}
@@ -283,8 +283,8 @@ func (this *Db) find(instance interface{}, example interface{}) (*Query, error) 
 	return query, nil
 }
 
-func (this *Db) FindFirst(instance interface{}, example interface{}) (bool, error) {
-	query, err := this.find(instance, example)
+func (d *Db) FindFirst(instance interface{}, example interface{}) (bool, error) {
+	query, err := d.find(instance, example)
 	if err != nil {
 		return false, err
 	}
@@ -292,34 +292,34 @@ func (this *Db) FindFirst(instance interface{}, example interface{}) (bool, erro
 		SelectTo(instance)
 }
 
-func (this *Db) FindAll(instance interface{}, example interface{}) error {
-	query, err := this.find(instance, example)
+func (d *Db) FindAll(instance interface{}, example interface{}) error {
+	query, err := d.find(instance, example)
 	if err != nil {
 		return err
 	}
 	return query.List(instance)
 }
 
-func (this *Db) Modify(instance interface{}) (bool, error) {
+func (d *Db) Modify(instance interface{}) (bool, error) {
 	table, _, err := structName(instance)
 	if err != nil {
 		return false, err
 	}
 
-	var dml = this.Overrider.Update(table)
+	var dml = d.Overrider.Update(table)
 
 	var key int64
 	key, err = dml.Submit(instance)
 	return key != 0, err
 }
 
-func (this *Db) Remove(instance interface{}) (bool, error) {
+func (d *Db) Remove(instance interface{}) (bool, error) {
 	table, _, err := structName(instance)
 	if err != nil {
 		return false, err
 	}
 
-	var dml = this.Overrider.Delete(table)
+	var dml = d.Overrider.Delete(table)
 
 	var deleted int64
 	deleted, err = dml.Submit(instance)
@@ -327,14 +327,14 @@ func (this *Db) Remove(instance interface{}) (bool, error) {
 }
 
 // removes all that match the criteria defined by the non zero values by the struct.
-func (this *Db) RemoveAll(instance interface{}) (int64, error) {
+func (d *Db) RemoveAll(instance interface{}) (int64, error) {
 	table, _, err := structName(instance)
 	if err != nil {
 		return 0, err
 	}
 
-	var dml = this.Overrider.Delete(table)
-	criterias, err := this.buildCriteria(table, instance)
+	var dml = d.Overrider.Delete(table)
+	criterias, err := d.buildCriteria(table, instance)
 	if err != nil {
 		return 0, err
 	}
@@ -351,7 +351,7 @@ func (this *Db) RemoveAll(instance interface{}) (int64, error) {
 //
 //If version is nil or zero, an insert is issue, otherwise an update.
 //If there is no version column it returns an error.
-func (this *Db) Save(instance interface{}) (bool, error) {
+func (d *Db) Save(instance interface{}) (bool, error) {
 	table, _, err := structName(instance)
 	if err != nil {
 		return false, err
@@ -359,7 +359,7 @@ func (this *Db) Save(instance interface{}) (bool, error) {
 
 	verColumn := table.GetVersionColumn()
 	if verColumn == nil {
-		return false, faults.New("The mapped table %s, must have a mapped version column.", table.GetName())
+		return false, faults.Errorf("The mapped table %s, must have a mapped version column.", table.GetName())
 	}
 
 	// find column
@@ -382,25 +382,25 @@ func (this *Db) Save(instance interface{}) (bool, error) {
 	ver := v.Int()
 
 	if ver == 0 {
-		k, err := this.Overrider.Insert(table).Submit(instance)
+		k, err := d.Overrider.Insert(table).Submit(instance)
 		return k != 0, err
 	} else {
-		k, err := this.Overrider.Update(table).Submit(instance)
+		k, err := d.Overrider.Update(table).Submit(instance)
 		return k != 0, err
 	}
 }
 
-func (this *Db) GetAttribute(key string) (interface{}, bool) {
-	if this.attributes == nil {
+func (d *Db) GetAttribute(key string) (interface{}, bool) {
+	if d.attributes == nil {
 		return nil, false
 	}
-	v, ok := this.attributes[key]
+	v, ok := d.attributes[key]
 	return v, ok
 }
 
-func (this *Db) SetAttribute(key string, value interface{}) {
-	if this.attributes == nil {
-		this.attributes = make(map[string]interface{})
+func (d *Db) SetAttribute(key string, value interface{}) {
+	if d.attributes == nil {
+		d.attributes = make(map[string]interface{})
 	}
-	this.attributes[key] = value
+	d.attributes[key] = value
 }

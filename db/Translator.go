@@ -35,7 +35,7 @@ type Translator interface {
 	GetAutoNumberQuery(column *Column) string
 	//	GetMaxTableChars() int
 	PaginateSQL(query *Query, sql string) string
-	Translate(dmlType DmlType, token Tokener) string
+	Translate(dmlType DmlType, token Tokener) (string, error)
 	TableName(table *Table) string
 	ColumnName(column *Column) string
 	ColumnAlias(token Tokener, position int) string

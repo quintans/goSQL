@@ -17,21 +17,21 @@ type MyTx struct {
 }
 
 // The implementor of Prepare should cache the prepared statements
-func (this *MyTx) Prepare(query string) (*sql.Stmt, error) {
+func (t *MyTx) Prepare(query string) (*sql.Stmt, error) {
 	var err error
 	var stmt *sql.Stmt
-	if this.stmtCache == nil {
-		stmt, err = this.Tx.Prepare(query)
+	if t.stmtCache == nil {
+		stmt, err = t.Tx.Prepare(query)
 	} else {
-		s, _ := this.stmtCache.GetIfPresent(query)
+		s, _ := t.stmtCache.GetIfPresent(query)
 		stmt, _ = s.(*sql.Stmt)
 		if stmt == nil {
-			stmt, err = this.Tx.Prepare(query)
+			stmt, err = t.Tx.Prepare(query)
 			if err == nil {
-				this.stmtCache.Put(query, stmt)
+				t.stmtCache.Put(query, stmt)
 			}
 		} else {
-			stmt = this.Tx.Stmt(stmt)
+			stmt = t.Tx.Stmt(stmt)
 		}
 	}
 	return stmt, err
@@ -43,7 +43,7 @@ type NoTx struct {
 }
 
 // The implementor of Prepare should cache the prepared statements
-func (this *NoTx) Prepare(query string) (*sql.Stmt, error) {
+func (t *NoTx) Prepare(query string) (*sql.Stmt, error) {
 	// 6.12.2013
 	// At the moment there is no way to reassign a statement to another connection,
 	// so this code is commented
@@ -67,7 +67,7 @@ func (this *NoTx) Prepare(query string) (*sql.Stmt, error) {
 		return stmt, err
 	*/
 
-	return this.DB.Prepare(query)
+	return t.DB.Prepare(query)
 }
 
 type ITransactionManager interface {
@@ -99,16 +99,16 @@ func NewTransactionManager(database *sql.DB, dbFactory func(dbx.IConnection) IDb
 	return this
 }
 
-func (this *TransactionManager) With(db IDb) ITransactionManager {
+func (t *TransactionManager) With(db IDb) ITransactionManager {
 	if db == nil {
-		return this
+		return t
 	}
 	return HollowTransactionManager{db}
 }
 
-func (this *TransactionManager) Transaction(handler func(db IDb) error) error {
+func (t *TransactionManager) Transaction(handler func(db IDb) error) error {
 	logger.Debugf("Transaction begin")
-	tx, err := this.database.Begin()
+	tx, err := t.database.Begin()
 
 	if err != nil {
 		return err
@@ -124,11 +124,11 @@ func (this *TransactionManager) Transaction(handler func(db IDb) error) error {
 
 	var myTx = new(MyTx)
 	myTx.Tx = tx
-	myTx.stmtCache = this.stmtCache
+	myTx.stmtCache = t.stmtCache
 
 	inTx := new(bool)
 	*inTx = true
-	err = handler(this.dbFactory(myTx))
+	err = handler(t.dbFactory(myTx))
 	*inTx = false
 	if err == nil {
 		logger.Debug("Transaction end: COMMIT")
@@ -140,7 +140,7 @@ func (this *TransactionManager) Transaction(handler func(db IDb) error) error {
 	return err
 }
 
-func (this *TransactionManager) NoTransaction(handler func(db IDb) error) error {
+func (t *TransactionManager) NoTransaction(handler func(db IDb) error) error {
 	logger.Debugf("TransactionLESS Begin")
 	defer func() {
 		err := recover()
@@ -151,12 +151,12 @@ func (this *TransactionManager) NoTransaction(handler func(db IDb) error) error 
 	}()
 
 	var myTx = new(NoTx)
-	myTx.DB = this.database
-	myTx.stmtCache = this.stmtCache
+	myTx.DB = t.database
+	myTx.stmtCache = t.stmtCache
 
 	inTx := new(bool)
 	*inTx = true
-	err := handler(this.dbFactory(myTx))
+	err := handler(t.dbFactory(myTx))
 	*inTx = false
 	logger.Debugf("TransactionLESS End")
 	return err
@@ -169,8 +169,8 @@ func (this TransactionManager) WithoutTransaction(handler func(db IDb) error) er
 }
 */
 
-func (this *TransactionManager) Store() IDb {
-	return this.dbFactory(this.database)
+func (t *TransactionManager) Store() IDb {
+	return t.dbFactory(t.database)
 }
 
 var _ ITransactionManager = HollowTransactionManager{}
@@ -179,18 +179,18 @@ type HollowTransactionManager struct {
 	db IDb
 }
 
-func (this HollowTransactionManager) With(db IDb) ITransactionManager {
+func (t HollowTransactionManager) With(db IDb) ITransactionManager {
 	return HollowTransactionManager{db}
 }
 
-func (this HollowTransactionManager) Transaction(handler func(db IDb) error) error {
-	return handler(this.db)
+func (t HollowTransactionManager) Transaction(handler func(db IDb) error) error {
+	return handler(t.db)
 }
 
-func (this HollowTransactionManager) NoTransaction(handler func(db IDb) error) error {
-	return handler(this.db)
+func (t HollowTransactionManager) NoTransaction(handler func(db IDb) error) error {
+	return handler(t.db)
 }
 
-func (this HollowTransactionManager) Store() IDb {
-	return this.db
+func (t HollowTransactionManager) Store() IDb {
+	return t.db
 }

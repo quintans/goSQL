@@ -22,32 +22,32 @@ func NewColumnHolder(column *Column) *ColumnHolder {
 	return this
 }
 
-func (this *ColumnHolder) GetAlias() string {
-	if this.Alias != "" {
-		return this.Alias
+func (c *ColumnHolder) GetAlias() string {
+	if c.Alias != "" {
+		return c.Alias
 	} else {
-		return this.column.GetAlias()
+		return c.column.GetAlias()
 	}
 }
 
-func (this *ColumnHolder) As(alias string) *ColumnHolder {
-	this.Alias = alias
-	return this
+func (c *ColumnHolder) As(alias string) *ColumnHolder {
+	c.Alias = alias
+	return c
 }
 
-func (this *ColumnHolder) For(tableAlias string) *ColumnHolder {
-	this.tableAlias = tableAlias
-	return this
+func (c *ColumnHolder) For(tableAlias string) *ColumnHolder {
+	c.tableAlias = tableAlias
+	return c
 }
 
-func (this *ColumnHolder) SetTableAlias(tableAlias string) {
-	if this.tableAlias == "" {
-		this.tableAlias = tableAlias
+func (c *ColumnHolder) SetTableAlias(tableAlias string) {
+	if c.tableAlias == "" {
+		c.tableAlias = tableAlias
 	}
 }
 
-func (this *ColumnHolder) GetColumn() *Column {
-	return this.column
+func (c *ColumnHolder) GetColumn() *Column {
+	return c.column
 }
 
 /*
@@ -66,22 +66,19 @@ func (this *ColumnHolder) String() string {
 }
 */
 
-func (this *ColumnHolder) Clone() interface{} {
-	return NewColumnHolder(this.column).As(this.Alias).For(this.tableAlias)
+func (c *ColumnHolder) Clone() interface{} {
+	return NewColumnHolder(c.column).As(c.Alias).For(c.tableAlias)
 }
 
-func (this *ColumnHolder) Equals(o interface{}) bool {
-	if this == o {
-		return true
-	}
-	return false
+func (c *ColumnHolder) Equals(o interface{}) bool {
+	return c == o
 }
 
-func (this *ColumnHolder) HashCode() int {
-	if this.hash == 0 {
-		result := tk.HashType(tk.HASH_SEED, this)
-		this.hash = result
+func (c *ColumnHolder) HashCode() int {
+	if c.hash == 0 {
+		result := tk.HashType(tk.HASH_SEED, c)
+		c.hash = result
 	}
 
-	return this.hash
+	return c.hash
 }

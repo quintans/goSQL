@@ -2,7 +2,7 @@ package db
 
 import (
 	coll "github.com/quintans/toolkit/collections"
-	. "github.com/quintans/toolkit/ext"
+	"github.com/quintans/toolkit/ext"
 )
 
 const FK_NAV_SEP = "."
@@ -11,5 +11,5 @@ const FK_NAV_SEP = "."
 var Tables = coll.NewLinkedHashMap()
 
 func AddEntity(table *Table) {
-	Tables.Put(Str(table.Alias), table)
+	Tables.Put(ext.Str(table.Alias), table)
 }

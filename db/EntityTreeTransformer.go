@@ -1,10 +1,10 @@
 package db
 
 import (
+	"github.com/quintans/faults"
 	tk "github.com/quintans/toolkit"
 	coll "github.com/quintans/toolkit/collections"
-	. "github.com/quintans/toolkit/ext"
-	"github.com/quintans/toolkit/faults"
+	"github.com/quintans/toolkit/ext"
 
 	"database/sql"
 	"reflect"
@@ -42,90 +42,88 @@ func NewEntityTreeFactoryTransformer(query *Query, typ reflect.Type, returner fu
 	return this
 }
 
-func (this *EntityTreeTransformer) BeforeAll() coll.Collection {
-	this.crawler = new(Crawler)
-	this.crawler.Prepare(this.Query)
+func (e *EntityTreeTransformer) BeforeAll() coll.Collection {
+	e.crawler = new(Crawler)
+	e.crawler.Prepare(e.Query)
 
-	if this.reuse {
+	if e.reuse {
 		return coll.NewLinkedHashSet()
 	}
 	return coll.NewArrayList()
 }
 
-func (this *EntityTreeTransformer) OnTransformation(result coll.Collection, instance interface{}) {
-	this.crawler.Rewind()
-	if instance != nil && (!this.reuse || !result.Contains(instance)) {
+func (e *EntityTreeTransformer) OnTransformation(result coll.Collection, instance interface{}) {
+	e.crawler.Rewind()
+	if instance != nil && (!e.reuse || !result.Contains(instance)) {
 		result.Add(instance)
 	}
 }
 
-func (this *EntityTreeTransformer) AfterAll(result coll.Collection) {
-	this.crawler.Dispose()
-	this.crawler = nil
+func (e *EntityTreeTransformer) AfterAll(result coll.Collection) {
+	e.crawler.Dispose()
+	e.crawler = nil
 }
 
-func (this *EntityTreeTransformer) Transform(rows *sql.Rows) (interface{}, error) {
-	val := this.Factory()
-	instance := val.Interface()
+func (e *EntityTreeTransformer) Transform(rows *sql.Rows) (interface{}, error) {
+	val := e.Factory()
 
-	alias := this.Query.GetTableAlias()
-	if this.TemplateData == nil {
+	alias := e.Query.GetTableAlias()
+	if e.TemplateData == nil {
 		// creates the array with all the types returned by the query
 		// using the entity properties as reference for instantiating the types
 		cols, err := rows.Columns()
 		if err != nil {
 			return nil, err
 		}
-		length := len(cols)
-		this.TemplateData = make([]interface{}, length, length)
+		e.TemplateData = make([]interface{}, len(cols))
 		// set default for unused columns, in case of a projection of a result
 		// with more columns than the attributes of the destination struct
-		for i := 0; i < len(this.TemplateData); i++ {
-			this.TemplateData[i] = &Any{}
+		for i := 0; i < len(e.TemplateData); i++ {
+			e.TemplateData[i] = &ext.Any{}
 		}
 
 		// instanciate all target types
-		this.InitFullRowData(this.TemplateData, val.Type(), alias)
-		this.crawler.Rewind()
+		e.InitFullRowData(e.TemplateData, val.Type(), alias)
+		e.crawler.Rewind()
 	}
 	// makes a copy
-	rowData := make([]interface{}, len(this.TemplateData), cap(this.TemplateData))
-	copy(rowData, this.TemplateData)
+	rowData := make([]interface{}, len(e.TemplateData), cap(e.TemplateData))
+	copy(rowData, e.TemplateData)
 
 	// Scan result set
 	if err := rows.Scan(rowData...); err != nil {
 		return nil, err
 	}
 
-	instance, err := this.transformEntity(rowData, val, alias)
+	instance, err := e.transformEntity(rowData, val, alias)
 	if err != nil {
 		return nil, err
 	}
 
-	if this.Returner == nil {
+	if e.Returner == nil {
 		if H, isH := instance.(tk.Hasher); isH {
 			return H, nil
 		}
 	} else {
-		this.Returner(val)
+		e.Returner(val)
 	}
 
 	return nil, nil
 }
 
-func (this *EntityTreeTransformer) InitFullRowData(
+func (e *EntityTreeTransformer) InitFullRowData(
 	row []interface{},
 	typ reflect.Type,
 	alias string,
 ) error {
-	lastProps, err := this.getCachedProperties(alias, typ)
+	lastProps, err := e.getCachedProperties(alias, typ)
 	if err != nil {
 		return err
 	}
 	// instanciate all target types for the driving entity
-	this.Overrider.InitRowData(row, lastProps)
+	e.Overrider.InitRowData(row, lastProps)
 
-	fks := this.ForwardBranches()
+	fks := e.ForwardBranches()
 	if fks != nil {
 		var subType reflect.Type
 		for _, fk := range fks {
@@ -144,44 +142,44 @@ func (this *EntityTreeTransformer) InitFullRowData(
 					fkAlias = fk.GetAliasTo()
 				}
 
-				this.InitFullRowData(row, subType, fkAlias)
+				e.InitFullRowData(row, subType, fkAlias)
 			}
 		}
 	}
 	return nil
 }
 
-func (this *EntityTreeTransformer) transformEntity(
+func (e *EntityTreeTransformer) transformEntity(
 	row []interface{},
 	parent reflect.Value,
 	alias string,
 ) (interface{}, error) {
 	var valid bool
-	lastProps, err := this.getCachedProperties(alias, parent.Type())
+	lastProps, err := e.getCachedProperties(alias, parent.Type())
 	if err != nil {
 		return nil, err
 	}
 	entity := parent.Interface()
 	hasher, isHasher := entity.(tk.Hasher)
 	emptyBean := true
-	if isHasher && this.reuse {
+	if isHasher && e.reuse {
 		// for performance, loads only key, because it's sufficient for searching the cache
-		valid, err = this.LoadInstanceKeys(row, parent, lastProps, true)
+		valid, err = e.LoadInstanceKeys(row, parent, lastProps, true)
 		if err != nil {
 			return nil, err
 		} else if valid {
 			// searches the cache
-			b, _ := this.entities.Get(hasher)
+			b, _ := e.entities.Get(hasher)
 			// if found, use it
 			if b != nil {
 				hasher = b.(tk.Hasher)
 				parent = reflect.ValueOf(hasher)
 			} else {
-				valid, err = this.LoadInstanceKeys(row, parent, lastProps, false)
+				valid, err = e.LoadInstanceKeys(row, parent, lastProps, false)
 				if err != nil {
 					return nil, err
 				} else if valid {
-					this.entities.Put(hasher, hasher)
+					e.entities.Put(hasher, hasher)
 				} else {
 					hasher = nil
 				}
@@ -201,7 +199,7 @@ func (this *EntityTreeTransformer) transformEntity(
 				}
 			}
 			if noKey {
-				return nil, faults.New(
+				return nil, faults.Errorf(
 					"Key columns not found for %s."+
 						" When transforming to a object tree and reusing previous entities, "+
 						"the key columns must be declared in the select.",
@@ -211,19 +209,19 @@ func (this *EntityTreeTransformer) transformEntity(
 		}
 		emptyBean = false
 	} else {
-		valid, err = this.Overrider.ToEntity(row, parent, lastProps, &emptyBean)
+		valid, err = e.Overrider.ToEntity(row, parent, lastProps, &emptyBean)
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	if !valid {
-		this.ignoreRemaningBranch()
+		e.ignoreRemaningBranch()
 		return nil, nil
 	}
 
 	emptyAssoc := true
-	fks := this.ForwardBranches()
+	fks := e.ForwardBranches()
 	if fks != nil {
 		var subType reflect.Type
 		for _, fk := range fks {
@@ -247,7 +245,7 @@ func (this *EntityTreeTransformer) transformEntity(
 				} else {
 					childVal = reflect.Zero(subType)
 				}
-				child, err := this.transformEntity(row, childVal, fkAlias)
+				child, err := e.transformEntity(row, childVal, fkAlias)
 				if err != nil {
 					return nil, err
 				} else if child != nil {
@@ -259,7 +257,7 @@ func (this *EntityTreeTransformer) transformEntity(
 							sliceV = reflect.MakeSlice(bp.Type, 0, 10)
 						}
 
-						if !this.reuse || !tk.SliceContains(sliceV.Interface(), child) {
+						if !e.reuse || !tk.SliceContains(sliceV.Interface(), child) {
 							sliceV = reflect.Append(sliceV, childVal)
 						}
 
@@ -285,7 +283,7 @@ func (this *EntityTreeTransformer) transformEntity(
 	}
 }
 
-func (this *EntityTreeTransformer) DiscardIfKeyIsNull() bool {
+func (e *EntityTreeTransformer) DiscardIfKeyIsNull() bool {
 	return true
 }
 
@@ -302,7 +300,7 @@ func (this *EntityTreeTransformer) LoadEntityKeys(
 */
 
 // return true if the entity is valid
-func (this *EntityTreeTransformer) LoadInstanceKeys(
+func (e *EntityTreeTransformer) LoadInstanceKeys(
 	row []interface{},
 	ptr reflect.Value,
 	properties map[string]*EntityProperty,
@@ -335,15 +333,15 @@ func (this *EntityTreeTransformer) LoadInstanceKeys(
 	return !invalid, nil
 }
 
-func (this *EntityTreeTransformer) getCachedProperties(alias string, typ reflect.Type) (map[string]*EntityProperty, error) {
-	properties, ok := this.cachedEntityMappings[alias]
+func (e *EntityTreeTransformer) getCachedProperties(alias string, typ reflect.Type) (map[string]*EntityProperty, error) {
+	properties, ok := e.cachedEntityMappings[alias]
 	if !ok {
 		var err error
-		properties, err = this.Overrider.PopulateMapping(alias, typ)
+		properties, err = e.Overrider.PopulateMapping(alias, typ)
 		if err != nil {
 			return nil, err
 		}
-		this.cachedEntityMappings[alias] = properties
+		e.cachedEntityMappings[alias] = properties
 	}
 
 	return properties, nil
@@ -351,22 +349,20 @@ func (this *EntityTreeTransformer) getCachedProperties(alias string, typ reflect
 
 // return the list o current branches and moves forward to the next list
 // return: the current list of branches
-func (this *EntityTreeTransformer) ForwardBranches() []*Association {
-	assocs := this.crawler.GetBranches()
+func (e *EntityTreeTransformer) ForwardBranches() []*Association {
+	assocs := e.crawler.GetBranches()
 	var list []*Association
-	if assocs != nil {
-		for _, assoc := range assocs {
-			list = append(list, assoc.ForeignKey)
-		}
+	for _, assoc := range assocs {
+		list = append(list, assoc.ForeignKey)
 	}
-	this.crawler.Forward() // move to next branches
+	e.crawler.Forward() // move to next branches
 	return list
 }
 
-func (this *EntityTreeTransformer) ignoreRemaningBranch() {
-	assocs := this.crawler.GetBranches()
-	this.crawler.Forward() // move to next branches
+func (e *EntityTreeTransformer) ignoreRemaningBranch() {
+	assocs := e.crawler.GetBranches()
+	e.crawler.Forward() // move to next branches
 	if assocs != nil {
-		this.ignoreRemaningBranch()
+		e.ignoreRemaningBranch()
 	}
 }

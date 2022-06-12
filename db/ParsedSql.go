@@ -18,15 +18,15 @@ func NewParsedSql(sql string) *ParsedSql {
 }
 
 // Add a named parameter parsed from this SQL statement.
-// 
+//
 // param name: the name of the parameter
 // param startIndex: the start index in the original SQL String
 // param endIndex: the end index in the original SQL String
-func (this *ParsedSql) AddNamedParameter(name string, startIndex int, endIndex int) {
-	this.Names = append(this.Names, name)
-	this.Indexes = append(this.Indexes, []int{startIndex, endIndex})
+func (p *ParsedSql) AddNamedParameter(name string, startIndex int, endIndex int) {
+	p.Names = append(p.Names, name)
+	p.Indexes = append(p.Indexes, []int{startIndex, endIndex})
 }
 
-func (this ParsedSql) String() string {
-	return this.sql
+func (p ParsedSql) String() string {
+	return p.sql
 }

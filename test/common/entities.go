@@ -5,9 +5,9 @@ import (
 	"strconv"
 	"strings"
 
-	. "github.com/quintans/goSQL/db"
+	"github.com/quintans/goSQL/db"
 	tk "github.com/quintans/toolkit"
-	. "github.com/quintans/toolkit/ext"
+	"github.com/quintans/toolkit/ext"
 
 	"time"
 )
@@ -25,15 +25,15 @@ type PublisherSales struct {
 	PreviousYear float64
 }
 
-func (this *PublisherSales) String() string {
-	if this == nil {
+func (p *PublisherSales) String() string {
+	if p == nil {
 		return "<nil>"
 	}
 	sb := tk.NewStrBuffer()
-	sb.Add("{Id: ", this.Id)
-	sb.Add(", Name: ", this.Name)
-	sb.Add(", ThisYear: ", this.ThisYear)
-	sb.Add(", PreviousYear: ", this.PreviousYear)
+	sb.Add("{Id: ", p.Id)
+	sb.Add(", Name: ", p.Name)
+	sb.Add(", ThisYear: ", p.ThisYear)
+	sb.Add(", PreviousYear: ", p.PreviousYear)
 	sb.Add("}")
 	return sb.String()
 }
@@ -56,46 +56,46 @@ type Publisher struct {
 	Books []*Book
 }
 
-func (this *Publisher) PostInsert(store IDb) {
-	logger.Infof("===> PostInsert trigger for Publisher with Id %v", *this.Id)
+func (p *Publisher) PostInsert(store db.IDb) {
+	logger.Infof("===> PostInsert trigger for Publisher with Id %v", *p.Id)
 }
 
-func (this *Publisher) PostRetrieve(store IDb) {
-	logger.Infof("===> PostRetrieve trigger for %s", this.String())
+func (p *Publisher) PostRetrieve(store db.IDb) {
+	logger.Infof("===> PostRetrieve trigger for %s", p.String())
 }
 
-func (this *Publisher) String() string {
-	if this == nil {
+func (p *Publisher) String() string {
+	if p == nil {
 		return "<nil>"
 	}
 	sb := tk.NewStrBuffer()
-	sb.Add("{Id: ", this.Id, ", Version: ", this.Version)
-	sb.Add(", Name: ", this.Name)
-	sb.Add(", Books: ", this.Books)
+	sb.Add("{Id: ", p.Id, ", Version: ", p.Version)
+	sb.Add(", Name: ", p.Name)
+	sb.Add(", Books: ", p.Books)
 	sb.Add("}")
 	return sb.String()
 }
 
-func (this *Publisher) Equals(e interface{}) bool {
-	if this == e {
+func (p *Publisher) Equals(e interface{}) bool {
+	if p == e {
 		return true
 	}
 
 	switch t := e.(type) {
 	case *Publisher:
-		return this.Id != nil && t.Id != nil && *this.Id == *t.Id
+		return p.Id != nil && t.Id != nil && *p.Id == *t.Id
 	}
 	return false
 }
 
-func (this *Publisher) HashCode() int {
-	result := tk.HashType(tk.HASH_SEED, this)
-	result = tk.HashLong(result, DefInt64(this.Id, 0))
+func (p *Publisher) HashCode() int {
+	result := tk.HashType(tk.HASH_SEED, p)
+	result = tk.HashLong(result, ext.DefInt64(p.Id, 0))
 	return result
 }
 
 var (
-	PUBLISHER           = TABLE("PUBLISHER")
+	PUBLISHER           = db.TABLE("PUBLISHER")
 	PUBLISHER_C_ID      = PUBLISHER.KEY("ID")          // implicit map to field Id
 	PUBLISHER_C_VERSION = PUBLISHER.VERSION("VERSION") // implicit map to field Version
 	PUBLISHER_C_NAME    = PUBLISHER.COLUMN("NAME")     // implicit map to field Name
@@ -118,14 +118,14 @@ type BookBin struct {
 	Book      *Book
 }
 
-func (this *BookBin) String() string {
-	if this == nil {
+func (b *BookBin) String() string {
+	if b == nil {
 		return "<nil>"
 	}
 	sb := tk.NewStrBuffer()
-	sb.Add("{Id: ", this.Id, ", Version: ", this.Version)
+	sb.Add("{Id: ", b.Id, ", Version: ", b.Version)
 	sb.Add(", Hardcover: ")
-	if len(this.Hardcover) == 0 {
+	if len(b.Hardcover) == 0 {
 		sb.Add("<nil>")
 	} else {
 		sb.Add("[]byte")
@@ -134,26 +134,26 @@ func (this *BookBin) String() string {
 	return sb.String()
 }
 
-func (this *BookBin) Equals(e interface{}) bool {
-	if this == e {
+func (b *BookBin) Equals(e interface{}) bool {
+	if b == e {
 		return true
 	}
 
 	switch t := e.(type) {
 	case *BookBin:
-		return this.Id != nil && t.Id != nil && *this.Id == *t.Id
+		return b.Id != nil && t.Id != nil && *b.Id == *t.Id
 	}
 	return false
 }
 
-func (this *BookBin) HashCode() int {
-	result := tk.HashType(tk.HASH_SEED, this)
-	result = tk.HashLong(result, DefInt64(this.Id, 0))
+func (b *BookBin) HashCode() int {
+	result := tk.HashType(tk.HASH_SEED, b)
+	result = tk.HashLong(result, ext.DefInt64(b.Id, 0))
 	return result
 }
 
 var (
-	BOOK_BIN             = TABLE("BOOK_BIN")
+	BOOK_BIN             = db.TABLE("BOOK_BIN")
 	BOOK_BIN_C_ID        = BOOK_BIN.KEY("ID")
 	BOOK_BIN_C_VERSION   = BOOK_BIN.VERSION("VERSION")
 	BOOK_BIN_C_HARDCOVER = BOOK_BIN.COLUMN("HARDCOVER")
@@ -170,7 +170,7 @@ var (
 var _ tk.Hasher = &Book{}
 
 type Book struct {
-	Marker
+	db.Marker
 	EntityBase
 
 	Name        string
@@ -184,62 +184,62 @@ type Book struct {
 	Title *string
 }
 
-func (this *Book) SetName(name string) {
-	this.Name = name
-	this.Mark("Name")
+func (b *Book) SetName(name string) {
+	b.Name = name
+	b.Mark("Name")
 }
 
-func (this *Book) SetPrice(price float64) {
-	this.Price = price
-	this.Mark("Price")
+func (b *Book) SetPrice(price float64) {
+	b.Price = price
+	b.Mark("Price")
 }
 
-func (this *Book) SetPublished(published *time.Time) {
-	this.Published = published
-	this.Mark("Published")
+func (b *Book) SetPublished(published *time.Time) {
+	b.Published = published
+	b.Mark("Published")
 }
 
-func (this *Book) SetPublisherId(id *int64) {
-	this.PublisherId = id
-	this.Mark("PublisherId")
+func (b *Book) SetPublisherId(id *int64) {
+	b.PublisherId = id
+	b.Mark("PublisherId")
 }
 
-func (this *Book) String() string {
-	if this == nil {
+func (b *Book) String() string {
+	if b == nil {
 		return "nil"
 	}
 	sb := tk.NewStrBuffer()
-	sb.Add("{Id: ", this.Id, ", Version: ", this.Version)
-	sb.Add(", Name: ", this.Name)
-	sb.Add(", Price: ", this.Price)
-	sb.Add(", Published: ", this.Published)
-	sb.Add(", PublisherId: ", this.PublisherId)
-	sb.Add(", Publisher: ", this.Publisher)
-	sb.Add(", Title: ", this.Title)
+	sb.Add("{Id: ", b.Id, ", Version: ", b.Version)
+	sb.Add(", Name: ", b.Name)
+	sb.Add(", Price: ", b.Price)
+	sb.Add(", Published: ", b.Published)
+	sb.Add(", PublisherId: ", b.PublisherId)
+	sb.Add(", Publisher: ", b.Publisher)
+	sb.Add(", Title: ", b.Title)
 	sb.Add("}")
 	return sb.String()
 }
 
-func (this *Book) Equals(e interface{}) bool {
-	if this == e {
+func (b *Book) Equals(e interface{}) bool {
+	if b == e {
 		return true
 	}
 
 	switch t := e.(type) {
 	case *Book:
-		return this.Id != nil && t.Id != nil && *this.Id == *t.Id
+		return b.Id != nil && t.Id != nil && *b.Id == *t.Id
 	}
 	return false
 }
 
-func (this *Book) HashCode() int {
-	result := tk.HashType(tk.HASH_SEED, this)
-	result = tk.HashLong(result, DefInt64(this.Id, 0))
+func (b *Book) HashCode() int {
+	result := tk.HashType(tk.HASH_SEED, b)
+	result = tk.HashLong(result, ext.DefInt64(b.Id, 0))
 	return result
 }
 
 var (
-	BOOK                = TABLE("BOOK")
+	BOOK                = db.TABLE("BOOK")
 	BOOK_C_ID           = BOOK.KEY("ID")
 	BOOK_C_VERSION      = BOOK.VERSION("VERSION")
 	BOOK_C_NAME         = BOOK.COLUMN("NAME")
@@ -252,10 +252,10 @@ var (
 				TO(PUBLISHER_C_ID).
 				As("Publisher")
 
-	BOOK_A_AUTHORS = NewM2MAssociation(
+	BOOK_A_AUTHORS = db.NewM2MAssociation(
 		"Authors",
-		ASSOCIATE(BOOK_C_ID).WITH(AUTHOR_BOOK_C_BOOK_ID),
-		ASSOCIATE(AUTHOR_BOOK_C_AUTHOR_ID).WITH(AUTHOR_C_ID),
+		db.ASSOCIATE(BOOK_C_ID).WITH(AUTHOR_BOOK_C_BOOK_ID),
+		db.ASSOCIATE(AUTHOR_BOOK_C_AUTHOR_ID).WITH(AUTHOR_C_ID),
 	)
 
 	BOOK_A_BOOK_BIN = BOOK.
@@ -267,11 +267,11 @@ var (
 				ASSOCIATE(BOOK_C_ID).
 				TO(BOOK_I18N_C_BOOK_ID).
 				As("I18n").
-				With(BOOK_I18N_C_LANG, Param("lang"))
+				With(BOOK_I18N_C_LANG, db.Param("lang"))
 )
 
 var (
-	BOOK_I18N           = TABLE("BOOK_I18N")
+	BOOK_I18N           = db.TABLE("BOOK_I18N")
 	BOOK_I18N_C_ID      = BOOK_I18N.KEY("ID")
 	BOOK_I18N_C_VERSION = BOOK_I18N.VERSION("VERSION")
 	BOOK_I18N_C_BOOK_ID = BOOK_I18N.COLUMN("BOOK_ID")
@@ -287,7 +287,7 @@ type AuthorBook struct {
 }
 
 var (
-	AUTHOR_BOOK             = TABLE("AUTHOR_BOOK")
+	AUTHOR_BOOK             = db.TABLE("AUTHOR_BOOK")
 	AUTHOR_BOOK_C_AUTHOR_ID = AUTHOR_BOOK.KEY("AUTHOR_ID") // implicit map to field 'AuthorId'
 	AUTHOR_BOOK_C_BOOK_ID   = AUTHOR_BOOK.KEY("BOOK_ID")   // implicit map to field 'BookId'
 )
@@ -305,46 +305,46 @@ type Author struct {
 	Secret *string `sql:"omit"`
 }
 
-func (this *Author) String() string {
-	if this == nil {
+func (a *Author) String() string {
+	if a == nil {
 		return "<nil>"
 	}
 	sb := tk.NewStrBuffer()
-	sb.Add("{Id: ", this.Id, ", Version: ", this.Version)
-	sb.Add(", Name: ", this.Name)
+	sb.Add("{Id: ", a.Id, ", Version: ", a.Version)
+	sb.Add(", Name: ", a.Name)
 	sb.Add("}")
 	return sb.String()
 }
 
-func (this *Author) Equals(e interface{}) bool {
-	if this == e {
+func (a *Author) Equals(e interface{}) bool {
+	if a == e {
 		return true
 	}
 
 	switch t := e.(type) {
 	case *Author:
-		return this.Id != nil && t.Id != nil && *this.Id == *t.Id
+		return a.Id != nil && t.Id != nil && *a.Id == *t.Id
 	}
 	return false
 }
 
-func (this *Author) HashCode() int {
-	result := tk.HashType(tk.HASH_SEED, this)
-	result = tk.HashLong(result, DefInt64(this.Id, 0))
+func (a *Author) HashCode() int {
+	result := tk.HashType(tk.HASH_SEED, a)
+	result = tk.HashLong(result, ext.DefInt64(a.Id, 0))
 	return result
 }
 
 var (
-	AUTHOR           = TABLE("AUTHOR")
+	AUTHOR           = db.TABLE("AUTHOR")
 	AUTHOR_C_ID      = AUTHOR.KEY("ID")
 	AUTHOR_C_VERSION = AUTHOR.VERSION("VERSION")
 	AUTHOR_C_NAME    = AUTHOR.COLUMN("NAME")
 	AUTHOR_C_SECRET  = AUTHOR.COLUMN("SECRET")
 
-	AUTHOR_A_BOOKS = NewM2MAssociation(
+	AUTHOR_A_BOOKS = db.NewM2MAssociation(
 		"Books",
-		ASSOCIATE(AUTHOR_C_ID).WITH(AUTHOR_BOOK_C_AUTHOR_ID),
-		ASSOCIATE(AUTHOR_BOOK_C_BOOK_ID).WITH(BOOK_C_ID),
+		db.ASSOCIATE(AUTHOR_C_ID).WITH(AUTHOR_BOOK_C_AUTHOR_ID),
+		db.ASSOCIATE(AUTHOR_BOOK_C_BOOK_ID).WITH(BOOK_C_ID),
 	)
 )
 
@@ -366,43 +366,43 @@ type Project struct {
 	Status     *Status
 }
 
-func (this *Project) String() string {
-	if this == nil {
+func (p *Project) String() string {
+	if p == nil {
 		return "<nil>"
 	}
 	sb := tk.NewStrBuffer()
-	sb.Add("{Id: ", this.Id, ", Version: ", this.Version)
-	sb.Add(", Name: ", this.Name)
-	sb.Add(", ManagerId: ", this.ManagerId)
-	sb.Add(", ManagerType: ", this.ManagerType)
-	sb.Add(", Employee: ", this.Employee)
-	sb.Add(", Consultant: ", this.Consultant)
-	sb.Add(", StatusCod: ", this.StatusCod)
-	sb.Add(", Status: ", this.Status)
+	sb.Add("{Id: ", p.Id, ", Version: ", p.Version)
+	sb.Add(", Name: ", p.Name)
+	sb.Add(", ManagerId: ", p.ManagerId)
+	sb.Add(", ManagerType: ", p.ManagerType)
+	sb.Add(", Employee: ", p.Employee)
+	sb.Add(", Consultant: ", p.Consultant)
+	sb.Add(", StatusCod: ", p.StatusCod)
+	sb.Add(", Status: ", p.Status)
 	sb.Add("}")
 	return sb.String()
 }
 
-func (this *Project) Equals(e interface{}) bool {
-	if this == e {
+func (p *Project) Equals(e interface{}) bool {
+	if p == e {
 		return true
 	}
 
 	switch t := e.(type) {
 	case *Project:
-		return this.Id != nil && t.Id != nil && *this.Id == *t.Id
+		return p.Id != nil && t.Id != nil && *p.Id == *t.Id
 	}
 	return false
 }
 
-func (this *Project) HashCode() int {
-	result := tk.HashType(tk.HASH_SEED, this)
-	result = tk.HashLong(result, DefInt64(this.Id, 0))
+func (p *Project) HashCode() int {
+	result := tk.HashType(tk.HASH_SEED, p)
+	result = tk.HashLong(result, ext.DefInt64(p.Id, 0))
 	return result
 }
 
 var (
-	PROJECT                = TABLE("PROJECT")
+	PROJECT                = db.TABLE("PROJECT")
 	PROJECT_C_ID           = PROJECT.KEY("ID")              // implicit map to field Id
 	PROJECT_C_VERSION      = PROJECT.VERSION("VERSION")     // implicit map to field Version
 	PROJECT_C_NAME         = PROJECT.COLUMN("NAME")         // implicit map to field Name
@@ -442,39 +442,39 @@ type Employee struct {
 	Project *Project
 }
 
-func (this *Employee) String() string {
-	if this == nil {
+func (p *Employee) String() string {
+	if p == nil {
 		return "<nil>"
 	}
 	sb := tk.NewStrBuffer()
-	sb.Add("{Id: ", this.Id, ", Version: ", this.Version)
-	sb.Add(", FirstName: ", this.FirstName)
-	sb.Add(", FirstName: ", this.LastName)
-	sb.Add(", Project: ", this.Project)
+	sb.Add("{Id: ", p.Id, ", Version: ", p.Version)
+	sb.Add(", FirstName: ", p.FirstName)
+	sb.Add(", FirstName: ", p.LastName)
+	sb.Add(", Project: ", p.Project)
 	sb.Add("}")
 	return sb.String()
 }
 
-func (this *Employee) Equals(e interface{}) bool {
-	if this == e {
+func (p *Employee) Equals(e interface{}) bool {
+	if p == e {
 		return true
 	}
 
 	switch t := e.(type) {
 	case *Employee:
-		return this.Id != nil && t.Id != nil && *this.Id == *t.Id
+		return p.Id != nil && t.Id != nil && *p.Id == *t.Id
 	}
 	return false
 }
 
-func (this *Employee) HashCode() int {
-	result := tk.HashType(tk.HASH_SEED, this)
-	result = tk.HashLong(result, DefInt64(this.Id, 0))
+func (p *Employee) HashCode() int {
+	result := tk.HashType(tk.HASH_SEED, p)
+	result = tk.HashLong(result, ext.DefInt64(p.Id, 0))
 	return result
 }
 
 var (
-	EMPLOYEE              = TABLE("EMPLOYEE")
+	EMPLOYEE              = db.TABLE("EMPLOYEE")
 	EMPLOYEE_C_ID         = EMPLOYEE.KEY("ID")            // implicit map to field Id
 	EMPLOYEE_C_VERSION    = EMPLOYEE.VERSION("VERSION")   // implicit map to field Version
 	EMPLOYEE_C_FIRST_NAME = EMPLOYEE.COLUMN("FIRST_NAME") // implicit map to field FirstName
@@ -500,38 +500,38 @@ type Consultant struct {
 	Project *Project
 }
 
-func (this *Consultant) String() string {
-	if this == nil {
+func (c *Consultant) String() string {
+	if c == nil {
 		return "<nil>"
 	}
 	sb := tk.NewStrBuffer()
-	sb.Add("{Id: ", this.Id, ", Version: ", this.Version)
-	sb.Add(", Name: ", this.Name)
-	sb.Add(", Project: ", this.Project)
+	sb.Add("{Id: ", c.Id, ", Version: ", c.Version)
+	sb.Add(", Name: ", c.Name)
+	sb.Add(", Project: ", c.Project)
 	sb.Add("}")
 	return sb.String()
 }
 
-func (this *Consultant) Equals(e interface{}) bool {
-	if this == e {
+func (c *Consultant) Equals(e interface{}) bool {
+	if c == e {
 		return true
 	}
 
 	switch t := e.(type) {
 	case *Consultant:
-		return this.Id != nil && t.Id != nil && *this.Id == *t.Id
+		return c.Id != nil && t.Id != nil && *c.Id == *t.Id
 	}
 	return false
 }
 
-func (this *Consultant) HashCode() int {
-	result := tk.HashType(tk.HASH_SEED, this)
-	result = tk.HashLong(result, DefInt64(this.Id, 0))
+func (c *Consultant) HashCode() int {
+	result := tk.HashType(tk.HASH_SEED, c)
+	result = tk.HashLong(result, ext.DefInt64(c.Id, 0))
 	return result
 }
 
 var (
-	CONSULTANT           = TABLE("CONSULTANT")
+	CONSULTANT           = db.TABLE("CONSULTANT")
 	CONSULTANT_C_ID      = CONSULTANT.KEY("ID")          // implicit map to field Id
 	CONSULTANT_C_VERSION = CONSULTANT.VERSION("VERSION") // implicit map to field Version
 	CONSULTANT_C_NAME    = CONSULTANT.COLUMN("NAME")     // implicit map to field Name
@@ -546,7 +546,7 @@ var (
 // CATALOG
 
 var (
-	CATALOG           = TABLE("CATALOG")
+	CATALOG           = db.TABLE("CATALOG")
 	CATALOG_C_ID      = CATALOG.KEY("ID")          // implicit map to field Id
 	CATALOG_C_VERSION = CATALOG.VERSION("VERSION") // implicit map to field Version
 	CATALOG_C_DOMAIN  = CATALOG.COLUMN("DOMAIN")
@@ -566,38 +566,38 @@ type Status struct {
 	Description *string
 }
 
-func (this *Status) String() string {
-	if this == nil {
+func (s *Status) String() string {
+	if s == nil {
 		return "nil"
 	}
 	sb := tk.NewStrBuffer()
-	sb.Add("{Id: ", this.Id, ", Version: ", this.Version)
-	sb.Add(", Code: ", this.Code)
-	sb.Add(", Description: ", this.Description)
+	sb.Add("{Id: ", s.Id, ", Version: ", s.Version)
+	sb.Add(", Code: ", s.Code)
+	sb.Add(", Description: ", s.Description)
 	sb.Add("}")
 	return sb.String()
 }
 
-func (this *Status) Equals(e interface{}) bool {
-	if this == e {
+func (s *Status) Equals(e interface{}) bool {
+	if s == e {
 		return true
 	}
 
 	switch t := e.(type) {
 	case *Status:
-		return this.Id != nil && t.Id != nil && *this.Id == *t.Id
+		return s.Id != nil && t.Id != nil && *s.Id == *t.Id
 	}
 	return false
 }
 
-func (this *Status) HashCode() int {
-	result := tk.HashType(tk.HASH_SEED, this)
-	result = tk.HashLong(result, DefInt64(this.Id, 0))
+func (s *Status) HashCode() int {
+	result := tk.HashType(tk.HASH_SEED, s)
+	result = tk.HashLong(result, ext.DefInt64(s.Id, 0))
 	return result
 }
 
 var (
-	STATUS               = TABLE("CATALOG").With("DOMAIN", "STATUS")
+	STATUS               = db.TABLE("CATALOG").With("DOMAIN", "STATUS")
 	STATUS_C_ID          = STATUS.KEY("ID")          // implicit map to field Id
 	STATUS_C_VERSION     = STATUS.VERSION("VERSION") // implicit map to field Version
 	STATUS_C_CODE        = STATUS.COLUMN("KEY").As("Code")

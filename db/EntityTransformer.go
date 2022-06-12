@@ -5,7 +5,7 @@ import (
 
 	"github.com/quintans/goSQL/dbx"
 	coll "github.com/quintans/toolkit/collections"
-	. "github.com/quintans/toolkit/ext"
+	"github.com/quintans/toolkit/ext"
 
 	"database/sql"
 	"reflect"
@@ -59,13 +59,13 @@ func createFactory(typ reflect.Type) func() reflect.Value {
 	}
 }
 
-func (this *EntityTransformer) Super(query *Query, factory func() reflect.Value, returner func(val reflect.Value) reflect.Value) {
-	this.Query = query
-	this.Factory = factory
-	this.Returner = returner
+func (e *EntityTransformer) Super(query *Query, factory func() reflect.Value, returner func(val reflect.Value) reflect.Value) {
+	e.Query = query
+	e.Factory = factory
+	e.Returner = returner
 }
 
-func (this *EntityTransformer) BeforeAll() coll.Collection {
+func (e *EntityTransformer) BeforeAll() coll.Collection {
 	return coll.NewArrayList()
 }
 
@@ -74,19 +74,19 @@ func (this *EntityTransformer) BeforeAll() coll.Collection {
 //	 param mappings: instance of Map
 //	 param tableAlias: The table alias. If <code>nil</code> the mapping key is only "propertyName"
 //	 param type: The entity class
-func (this *EntityTransformer) PopulateMapping(tableAlias string, typ reflect.Type) (map[string]*EntityProperty, error) {
+func (e *EntityTransformer) PopulateMapping(tableAlias string, typ reflect.Type) (map[string]*EntityProperty, error) {
 	prefix := tableAlias
 	if tableAlias != "" {
 		prefix = tableAlias + "."
 	}
 
-	mappings, err := PopulateMapping(prefix, typ, this.Query.GetDb().GetTranslator())
+	mappings, err := PopulateMapping(prefix, typ, e.Query.GetDb().GetTranslator())
 	if err != nil {
 		return nil, err
 	}
 
 	// Matches the columns with the bean properties
-	for idx, token := range this.Query.Columns {
+	for idx, token := range e.Query.Columns {
 		ta := token.GetAlias()
 
 		var bp *EntityProperty = nil
@@ -99,7 +99,7 @@ func (this *EntityTransformer) PopulateMapping(tableAlias string, typ reflect.Ty
 		} else if ok {
 			if tableAlias == token.GetPseudoTableAlias() {
 				bp = mappings[prefix+capFirst(ch.GetColumn().GetAlias())]
-				if this.Overrider.DiscardIfKeyIsNull() && bp != nil {
+				if e.Overrider.DiscardIfKeyIsNull() && bp != nil {
 					bp.Key = ch.GetColumn().IsKey()
 				}
 			}
@@ -118,31 +118,31 @@ func capFirst(name string) string {
 }
 
 // can be overriden
-func (this *EntityTransformer) DiscardIfKeyIsNull() bool {
+func (e *EntityTransformer) DiscardIfKeyIsNull() bool {
 	return false
 }
 
-func (this *EntityTransformer) OnTransformation(result coll.Collection, instance interface{}) {
+func (e *EntityTransformer) OnTransformation(result coll.Collection, instance interface{}) {
 	if instance != nil {
 		result.Add(instance)
 	}
 }
 
-func (this *EntityTransformer) AfterAll(result coll.Collection) {
+func (e *EntityTransformer) AfterAll(result coll.Collection) {
 }
 
-func (this *EntityTransformer) Transform(rows *sql.Rows) (interface{}, error) {
-	val := this.Factory()
+func (e *EntityTransformer) Transform(rows *sql.Rows) (interface{}, error) {
+	val := e.Factory()
 
-	if this.Properties == nil {
+	if e.Properties == nil {
 		var err error
-		this.Properties, err = this.Overrider.PopulateMapping("", val.Type())
+		e.Properties, err = e.Overrider.PopulateMapping("", val.Type())
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	if this.TemplateData == nil {
+	if e.TemplateData == nil {
 		// creates the array with all the types returned by the query
 		// using the entity properties as reference for instantiating the types
 		cols, err := rows.Columns()
@@ -150,35 +150,35 @@ func (this *EntityTransformer) Transform(rows *sql.Rows) (interface{}, error) {
 			return nil, err
 		}
 		length := len(cols)
-		this.TemplateData = make([]interface{}, length, length)
+		e.TemplateData = make([]interface{}, length)
 		// set default for unused columns, in case of a projection of a result
 		// with more columns than the attributes of the destination struct
-		for i := 0; i < len(this.TemplateData); i++ {
-			this.TemplateData[i] = &Any{}
+		for i := 0; i < len(e.TemplateData); i++ {
+			e.TemplateData[i] = &ext.Any{}
 		}
 		// instanciate all target types
-		this.Overrider.InitRowData(this.TemplateData, this.Properties)
+		e.Overrider.InitRowData(e.TemplateData, e.Properties)
 	}
 	// makes a copy
-	rowData := make([]interface{}, len(this.TemplateData), cap(this.TemplateData))
-	copy(rowData, this.TemplateData)
+	rowData := make([]interface{}, len(e.TemplateData), cap(e.TemplateData))
+	copy(rowData, e.TemplateData)
 
 	// Scan result set
 	if err := rows.Scan(rowData...); err != nil {
 		return nil, err
 	}
 
-	if _, err := this.Overrider.ToEntity(rowData, val, this.Properties, nil); err != nil {
+	if _, err := e.Overrider.ToEntity(rowData, val, e.Properties, nil); err != nil {
 		return nil, err
 	}
 
 	instance := val.Interface()
 	// post trigger
 	if t, isT := instance.(PostRetriever); isT {
-		t.PostRetrieve(this.Query.GetDb())
+		t.PostRetrieve(e.Query.GetDb())
 	}
 
-	if this.Returner == nil {
+	if e.Returner == nil {
 		return instance, nil
 		/*
 			if H, isH := instance.(tk.Hasher); isH {
@@ -186,7 +186,7 @@ func (this *EntityTransformer) Transform(rows *sql.Rows) (interface{}, error) {
 			}
 		*/
 	} else {
-		v := this.Returner(val)
+		v := e.Returner(val)
 		if v.IsValid() {
 			return v.Interface(), nil
 		}
@@ -195,7 +195,7 @@ func (this *EntityTransformer) Transform(rows *sql.Rows) (interface{}, error) {
 	return nil, nil
 }
 
-func (this *EntityTransformer) InitRowData(
+func (e *EntityTransformer) InitRowData(
 	row []interface{},
 	properties map[string]*EntityProperty,
 ) {
@@ -215,7 +215,7 @@ func (this *EntityTransformer) InitRowData(
 }
 
 // returns if the entity was valid
-func (this *EntityTransformer) ToEntity(
+func (e *EntityTransformer) ToEntity(
 	row []interface{},
 	instance reflect.Value,
 	properties map[string]*EntityProperty,

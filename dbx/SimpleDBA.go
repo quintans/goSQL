@@ -2,11 +2,9 @@ package dbx
 
 import (
 	"database/sql"
-	"fmt"
 	"reflect"
 
-	"errors"
-
+	"github.com/quintans/faults"
 	tk "github.com/quintans/toolkit"
 	coll "github.com/quintans/toolkit/collections"
 	"github.com/quintans/toolkit/log"
@@ -45,17 +43,17 @@ func closeResources(rows *sql.Rows, stmt *sql.Stmt) error {
 	return nil
 }
 
-func (this *SimpleDBA) fetchRows(sql string, params ...interface{}) (*sql.Rows, *sql.Stmt, error) {
-	stmt, err := this.connection.Prepare(sql)
+func (s *SimpleDBA) fetchRows(sql string, params ...interface{}) (*sql.Rows, *sql.Stmt, error) {
+	stmt, err := s.connection.Prepare(sql)
 	if err != nil {
-		logger.Errorf("%T.fetchRows PREPARE %s", this, err)
+		logger.Errorf("%T.fetchRows PREPARE %s", s, err)
 		return nil, nil, rethrow(FAULT_PREP_STATEMENT, err, sql, params...)
 	}
 
 	rows, err := stmt.Query(params...)
 	if err != nil {
 		stmt.Close()
-		logger.Errorf("%T.fetchRows QUERY %s: %s %s", this, err, sql, params)
+		logger.Errorf("%T.fetchRows QUERY %s: %s %s", s, err, sql, params)
 		return nil, nil, rethrow(FAULT_QUERY, err, sql, params...)
 	}
 
@@ -69,12 +67,12 @@ func (this *SimpleDBA) fetchRows(sql string, params ...interface{}) (*sql.Rows, 
 // param params: The replacement parameters.
 // param rt: The handler that converts the results into an object.
 // return The Collection returned by the handler and a Fail if a database access error occurs
-func (this *SimpleDBA) QueryCollection(
+func (s *SimpleDBA) QueryCollection(
 	sql string,
 	rt IRowTransformer,
 	params ...interface{},
 ) (coll.Collection, error) {
-	rows, stmt, fail := this.fetchRows(sql, params...)
+	rows, stmt, fail := s.fetchRows(sql, params...)
 	if fail != nil {
 		return nil, fail
 	}
@@ -94,12 +92,12 @@ func (this *SimpleDBA) QueryCollection(
 	return result, nil
 }
 
-func (this *SimpleDBA) Query(
+func (s *SimpleDBA) Query(
 	sql string,
 	transformer func(rows *sql.Rows) (interface{}, error),
 	params ...interface{},
 ) ([]interface{}, error) {
-	rows, stmt, fail := this.fetchRows(sql, params...)
+	rows, stmt, fail := s.fetchRows(sql, params...)
 	if fail != nil {
 		return nil, fail
 	}
@@ -118,12 +116,12 @@ func (this *SimpleDBA) Query(
 }
 
 // the transformer will be responsible for creating  the result list
-func (this *SimpleDBA) QueryClosure(
+func (s *SimpleDBA) QueryClosure(
 	query string,
 	transformer func(rows *sql.Rows) error,
 	params ...interface{},
 ) error {
-	rows, stmt, fail := this.fetchRows(query, params...)
+	rows, stmt, fail := s.fetchRows(query, params...)
 	if fail != nil {
 		return fail
 	}
@@ -150,7 +148,7 @@ func (this *SimpleDBA) QueryClosure(
 //  q.QueryInto(func(role *string) {
 //	  roles = append(roles, *role)
 //  })
-func (this *SimpleDBA) QueryInto(
+func (s *SimpleDBA) QueryInto(
 	query string,
 	closure interface{},
 	params ...interface{},
@@ -158,7 +156,7 @@ func (this *SimpleDBA) QueryInto(
 	// determine types and instanciate them
 	ftype := reflect.TypeOf(closure)
 	if ftype.Kind() != reflect.Func {
-		return nil, fmt.Errorf("goSQL: Expected a function with the signature func(primitive1, ..., primitiveN) [anything]. Got %s.", ftype.String())
+		return nil, faults.Errorf("expected a function with the signature func(primitive1, ..., primitiveN) [anything], but got %s", ftype.String())
 	}
 
 	size := ftype.NumIn() // number of input variables
@@ -180,12 +178,12 @@ func (this *SimpleDBA) QueryInto(
 	var results []interface{}
 	// output must be at most 1
 	if ftype.NumOut() > 1 {
-		return nil, fmt.Errorf("goSQL: A function must have at most one output. Got %d outputs", ftype.NumOut())
+		return nil, faults.Errorf("a function must have at most one output, but got %d outputs", ftype.NumOut())
 	} else if ftype.NumOut() == 1 {
 		results = make([]interface{}, 0)
 	}
 
-	err := this.QueryClosure(query, func(rows *sql.Rows) error {
+	err := s.QueryClosure(query, func(rows *sql.Rows) error {
 		err := rows.Scan(instances...)
 		if err != nil {
 			return err
@@ -233,12 +231,12 @@ func (this *SimpleDBA) QueryInto(
 // param params
 //            The named parameters.
 // @return The transformed result
-func (this *SimpleDBA) QueryFirst(
+func (s *SimpleDBA) QueryFirst(
 	sql string,
 	params map[string]interface{},
 	rt IRowTransformer,
 ) (interface{}, error) {
-	result, fail1 := this.QueryCollection(sql, rt, params)
+	result, fail1 := s.QueryCollection(sql, rt, params)
 	if fail1 != nil {
 		return nil, fail1
 	}
@@ -258,12 +256,12 @@ func (this *SimpleDBA) QueryFirst(
 // param params
 //            The named parameters.
 // @return if there was a row scan and error
-func (this *SimpleDBA) QueryRow(
+func (s *SimpleDBA) QueryRow(
 	sql string,
 	params []interface{},
 	dest ...interface{},
 ) (bool, error) {
-	rows, stmt, err := this.fetchRows(sql, params...)
+	rows, stmt, err := s.fetchRows(sql, params...)
 	if err != nil {
 		return false, err
 	}
@@ -292,8 +290,8 @@ func (this *SimpleDBA) QueryRow(
 // param params
 //            The query replacement parameters.
 // @return The number of rows affected.
-func (this *SimpleDBA) execute(sql string, params ...interface{}) (sql.Result, *sql.Stmt, error) {
-	stmt, err := this.connection.Prepare(sql)
+func (s *SimpleDBA) execute(sql string, params ...interface{}) (sql.Result, *sql.Stmt, error) {
+	stmt, err := s.connection.Prepare(sql)
 	if err != nil {
 		return nil, nil, rethrow(FAULT_PREP_STATEMENT, err, sql, params...)
 	}
@@ -318,8 +316,8 @@ func (this *SimpleDBA) execute(sql string, params ...interface{}) (sql.Result, *
 //            The query named parameters.
 // @return The number of rows affected.
 // */
-func (this *SimpleDBA) Update(sql string, params ...interface{}) (int64, error) {
-	result, stmt, err := this.execute(sql, params...)
+func (s *SimpleDBA) Update(sql string, params ...interface{}) (int64, error) {
+	result, stmt, err := s.execute(sql, params...)
 	if err != nil {
 		return 0, err
 	}
@@ -327,12 +325,12 @@ func (this *SimpleDBA) Update(sql string, params ...interface{}) (int64, error) 
 	return result.RowsAffected()
 }
 
-func (this *SimpleDBA) Delete(sql string, params ...interface{}) (int64, error) {
-	return this.Update(sql, params...)
+func (s *SimpleDBA) Delete(sql string, params ...interface{}) (int64, error) {
+	return s.Update(sql, params...)
 }
 
-func (this *SimpleDBA) Insert(sql string, params ...interface{}) (int64, error) {
-	_, stmt, err := this.execute(sql, params...)
+func (s *SimpleDBA) Insert(sql string, params ...interface{}) (int64, error) {
+	_, stmt, err := s.execute(sql, params...)
 	if err != nil {
 		return 0, err
 	}
@@ -342,9 +340,9 @@ func (this *SimpleDBA) Insert(sql string, params ...interface{}) (int64, error) 
 	return 0, nil
 }
 
-func (this *SimpleDBA) InsertReturning(sql string, params ...interface{}) (int64, error) {
+func (s *SimpleDBA) InsertReturning(sql string, params ...interface{}) (int64, error) {
 	var id int64
-	_, err := this.QueryRow(sql, params, &id)
+	_, err := s.QueryRow(sql, params, &id)
 	if err != nil {
 		return 0, err
 	}
@@ -365,13 +363,11 @@ func (this *SimpleDBA) InsertReturning(sql string, params ...interface{}) (int64
 //            valid value to pass in.
 
 func rethrow(code string, cause error, sql string, params ...interface{}) error {
-	causeMessage := cause.Error()
-
 	msg := tk.NewStrBuffer()
-	msg.Addf("[%s] ", code).Add(causeMessage, "\nSQL: ", sql, "\nParameters: ")
+	msg.Addf("[%s] ", code).Add("\nSQL: ", sql, "\nParameters: ")
 	if params != nil {
 		msg.Addf("%v", params)
 	}
 
-	return errors.Wrap(cause, msg.String())
+	return faults.Errorf("%s: %w", msg.String(), cause)
 }

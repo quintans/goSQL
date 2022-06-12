@@ -79,77 +79,75 @@ func NewEndToken(operator string, o interface{}) *Token {
 	return this
 }
 
-func (this *Token) GetPseudoTableAlias() string {
-	if this.pseudoTableAlias != "" {
-		return this.pseudoTableAlias
+func (t *Token) GetPseudoTableAlias() string {
+	if t.pseudoTableAlias != "" {
+		return t.pseudoTableAlias
 	}
-	return this.tableAlias
+	return t.tableAlias
 }
 
-func (this *Token) SetPseudoTableAlias(pseudoTableAlias string) {
-	this.pseudoTableAlias = pseudoTableAlias
+func (t *Token) SetPseudoTableAlias(pseudoTableAlias string) {
+	t.pseudoTableAlias = pseudoTableAlias
 }
 
-func (this *Token) GetOperator() string {
-	return this.Operator
+func (t *Token) GetOperator() string {
+	return t.Operator
 }
 
-func (this *Token) SetOperator(operator string) {
-	this.Operator = operator
+func (t *Token) SetOperator(operator string) {
+	t.Operator = operator
 }
 
-func (this *Token) GetAlias() string {
-	return this.Alias
+func (t *Token) GetAlias() string {
+	return t.Alias
 }
 
-func (this *Token) SetAlias(alias string) {
-	this.Alias = alias
+func (t *Token) SetAlias(alias string) {
+	t.Alias = alias
 }
 
 // Propagates table alias
-func (this *Token) SetTableAlias(tableAlias string) {
-	this.tableAlias = tableAlias
-	if this.Members != nil {
-		for _, o := range this.Members {
+func (t *Token) SetTableAlias(tableAlias string) {
+	t.tableAlias = tableAlias
+	if t.Members != nil {
+		for _, tok := range t.Members {
 			// it may contains others. ex: param("foo")
-			if tok, ok := o.(Tokener); ok {
-				tok.SetTableAlias(tableAlias)
-			}
+			tok.SetTableAlias(tableAlias)
 		}
 	}
 }
 
-func (this *Token) GetTableAlias() string {
-	return this.tableAlias
+func (t *Token) GetTableAlias() string {
+	return t.tableAlias
 }
 
-func (this *Token) IsNil() bool {
-	return this.Members == nil && ext.IsNil(this.Value)
+func (t *Token) IsNil() bool {
+	return t.Members == nil && ext.IsNil(t.Value)
 }
 
-func (this *Token) GetMembers() []Tokener {
-	return this.Members
+func (t *Token) GetMembers() []Tokener {
+	return t.Members
 }
 
-func (this *Token) SetMembers(members ...Tokener) {
-	this.Members = members
+func (t *Token) SetMembers(members ...Tokener) {
+	t.Members = members
 }
 
-func (this *Token) SetValue(value interface{}) {
-	this.Value = value
+func (t *Token) SetValue(value interface{}) {
+	t.Value = value
 }
 
-func (this *Token) GetValue() interface{} {
-	return this.Value
+func (t *Token) GetValue() interface{} {
+	return t.Value
 }
 
-func (this *Token) String() string {
+func (t *Token) String() string {
 	var sb tk.StrBuffer
-	sb.Add("{operator=", this.Operator, ", ")
+	sb.Add("{operator=", t.Operator, ", ")
 	comma := false
-	if this.Members != nil {
+	if t.Members != nil {
 		sb.Add("members=[")
-		for _, o := range this.Members {
+		for _, o := range t.Members {
 			if comma {
 				sb.Add("; ")
 			}
@@ -157,15 +155,15 @@ func (this *Token) String() string {
 			comma = true
 		}
 	}
-	sb.Add(", alias=", this.Alias, "]}")
+	sb.Add(", alias=", t.Alias, "]}")
 
 	return sb.String()
 }
 
-func (this *Token) Clone() interface{} {
+func (t *Token) Clone() interface{} {
 	token := new(Token)
-	token.Operator = this.Operator
-	token.Alias = this.Alias
+	token.Operator = t.Operator
+	token.Alias = t.Alias
 
 	/*
 		// Deep cloning
@@ -185,35 +183,33 @@ func (this *Token) Clone() interface{} {
 			}
 		}
 	*/
-	if this.Members != nil {
-		otherMembers := make([]Tokener, len(this.Members))
-		for i, o := range this.Members {
-			otherMembers[i] = o
-		}
+	if t.Members != nil {
+		otherMembers := make([]Tokener, len(t.Members))
+		copy(otherMembers, t.Members)
 		token.Members = otherMembers
 	} else {
-		token.Value = this.Value
+		token.Value = t.Value
 	}
 	return token
 }
 
-func (this *Token) Equals(o interface{}) bool {
-	switch t := o.(type) { //type switch
+func (t *Token) Equals(o interface{}) bool {
+	switch tp := o.(type) { //type switch
 	case *Token:
-		if this.Operator == t.Operator &&
-			this.Alias == t.Alias && this.matchMembers(t.Members) {
+		if t.Operator == tp.Operator &&
+			t.Alias == tp.Alias && t.matchMembers(tp.Members) {
 			return true
 		}
 	}
 	return false
 }
 
-func (this *Token) matchMembers(m []Tokener) bool {
-	if this.Members == nil || m == nil || len(this.Members) != len(m) {
+func (t *Token) matchMembers(m []Tokener) bool {
+	if t.Members == nil || m == nil || len(t.Members) != len(m) {
 		return false
 	}
 
-	for idx, o := range this.Members {
+	for idx, o := range t.Members {
 		if !tk.Match(o, m[idx]) {
 			return false
 		}
@@ -222,54 +218,54 @@ func (this *Token) matchMembers(m []Tokener) bool {
 	return true
 }
 
-func (this *Token) HashCode() int {
-	if this.hash == 0 {
-		result := tk.HashType(tk.HASH_SEED, this)
-		result = tk.HashString(result, this.Operator)
-		result = tk.HashString(result, this.Alias)
-		result = tk.Hash(result, this.Members)
-		this.hash = result
+func (t *Token) HashCode() int {
+	if t.hash == 0 {
+		result := tk.HashType(tk.HASH_SEED, t)
+		result = tk.HashString(result, t.Operator)
+		result = tk.HashString(result, t.Alias)
+		result = tk.Hash(result, t.Members)
+		t.hash = result
 	}
 
-	return this.hash
+	return t.hash
 }
 
-func (this *Token) Greater(value interface{}) *Criteria {
-	return Greater(this, value)
+func (t *Token) Greater(value interface{}) *Criteria {
+	return Greater(t, value)
 }
 
-func (this *Token) GreaterOrMatch(value interface{}) *Criteria {
-	return GreaterOrMatch(this, value)
+func (t *Token) GreaterOrMatch(value interface{}) *Criteria {
+	return GreaterOrMatch(t, value)
 }
 
-func (this *Token) Lesser(value interface{}) *Criteria {
-	return Lesser(this, value)
+func (t *Token) Lesser(value interface{}) *Criteria {
+	return Lesser(t, value)
 }
 
-func (this *Token) LesserOrMatch(value interface{}) *Criteria {
-	return LesserOrMatch(this, value)
+func (t *Token) LesserOrMatch(value interface{}) *Criteria {
+	return LesserOrMatch(t, value)
 }
 
-func (this *Token) Matches(value interface{}) *Criteria {
-	return Matches(this, value)
+func (t *Token) Matches(value interface{}) *Criteria {
+	return Matches(t, value)
 }
 
-func (this *Token) IMatches(value interface{}) *Criteria {
-	return IMatches(this, value)
+func (t *Token) IMatches(value interface{}) *Criteria {
+	return IMatches(t, value)
 }
 
-func (this *Token) Like(right interface{}) *Criteria {
-	return Like(this, right)
+func (t *Token) Like(right interface{}) *Criteria {
+	return Like(t, right)
 }
 
-func (this *Token) ILike(right interface{}) *Criteria {
-	return ILike(this, right)
+func (t *Token) ILike(right interface{}) *Criteria {
+	return ILike(t, right)
 }
 
-func (this *Token) Different(value interface{}) *Criteria {
-	return Different(this, value)
+func (t *Token) Different(value interface{}) *Criteria {
+	return Different(t, value)
 }
 
-func (this *Token) IsNull() *Criteria {
-	return IsNull(this)
+func (t *Token) IsNull() *Criteria {
+	return IsNull(t)
 }

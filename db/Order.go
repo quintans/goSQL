@@ -20,19 +20,19 @@ func NewOrderAs(alias string) *Order {
 	return this
 }
 
-func (this Order) GetAlias() string {
-	return this.alias
+func (o Order) GetAlias() string {
+	return o.alias
 }
 
-func (this *Order) GetHolder() *ColumnHolder {
-	return this.column
+func (o *Order) GetHolder() *ColumnHolder {
+	return o.column
 }
 
-func (this *Order) Asc(asc bool) *Order {
-	this.asc = asc
-	return this
+func (o *Order) Asc(asc bool) *Order {
+	o.asc = asc
+	return o
 }
 
-func (this *Order) IsAsc() bool {
-	return this.asc
+func (o *Order) IsAsc() bool {
+	return o.asc
 }

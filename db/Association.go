@@ -3,31 +3,63 @@ package db
 import (
 	"fmt"
 
+	"github.com/quintans/faults"
 	tk "github.com/quintans/toolkit"
 )
 
-type ColGroup []*Column
+type ColGroup struct {
+	cols []*Column
+	err  error
+}
 
-func (this ColGroup) TO(to ...*Column) Relashionships {
-	if len(this) != len(to) {
-		panic("The number of source columns is different from the number of target columns.")
+func (cg ColGroup) TO(to ...*Column) Relashionships {
+	if cg.err != nil {
+		return Relashionships{}
 	}
-	relations := make([]Relation, len(this), len(this))
-	for k, from := range this {
+
+	if len(cg.cols) != len(to) {
+		return Relashionships{
+			err: faults.Errorf("the number of source columns (%d) is different from the number of target columns (%d).", len(cg.cols), len(to)),
+		}
+	}
+	relations := make([]Relation, len(cg.cols))
+	for k, from := range cg.cols {
 		relations[k] = NewRelation(from, to[k])
 	}
-	return relations
+	return Relashionships{
+		rels: relations,
+	}
 }
 
-func (this ColGroup) WITH(to ...*Column) *Association {
-	relations := this.TO(to...)
-	return NewAssociation(relations...)
+func (cg ColGroup) WITH(to ...*Column) *Association {
+	if cg.err != nil {
+		return &Association{
+			err: cg.err,
+		}
+	}
+
+	r := cg.TO(to...)
+	if r.err != nil {
+		return &Association{}
+	}
+	return NewAssociation(r.rels...)
 }
 
-type Relashionships []Relation
+type Relashionships struct {
+	rels []Relation
+	err  error
+}
 
-func (this Relashionships) As(alias string) *Association {
-	return NewAssociation(this...).As(alias)
+func (r Relashionships) Fault() error {
+	return r.err
+}
+
+func (r Relashionships) As(alias string) *Association {
+	if r.err != nil {
+		return &Association{err: r.err}
+	}
+
+	return NewAssociation(r.rels...).As(alias)
 }
 
 func ASSOCIATE(from ...*Column) ColGroup {
@@ -36,12 +68,15 @@ func ASSOCIATE(from ...*Column) ColGroup {
 		table := from[0].GetTable()
 		for _, source := range from {
 			if !table.Equals(source.GetTable()) {
-				panic("All columns must belong to the same table")
+				return ColGroup{
+					err: faults.Errorf("column '%s' must belong to table '%s'", source, table),
+				}
 			}
 		}
 	}
-
-	return from
+	return ColGroup{
+		cols: from,
+	}
 }
 
 type Association struct {
@@ -63,6 +98,8 @@ type Association struct {
 	discriminators     []Discriminator
 
 	hash int
+
+	err error
 }
 
 var _ tk.Base = &Association{}
@@ -77,22 +114,35 @@ func NewAssociationCopy(fk *Association) *Association {
 		for k, v := range fk.relations {
 			rels[k] = NewRelation(v.From.GetColumn(), v.To.GetColumn())
 		}
-		this.defineAssociation(false, fk.Alias, rels...)
+		if err := this.defineAssociation(false, fk.Alias, rels...); err != nil {
+			return &Association{
+				err: err,
+			}
+		}
 		this.discriminators = fk.discriminators
 	}
 	return this
 }
 
-func (this *Association) GenericPath() string {
-	return fmt.Sprintf("%s (%s->%s)", this.Alias, this.tableFrom.String(), this.tableTo.String())
+func (a *Association) GenericPath() string {
+	if a.err != nil {
+		return a.err.Error()
+	}
+	return fmt.Sprintf("%s (%s->%s)", a.Alias, a.tableFrom.String(), a.tableTo.String())
 }
 
-func (this *Association) Path() string {
-	return fmt.Sprintf("%s (%s.%s->%s.%s)", this.Alias, this.aliasFrom, this.tableFrom.String(), this.aliasTo, this.tableTo.String())
+func (a *Association) Path() string {
+	if a.err != nil {
+		return a.err.Error()
+	}
+	return fmt.Sprintf("%s (%s.%s->%s.%s)", a.Alias, a.aliasFrom, a.tableFrom.String(), a.aliasTo, a.tableTo.String())
 }
 
-func (this *Association) IsMany2Many() bool {
-	return this.tableMany2Many != nil
+func (a *Association) IsMany2Many() bool {
+	if a.err != nil {
+		return false
+	}
+	return a.tableMany2Many != nil
 }
 
 // Many To Many
@@ -111,150 +161,171 @@ func NewM2MAssociation(alias string, fkFrom *Association, fkTo *Association) *As
 	return this
 }
 
-func (this *Association) defineM2MAssociation(associate bool, alias string, fkFrom *Association, fkTo *Association) {
-	this.Alias = alias
+func (a *Association) defineM2MAssociation(associate bool, alias string, fkFrom *Association, fkTo *Association) {
+	a.Alias = alias
 
-	this.tableMany2Many = fkFrom.tableTo
+	a.tableMany2Many = fkFrom.tableTo
 
-	this.FromM2M = fkFrom
-	this.tableFrom = this.FromM2M.tableFrom
-	this.ToM2M = fkTo
-	this.tableTo = this.ToM2M.tableTo
+	a.FromM2M = fkFrom
+	a.tableFrom = a.FromM2M.tableFrom
+	a.ToM2M = fkTo
+	a.tableTo = a.ToM2M.tableTo
 
 	if associate {
 		// informs the tables of this association
-		this.tableFrom.AddAssociation(this)
+		a.tableFrom.AddAssociation(a)
 	}
 }
 
-func (this *Association) GetTableMany2Many() *Table {
-	return this.tableMany2Many
+func (a *Association) GetTableMany2Many() *Table {
+	return a.tableMany2Many
 }
 
 func NewAssociation(relations ...Relation) *Association {
-	this := new(Association)
-	this.defineAssociation(false, "", relations...)
-	return this
+	a := new(Association)
+	if err := a.defineAssociation(false, "", relations...); err != nil {
+		return &Association{
+			err: err,
+		}
+	}
+	return a
 }
 
 func NewAssociationAs(name string, relations ...Relation) *Association {
-	this := new(Association)
-	this.defineAssociation(true, name, relations...)
-	return this
+	a := new(Association)
+	if err := a.defineAssociation(true, name, relations...); err != nil {
+		return &Association{
+			err: err,
+		}
+	}
+	return a
 }
 
-func (this *Association) As(alias string) *Association {
-	this.Alias = alias
-	return this
+func (a *Association) As(alias string) *Association {
+	if a.err != nil {
+		return a
+	}
+	a.Alias = alias
+	return a
 }
 
-func (this *Association) With(column *Column, value interface{}) *Association {
-	if this.discriminators == nil {
-		this.discriminators = make([]Discriminator, 0)
+func (a *Association) With(column *Column, value interface{}) *Association {
+	if a.err != nil {
+		return a
+	}
+	if a.discriminators == nil {
+		a.discriminators = make([]Discriminator, 0)
 	}
 
-	if this.discriminatorTable != nil && !this.discriminatorTable.Equals(column.GetTable()) {
-		panic("Discriminator columns must belong to the same table." +
-			column.String() +
-			" does not belong to " +
-			this.discriminatorTable.String())
+	if a.discriminatorTable != nil && !a.discriminatorTable.Equals(column.GetTable()) {
+		return &Association{
+			err: faults.New("discriminator columns must belong to the same table." +
+				column.String() +
+				" does not belong to " +
+				a.discriminatorTable.String()),
+		}
 	}
 
-	this.discriminatorTable = column.GetTable()
+	a.discriminatorTable = column.GetTable()
 	token := tokenizeOne(value)
 	discriminator := NewDiscriminator(column, token)
-	this.discriminators = append(this.discriminators, discriminator)
-	return this
+	a.discriminators = append(a.discriminators, discriminator)
+	return a
 }
 
-func (this *Association) defineAssociation(add2Table bool, alias string, relations ...Relation) {
-	this.Alias = alias
+func (a *Association) defineAssociation(add2Table bool, alias string, relations ...Relation) error {
+	if a.err != nil {
+		return a.err
+	}
+	a.Alias = alias
 
 	tableFrom := relations[0].From.GetColumn().GetTable()
 	tableTo := relations[0].To.GetColumn().GetTable()
 	// check consistency
 	for _, relation := range relations {
 		if !tableFrom.Equals(relation.From.GetColumn().GetTable()) {
-			panic("left side of " + relation.String() + " does not belong to " + tableFrom.String())
+			return faults.Errorf("left side of '%s' does not belong to '%s'", relation, tableFrom)
 		} else if !tableTo.Equals(relation.To.GetColumn().GetTable()) {
-			panic("right side of " + relation.String() + " does not belong to " + tableTo.String())
+			return faults.Errorf("right side of '%s' does not belong to '%s'", relation, tableTo)
 		}
 	}
-	this.tableFrom = tableFrom
-	this.tableTo = tableTo
-	this.relations = relations
+	a.tableFrom = tableFrom
+	a.tableTo = tableTo
+	a.relations = relations
 
 	if add2Table {
-		tableFrom.AddAssociation(this)
+		tableFrom.AddAssociation(a)
+	}
+	return nil
+}
+
+func (a *Association) GetAliasFrom() string {
+	return a.aliasFrom
+}
+
+func (a *Association) SetAliasFrom(aliasFrom string) {
+	if a.err != nil {
+		return
+	}
+	if a.aliasFrom == "" {
+		a.aliasFrom = aliasFrom
 	}
 }
 
-func (this *Association) GetAliasFrom() string {
-	return this.aliasFrom
+func (a *Association) GetAliasTo() string {
+	return a.aliasTo
 }
 
-func (this *Association) SetAliasFrom(aliasFrom string) {
-	if this.aliasFrom == "" {
-		this.aliasFrom = aliasFrom
+func (a *Association) SetAliasTo(aliasTo string) {
+	if a.err != nil {
+		return
+	}
+	if a.aliasTo == "" {
+		a.aliasTo = aliasTo
 	}
 }
 
-func (this *Association) GetAliasTo() string {
-	return this.aliasTo
+func (a *Association) GetTableFrom() *Table {
+	return a.tableFrom
 }
 
-func (this *Association) SetAliasTo(aliasTo string) {
-	if this.aliasTo == "" {
-		this.aliasTo = aliasTo
-	}
+func (a *Association) GetTableTo() *Table {
+	return a.tableTo
 }
 
-func (this *Association) GetTableFrom() *Table {
-	return this.tableFrom
+func (a *Association) GetRelations() []Relation {
+	return a.relations
 }
 
-func (this *Association) GetTableTo() *Table {
-	return this.tableTo
+func (a *Association) GetDiscriminatorTable() *Table {
+	return a.discriminatorTable
 }
 
-func (this *Association) GetRelations() []Relation {
-	return this.relations
+func (a *Association) GetDiscriminators() []Discriminator {
+	return a.discriminators
 }
 
-func (this *Association) GetDiscriminatorTable() *Table {
-	return this.discriminatorTable
+func (a *Association) SetDiscriminators(discriminators ...Discriminator) {
+	a.discriminators = discriminators
 }
 
-func (this *Association) GetDiscriminators() []Discriminator {
-	return this.discriminators
+func (a *Association) String() string {
+	return a.Path()
 }
 
-func (this *Association) SetDiscriminators(discriminators ...Discriminator) {
-	this.discriminators = discriminators
+func (a *Association) Clone() interface{} {
+	return NewAssociationCopy(a)
 }
 
-func (this *Association) String() string {
-	return this.Path()
+func (a *Association) Equals(o interface{}) bool {
+	return a == o
 }
 
-func (this *Association) Clone() interface{} {
-	a := NewAssociationCopy(this)
-	return a
-}
-
-func (this *Association) Equals(o interface{}) bool {
-	if this == o {
-		return true
+func (a *Association) HashCode() int {
+	if a.hash == 0 {
+		result := tk.HashType(tk.HASH_SEED, a)
+		a.hash = result
 	}
 
-	return false
-}
-
-func (this *Association) HashCode() int {
-	if this.hash == 0 {
-		result := tk.HashType(tk.HASH_SEED, this)
-		this.hash = result
-	}
-
-	return this.hash
+	return a.hash
 }

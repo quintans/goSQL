@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/quintans/faults"
 	"github.com/quintans/goSQL/dbx"
 	tk "github.com/quintans/toolkit"
 	"github.com/quintans/toolkit/log"
@@ -32,26 +33,26 @@ type RawSql struct {
 // Convert a Map of named parameter values to a corresponding array.
 //
 // return the array of values
-func (this *RawSql) BuildValues(paramMap map[string]interface{}) []interface{} {
-	paramArray := make([]interface{}, len(this.Names))
+func (r *RawSql) BuildValues(paramMap map[string]interface{}) ([]interface{}, error) {
+	paramArray := make([]interface{}, len(r.Names))
 	var ok bool
-	for i, name := range this.Names {
+	for i, name := range r.Names {
 		paramArray[i], ok = paramMap[name]
 		if !ok {
-			panic(fmt.Sprintf("[%s] No value supplied for the SQL parameter '%s' for the SQL %s",
-				dbx.FAULT_VALUES_STATEMENT, name, this.OriSql))
+			return nil, faults.Errorf("[%s] No value supplied for the SQL parameter '%s' for the SQL %s",
+				dbx.FAULT_VALUES_STATEMENT, name, r.OriSql)
 		}
 	}
-	return paramArray
+	return paramArray, nil
 }
 
-func (this *RawSql) Clone() interface{} {
+func (r *RawSql) Clone() interface{} {
 	other := new(RawSql)
-	other.OriSql = this.OriSql
-	other.Sql = this.Sql
-	if this.Names != nil {
-		other.Names = make([]string, len(this.Names))
-		copy(other.Names, this.Names)
+	other.OriSql = r.OriSql
+	other.Sql = r.Sql
+	if r.Names != nil {
+		other.Names = make([]string, len(r.Names))
+		copy(other.Names, r.Names)
 	}
 	return other
 }
@@ -92,97 +93,97 @@ func NewDmlBase(DB IDb, table *Table) *DmlBase {
 	return this
 }
 
-func (this *DmlBase) Super(DB IDb, table *Table) {
-	this.db = DB
-	this.table = table
-	this.alias(PREFIX + "0")
+func (d *DmlBase) Super(DB IDb, table *Table) {
+	d.db = DB
+	d.table = table
+	d.alias(PREFIX + "0")
 
 	if table != nil {
-		this.discriminatorCriterias = table.GetCriterias()
+		d.discriminatorCriterias = table.GetCriterias()
 	}
-	this.parameters = make(map[string]interface{})
+	d.parameters = make(map[string]interface{})
 
-	this.dba = dbx.NewSimpleDBA(DB.GetConnection())
+	d.dba = dbx.NewSimpleDBA(DB.GetConnection())
 }
 
-func (this *DmlBase) NextRawIndex() int {
-	this.rawIndex++
-	return this.rawIndex
+func (d *DmlBase) NextRawIndex() int {
+	d.rawIndex++
+	return d.rawIndex
 }
 
-func (this *DmlBase) GetDb() IDb {
-	return this.db
+func (d *DmlBase) GetDb() IDb {
+	return d.db
 }
 
-func (this *DmlBase) GetDba() *dbx.SimpleDBA {
-	return this.dba
+func (d *DmlBase) GetDba() *dbx.SimpleDBA {
+	return d.dba
 }
 
-func (this *DmlBase) GetTable() *Table {
-	return this.table
+func (d *DmlBase) GetTable() *Table {
+	return d.table
 }
 
-func (this *DmlBase) GetTableAlias() string {
-	return this.tableAlias
+func (d *DmlBase) GetTableAlias() string {
+	return d.tableAlias
 }
 
-func (this *DmlBase) SetTableAlias(alias string) {
-	this.alias(alias)
+func (d *DmlBase) SetTableAlias(alias string) {
+	d.alias(alias)
 }
 
-func (this *DmlBase) alias(a string) {
+func (d *DmlBase) alias(a string) {
 	if a != "" {
-		this.joinBag = NewAliasBag(a + "_" + JOIN_PREFIX)
-		this.tableAlias = a
-		this.rawSQL = nil
+		d.joinBag = NewAliasBag(a + "_" + JOIN_PREFIX)
+		d.tableAlias = a
+		d.rawSQL = nil
 	}
 }
 
-func (this *DmlBase) GetJoins() []*Join {
-	return this.joins
+func (d *DmlBase) GetJoins() []*Join {
+	return d.joins
 }
 
-func (this *DmlBase) SetParameter(key string, parameter interface{}) {
-	this.parameters[key] = parameter
+func (d *DmlBase) SetParameter(key string, parameter interface{}) {
+	d.parameters[key] = parameter
 }
 
-func (this *DmlBase) GetParameters() map[string]interface{} {
-	return this.parameters
+func (d *DmlBase) GetParameters() map[string]interface{} {
+	return d.parameters
 }
 
-func (this *DmlBase) GetParameter(column *Column) interface{} {
-	return this.parameters[column.GetAlias()]
+func (d *DmlBase) GetParameter(column *Column) interface{} {
+	return d.parameters[column.GetAlias()]
 }
 
-func (this *DmlBase) GetCriteria() *Criteria {
-	return this.criteria
+func (d *DmlBase) GetCriteria() *Criteria {
+	return d.criteria
 }
 
 // Sets the value of parameter to the column
 // param col: The column
 // param parameter: The value to set
-func (this *DmlBase) SetParameterFor(col *Column, parameter interface{}) {
-	this.SetParameter(col.GetAlias(), parameter)
+func (d *DmlBase) SetParameterFor(col *Column, parameter interface{}) {
+	d.SetParameter(col.GetAlias(), parameter)
 }
 
-func (this *DmlBase) GetAliasForAssociation(association *Association) string {
-	if this.joinBag != nil {
-		return this.joinBag.GetAlias(association)
+func (d *DmlBase) GetAliasForAssociation(association *Association) string {
+	if d.joinBag != nil {
+		return d.joinBag.GetAlias(association)
 	}
 	return ""
 }
 
 // includes the associations as inner joins to the current path
 // param associations
-func (this *DmlBase) inner(inner bool, associations ...*Association) {
+func (d *DmlBase) inner(inner bool, associations ...*Association) {
 	for _, association := range associations {
 		pe := new(PathElement)
 		pe.Base = association
 		pe.Inner = inner
-		this.path = append(this.path, pe)
+		d.path = append(d.path, pe)
 	}
 
-	this.rawSQL = nil
+	d.rawSQL = nil
 }
 
 /*
@@ -190,12 +191,12 @@ Indicates that the current association chain should be used to join only.
 A table end alias can also be supplied.
 This
 */
-func (this *DmlBase) joinTo(path []*PathElement, fetch bool) {
+func (d *DmlBase) joinTo(path []*PathElement, fetch bool) {
 	if len(path) > 0 {
-		this.addJoin(path, nil, fetch)
+		d.addJoin(path, nil, fetch)
 
 		// the first position refers to constraints applied to the table, due to a association discriminator
-		pathCriterias := this.buildPathCriterias(path)
+		pathCriterias := d.buildPathCriterias(path)
 		var firstCriterias []*Criteria
 		// process the acumulated criterias
 		for index, pathCriteria := range pathCriterias {
@@ -216,12 +217,12 @@ func (this *DmlBase) joinTo(path []*PathElement, fetch bool) {
 							conds = append(tmp, firstCriterias...)
 							firstCriterias = nil
 						}
-						this.applyOn(path[:index], And(conds...))
+						d.applyOn(path[:index], And(conds...))
 					}
 				}
 
 				if pathCriteria.Columns != nil {
-					this.applyInclude(path[:index], pathCriteria.Columns...)
+					d.applyInclude(path[:index], pathCriteria.Columns...)
 				}
 			}
 		}
@@ -233,12 +234,12 @@ The path criteria on position 0 refers the criteria on the FROM table.
 The Association can have a constraint(discriminator) refering a column in the source table.
 Both ends of Discriminator criterias (association origin and destination tables) are treated in this block
 */
-func (this *DmlBase) buildPathCriterias(paths []*PathElement) []*PathCriteria {
+func (d *DmlBase) buildPathCriterias(paths []*PathElement) []*PathCriteria {
 	// see if any targeted table has discriminator columns
 	index := 0
 	var tableCriterias []*Criteria
 	length := len(paths) + 1
-	pathCriterias := make([]*PathCriteria, length, length)
+	pathCriterias := make([]*PathCriteria, length)
 
 	// processes normal criterias
 	for _, pe := range paths {
@@ -272,7 +273,7 @@ func (this *DmlBase) buildPathCriterias(paths []*PathElement) []*PathCriteria {
 	}
 
 	// process criterias from the association discriminators
-	var lastFkAlias = this.GetTableAlias()
+	var lastFkAlias = d.GetTableAlias()
 	index = 0
 	for _, pe := range paths {
 		index++
@@ -297,17 +298,17 @@ func (this *DmlBase) buildPathCriterias(paths []*PathElement) []*PathCriteria {
 				}
 			}
 		}
-		lastFkAlias = this.joinBag.GetAlias(pe.Derived)
+		lastFkAlias = d.joinBag.GetAlias(pe.Derived)
 	}
 
 	return pathCriterias
 }
 
-func (this *DmlBase) addJoin(associations []*PathElement, common []*PathElement, fetch bool) []*PathElement {
+func (d *DmlBase) addJoin(associations []*PathElement, common []*PathElement, fetch bool) []*PathElement {
 	var local []*PathElement
 
 	if common == nil {
-		common = DeepestCommonPath(this.cachedAssociation, associations)
+		common = DeepestCommonPath(d.cachedAssociation, associations)
 	}
 
 	deriveds := make([]*Association, len(associations))
@@ -340,40 +341,40 @@ func (this *DmlBase) addJoin(associations []*PathElement, common []*PathElement,
 			*/
 			var fkAlias string
 			if f == 0 {
-				fkAlias = this.tableAlias
+				fkAlias = d.tableAlias
 			} else {
-				fkAlias = this.joinBag.GetAlias(lastFk)
+				fkAlias = d.joinBag.GetAlias(lastFk)
 			}
 
 			if deriveds[f].IsMany2Many() {
 				fromFk := deriveds[f].FromM2M
 				toFk := deriveds[f].ToM2M
 
-				this.prepareAssociation(
+				d.prepareAssociation(
 					fkAlias,
-					this.joinBag.GetAlias(fromFk),
+					d.joinBag.GetAlias(fromFk),
 					fromFk)
 
 				if pe.PreferredAlias == "" {
-					fkAlias = this.joinBag.GetAlias(toFk)
+					fkAlias = d.joinBag.GetAlias(toFk)
 				} else {
 					fkAlias = pe.PreferredAlias
-					this.joinBag.SetAlias(toFk, pe.PreferredAlias)
+					d.joinBag.SetAlias(toFk, pe.PreferredAlias)
 				}
-				this.prepareAssociation(
-					this.joinBag.GetAlias(fromFk),
+				d.prepareAssociation(
+					d.joinBag.GetAlias(fromFk),
 					fkAlias,
 					toFk)
 				lastFk = toFk
 			} else {
 				var fkAlias2 string
 				if pe.PreferredAlias == "" {
-					fkAlias2 = this.joinBag.GetAlias(deriveds[f])
+					fkAlias2 = d.joinBag.GetAlias(deriveds[f])
 				} else {
 					fkAlias2 = pe.PreferredAlias
-					this.joinBag.SetAlias(deriveds[f], pe.PreferredAlias)
+					d.joinBag.SetAlias(deriveds[f], pe.PreferredAlias)
 				}
-				this.prepareAssociation(
+				d.prepareAssociation(
 					fkAlias,
 					fkAlias2,
 					deriveds[f])
@@ -398,19 +399,19 @@ func (this *DmlBase) addJoin(associations []*PathElement, common []*PathElement,
 
 	// only caches if the path was different
 	if !matches {
-		this.cachedAssociation = append(this.cachedAssociation, local)
+		d.cachedAssociation = append(d.cachedAssociation, local)
 	}
 
 	// gets the alias of the last join
-	this.lastFkAlias = this.joinBag.GetAlias(lastFk)
+	d.lastFkAlias = d.joinBag.GetAlias(lastFk)
 
-	this.lastJoin = NewJoin(local, fetch)
-	this.joins = append(this.joins, this.lastJoin)
+	d.lastJoin = NewJoin(local, fetch)
+	d.joins = append(d.joins, d.lastJoin)
 
 	return local
 }
 
-func (this *DmlBase) prepareAssociation(aliasFrom string, aliasTo string, currentFk *Association) {
+func (d *DmlBase) prepareAssociation(aliasFrom string, aliasTo string, currentFk *Association) {
 	currentFk.SetAliasFrom(aliasFrom)
 	currentFk.SetAliasTo(aliasTo)
 	for _, rel := range currentFk.GetRelations() {
@@ -419,22 +420,22 @@ func (this *DmlBase) prepareAssociation(aliasFrom string, aliasTo string, curren
 	}
 }
 
-func (this *DmlBase) where(restrictions []*Criteria) {
+func (d *DmlBase) where(restrictions []*Criteria) {
 	var criterias []*Criteria
 	if len(restrictions) > 0 {
 		criterias = append(criterias, restrictions...)
 	}
 
-	if len(this.discriminatorCriterias) > 0 {
-		criterias = append(criterias, this.discriminatorCriterias...)
+	if len(d.discriminatorCriterias) > 0 {
+		criterias = append(criterias, d.discriminatorCriterias...)
 	}
 
 	if len(criterias) > 0 {
-		this.applyWhere(And(criterias...))
+		d.applyWhere(And(criterias...))
 	}
 }
 
-func (this *DmlBase) applyOn(chain []*PathElement, criteria *Criteria) {
+func (d *DmlBase) applyOn(chain []*PathElement, criteria *Criteria) {
 	if len(chain) > 0 {
 		pe := chain[len(chain)-1]
 		cpy, _ := criteria.Clone().(*Criteria)
@@ -442,49 +443,49 @@ func (this *DmlBase) applyOn(chain []*PathElement, criteria *Criteria) {
 		fk := pe.Derived
 		var fkAlias string
 		if fk.IsMany2Many() {
-			fkAlias = this.joinBag.GetAlias(fk.ToM2M)
+			fkAlias = d.joinBag.GetAlias(fk.ToM2M)
 		} else {
-			fkAlias = this.joinBag.GetAlias(pe.Derived)
+			fkAlias = d.joinBag.GetAlias(pe.Derived)
 		}
 		cpy.SetTableAlias(fkAlias)
 
-		this.replaceRaw(cpy)
+		d.replaceRaw(cpy)
 		pe.Criteria = cpy
 
-		this.rawSQL = nil
+		d.rawSQL = nil
 	}
 }
 
-func (this *DmlBase) applyInclude(chain []*PathElement, tokens ...Tokener) {
+func (d *DmlBase) applyInclude(chain []*PathElement, tokens ...Tokener) {
 	if len(chain) > 0 {
 		pe := chain[len(chain)-1]
 		fk := pe.Derived
 		var fkAlias string
 		if fk.IsMany2Many() {
-			fkAlias = this.joinBag.GetAlias(fk.ToM2M)
+			fkAlias = d.joinBag.GetAlias(fk.ToM2M)
 		} else {
-			fkAlias = this.joinBag.GetAlias(pe.Derived)
+			fkAlias = d.joinBag.GetAlias(pe.Derived)
 		}
 		for _, token := range tokens {
 			token.SetTableAlias(fkAlias)
 		}
 
-		this.rawSQL = nil
+		d.rawSQL = nil
 	}
 }
 
 // WHERE ===
-func (this *DmlBase) applyWhere(restriction *Criteria) {
+func (d *DmlBase) applyWhere(restriction *Criteria) {
 	token, _ := restriction.Clone().(*Criteria)
-	this.replaceRaw(token)
-	token.SetTableAlias(this.tableAlias)
+	d.replaceRaw(token)
+	token.SetTableAlias(d.tableAlias)
 
-	this.criteria = token
+	d.criteria = token
 
-	this.rawSQL = nil
+	d.rawSQL = nil
 }
 
-func (this *DmlBase) dumpParameters(params map[string]interface{}) string {
+func (d *DmlBase) dumpParameters(params map[string]interface{}) string {
 	str := tk.NewStrBuffer()
 	for name, v := range params {
 		if strings.HasSuffix(name, "$") {
@@ -512,7 +513,7 @@ func (this *DmlBase) dumpParameters(params map[string]interface{}) string {
 	return str.String()
 }
 
-func (this *DmlBase) debugTime(when time.Time, depth int) {
+func (d *DmlBase) debugTime(when time.Time, depth int) {
 	elapsed := time.Since(when)
 	if lgr.IsActive(log.DEBUG) {
 		lgr.CallerAt(depth+1).Debugf("%s", func() string {
@@ -521,12 +522,12 @@ func (this *DmlBase) debugTime(when time.Time, depth int) {
 	}
 }
 
-func (this *DmlBase) debugSQL(sql string, depth int) {
+func (d *DmlBase) debugSQL(sql string, depth int) {
 	if lgr.IsActive(log.DEBUG) {
-		dump := this.dumpParameters(this.parameters)
+		dump := d.dumpParameters(d.parameters)
 		lgr.CallerAt(depth+1).Debugf("%s", func() string {
 			return fmt.Sprintf("\n\t%T SQL: %s\n\tparameters: %s",
-				this, sql, dump)
+				d, sql, dump)
 		})
 	}
 }
@@ -536,7 +537,7 @@ func (this *DmlBase) debugSQL(sql string, depth int) {
 // param baseDml: the instance DmlBase were to put the created parameters
 // param token
 // return
-func (this *DmlBase) replaceRaw(token Tokener) {
+func (d *DmlBase) replaceRaw(token Tokener) {
 	/*
 		if tk.IsNil(token) {
 			return
@@ -545,9 +546,9 @@ func (this *DmlBase) replaceRaw(token Tokener) {
 
 	members := token.GetMembers()
 	if token.GetOperator() == TOKEN_RAW {
-		this.rawIndex++
-		parameter := this.tableAlias + "_R" + strconv.Itoa(this.rawIndex)
-		this.SetParameter(parameter, token.GetValue())
+		d.rawIndex++
+		parameter := d.tableAlias + "_R" + strconv.Itoa(d.rawIndex)
+		d.SetParameter(parameter, token.GetValue())
 		token.SetOperator(TOKEN_PARAM)
 		token.SetValue(parameter)
 		return
@@ -555,15 +556,13 @@ func (this *DmlBase) replaceRaw(token Tokener) {
 		subquery := token.GetValue().(*Query)
 		// copy the parameters of the subquery to the main query
 		for k, v := range subquery.GetParameters() {
-			this.SetParameter(k, v)
+			d.SetParameter(k, v)
 		}
 		return
 	} else {
-		if members != nil {
-			for _, t := range members {
-				if t != nil {
-					this.replaceRaw(t)
-				}
+		for _, t := range members {
+			if t != nil {
+				d.replaceRaw(t)
 			}
 		}
 	}

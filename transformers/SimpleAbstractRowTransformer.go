@@ -14,22 +14,22 @@ type SimpleAbstractRowTransformer struct {
 
 var _ dbx.IRowTransformer = &SimpleAbstractRowTransformer{}
 
-func (this *SimpleAbstractRowTransformer) BeforeAll() coll.Collection {
+func (s *SimpleAbstractRowTransformer) BeforeAll() coll.Collection {
 	return coll.NewArrayList()
 }
 
-func (this *SimpleAbstractRowTransformer) Transform(rows *sql.Rows) (interface{}, error) {
-	if this.Transformer != nil {
-		return this.Transformer(rows)
+func (s *SimpleAbstractRowTransformer) Transform(rows *sql.Rows) (interface{}, error) {
+	if s.Transformer != nil {
+		return s.Transformer(rows)
 	}
-	return nil, &tk.Fail{dbx.FAULT_PARSE_STATEMENT, "Undefined Transformer function"}
+	return nil, &tk.Fail{Code: dbx.FAULT_PARSE_STATEMENT, Message: "Undefined Transformer function"}
 }
 
-func (this *SimpleAbstractRowTransformer) OnTransformation(result coll.Collection, instance interface{}) {
+func (s *SimpleAbstractRowTransformer) OnTransformation(result coll.Collection, instance interface{}) {
 	if instance != nil {
 		result.Add(instance)
 	}
 }
 
-func (this *SimpleAbstractRowTransformer) AfterAll(result coll.Collection) {
+func (s *SimpleAbstractRowTransformer) AfterAll(result coll.Collection) {
 }

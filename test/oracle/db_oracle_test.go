@@ -7,12 +7,11 @@ import (
 	"testing"
 	"time"
 
-	"errors"
-
 	"github.com/docker/go-connections/nat"
+	"github.com/quintans/faults"
 	. "github.com/quintans/goSQL/db"
 	"github.com/quintans/goSQL/test/common"
-	trx "github.com/quintans/goSQL/translators"
+	"github.com/quintans/goSQL/translators"
 	"github.com/quintans/toolkit/log"
 	"github.com/testcontainers/testcontainers-go"
 
@@ -44,7 +43,7 @@ func StartContainer(port string) (func(), ITransactionManager, *sql.DB, error) {
 			Started:          true,
 		})
 		if err != nil {
-			return nil, nil, nil, errors.Wrap(err, "To connect to Oracle, Instant Client is needed.")
+			return nil, nil, nil, faults.Errorf("to connect to Oracle, Instant Client is needed: %w", err)
 		}
 
 		closer = func() { db.Terminate(ctx) }
@@ -75,24 +74,28 @@ func TestOracle(t *testing.T) {
 	}
 	defer closer()
 
-	tester := common.Tester{DbName: common.Oracle}
-	tester.RunAll(tm, t)
+	tester := common.Tester{DbName: common.Oracle, Tm: tm}
+	tester.RunAll(t)
 	theDB.Close()
 }
 
 func InitOracle(port string) (ITransactionManager, *sql.DB, error) {
 	common.RAW_SQL = "SELECT name FROM book WHERE name LIKE :1"
 
-	translator := trx.NewOracleTranslator()
+	translator := translators.NewOracleTranslator()
 	translator.RegisterTranslation(
 		common.TOKEN_SECONDSDIFF,
-		func(dmlType DmlType, token Tokener, tx Translator) string {
+		func(dmlType DmlType, token Tokener, tx Translator) (string, error) {
 			m := token.GetMembers()
+			args, err := translators.Translate(tx.Translate, dmlType, m...)
+			if err != nil {
+				return "", err
+			}
 			return fmt.Sprintf(
 				"(SYSDATE - ( %s - %s) - SYSDATE)*86400",
-				tx.Translate(dmlType, m[1]),
-				tx.Translate(dmlType, m[0]),
-			)
+				args[1],
+				args[2],
+			), nil
 		},
 	)
 

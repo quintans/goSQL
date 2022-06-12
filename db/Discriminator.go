@@ -1,7 +1,5 @@
 package db
 
-import ()
-
 type Discriminator struct {
 	Column *Column
 	Value  Tokener
@@ -14,6 +12,6 @@ func NewDiscriminator(column *Column, value Tokener) Discriminator {
 	return this
 }
 
-func (this Discriminator) Criteria() *Criteria {
-	return Matches(this.Column, this.Value)
+func (d Discriminator) Criteria() *Criteria {
+	return Matches(d.Column, d.Value)
 }
