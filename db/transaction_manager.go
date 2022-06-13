@@ -90,13 +90,34 @@ type TransactionManager struct {
 // dbFactory is a database connection factory. This factory accepts boolean flag that indicates if the created IDb is still valid.
 // This may be useful if an Entity holds a reference to the IDb to do lazy loading.
 func NewTransactionManager(database *sql.DB, dbFactory func(dbx.IConnection) IDb, capacity int) *TransactionManager {
-	this := new(TransactionManager)
-	this.database = database
-	this.dbFactory = dbFactory
+	t := new(TransactionManager)
+	t.database = database
+	t.dbFactory = dbFactory
 	if capacity > 1 {
-		this.stmtCache = cache.NewLRUCache(capacity)
+		t.stmtCache = cache.NewLRUCache(capacity)
 	}
-	return this
+	return t
+}
+
+func NewDefaultTransactionManager(database *sql.DB, translator Translator) *TransactionManager {
+	// transaction manager
+	return NewTransactionManager(
+		database,
+		func(c dbx.IConnection) IDb {
+			return NewDb(c, translator)
+		},
+		1000,
+	)
+}
+
+func (t *TransactionManager) SetCacheSize(capacity int) {
+	if capacity > 1 {
+		t.stmtCache = cache.NewLRUCache(capacity)
+	}
+}
+
+func (t *TransactionManager) SetDbFactory(dbFactory func(dbx.IConnection) IDb) {
+	t.dbFactory = dbFactory
 }
 
 func (t *TransactionManager) With(db IDb) ITransactionManager {

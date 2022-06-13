@@ -112,14 +112,12 @@ Another example with an update
 store.Update(PUBLISHER).Submit(&publisher)
 ```
 
-and the shorter version...
+and the shortest version...
 
 ```go
 store.Modify(&publisher)
 ```
-<br>
-Besides the examples in this page there are a lot more examples in the
-[Kanban taskboard](//github.com/quintans/taskboard) specifically [here](//github.com/quintans/taskboard/blob/master/biz/impl/TaskBoardService.go).
+
 
 ## Features
 
@@ -209,31 +207,18 @@ var (
 // the transaction manager
 var TM ITransactionManager
 
-func init() {
+func main() {
 	// database configuration
 	mydb, err := sql.Open("mysql", "root:root@/gosql?parseTime=true")
 	if err != nil {
 		panic(err)
 	}
 
-	translator := trx.NewMySQL5Translator()
-
 	// transaction manager
-	TM = NewTransactionManager(
-		// database
-		mydb,
-		// database context factory
-		func(c dbx.IConnection) IDb {
-			return NewDb(c, translator)
-		},
-		// statement cache
-		1000,
-	)
-}
+	tm = NewDefaultTransactionManager(mydb, trx.NewMySQL5Translator())
 
-func main() {
-	// get the databse context
-	store := TM.Store()
+	// get the database context
+	store := tm.Store()
 	// the target entity
 	var publisher Publisher
 	// Retrieve
@@ -246,14 +231,14 @@ func main() {
 }
 ```
 
-Source from [intro.go](intro.go).
+Source from [basic.go](./example/basic.go).
 
-You can also check out [common.go](test/common/common.go) for a lot more examples.
+You can also check out [common.go](./test/common/common.go) for a lot more examples.
 
 <br>
 
 In the following chapters I will try to explain the several aspects of the library using a set of examples.
-These examples are supported by tables defined in [tables_mysql.sql](test/mysql/tables_mysql.sql), a MySQL database sql script.
+These examples are supported by tables defined in [tables_mysql.sql](./test/mysql/tables_mysql.sql), a MySQL database sql script.
 
 I will start first by describing the table model and how to map the entities.
 

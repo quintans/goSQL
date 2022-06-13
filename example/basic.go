@@ -2,7 +2,6 @@ package main
 
 import (
 	"github.com/quintans/goSQL/db"
-	"github.com/quintans/goSQL/dbx"
 	trx "github.com/quintans/goSQL/translators"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -27,9 +26,9 @@ var (
 )
 
 // the transaction manager
-var TM db.ITransactionManager
+var tm db.ITransactionManager
 
-func init() {
+func main() {
 	// database configuration
 	mydb, err := sql.Open("mysql", "root:root@/gosql?parseTime=true")
 	if err != nil {
@@ -37,28 +36,15 @@ func init() {
 		panic(err)
 	}
 
-	translator := trx.NewMySQL5Translator()
-
 	// transaction manager
-	TM = db.NewTransactionManager(
-		// database
-		mydb,
-		// database context factory
-		func(c dbx.IConnection) db.IDb {
-			return db.NewDb(c, translator)
-		},
-		// statement cache
-		1000,
-	)
-}
+	tm = db.NewDefaultTransactionManager(mydb, trx.NewMySQL5Translator())
 
-func main() {
 	// get the databse context
-	store := TM.Store()
+	store := tm.Store()
 	// the target entity
 	var publisher Publisher
 	// Retrieve
-	_, err := store.Retrieve(&publisher, 2)
+	_, err = store.Retrieve(&publisher, 2)
 	if err != nil {
 		fmt.Printf("%+v\n", err)
 		panic(err)
