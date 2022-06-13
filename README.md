@@ -1306,7 +1306,7 @@ translator.RegisterConverter("color", ColorConverter{})
 
 ## Embeded Structs
 
-If we want to group columns into a complex type (`struct`) we just have to tag the firld as `sql:"embeded"`.
+If we want to group columns into a complex type (`struct`) we just have to tag the field as `sql:"embeded"`.
 This is handy when working with Value Objects.
 
 Consider the table

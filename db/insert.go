@@ -1,8 +1,6 @@
 package db
 
 import (
-	"fmt"
-
 	"github.com/quintans/faults"
 	coll "github.com/quintans/toolkit/collections"
 
@@ -161,7 +159,6 @@ func (i *Insert) Submit(instance interface{}) (int64, error) {
 	var version int64 = 1
 	for e := i.table.GetColumns().Enumerator(); e.HasNext(); {
 		column := e.Next().(*Column)
-		fmt.Println("===>", column.name)
 		if column.IsVersion() {
 			i.Set(column, version)
 		} else {
