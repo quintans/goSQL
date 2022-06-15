@@ -2,6 +2,8 @@ package db
 
 import (
 	"reflect"
+	"strings"
+	"sync"
 
 	"github.com/quintans/faults"
 	"github.com/quintans/goSQL/dbx"
@@ -11,8 +13,10 @@ import (
 
 var logger = log.LoggerFor("github.com/quintans/goSQL/db")
 
-var OPTIMISTIC_LOCK_MSG = "No update was possible for this version of the data. Data may have changed."
-var VERSION_SET_MSG = "Unable to set Version data."
+var (
+	OPTIMISTIC_LOCK_MSG = "No update was possible for this version of the data. Data may have changed."
+	VERSION_SET_MSG     = "Unable to set Version data."
+)
 
 const (
 	sqlKey        = "sql"
@@ -55,6 +59,7 @@ type TableNamer interface {
 }
 
 type IDb interface {
+	PopulateMapping(prefix string, typ reflect.Type) (map[string]*EntityProperty, error)
 	GetTranslator() Translator
 	GetConnection() dbx.IConnection
 
@@ -78,11 +83,12 @@ type IDb interface {
 
 var _ IDb = &Db{}
 
-func NewDb(connection dbx.IConnection, translator Translator) *Db {
+func NewDb(connection dbx.IConnection, translator Translator, cache *sync.Map) *Db {
 	this := new(Db)
 	this.Overrider = this
 	this.Connection = connection
 	this.Translator = translator
+	this.cache = cache
 	return this
 }
 
@@ -92,6 +98,7 @@ type Db struct {
 	Translator Translator
 
 	attributes map[string]interface{}
+	cache      *sync.Map
 }
 
 func (d *Db) GetTranslator() Translator {
@@ -146,8 +153,8 @@ func structName(instance interface{}) (*Table, reflect.Type, error) {
 	} else {
 		tab, ok = Tables.Get(ext.Str(typ.Name()))
 		if !ok {
-			// tries to find using also the strcut package.
-			// The package correspondes to the database schema
+			// tries to find using also the struct package.
+			// The package corresponds to the database schema
 			tab, ok = Tables.Get(ext.Str(typ.PkgPath() + "." + typ.Name()))
 			if !ok {
 				return nil, nil, faults.Errorf("There is no table mapped to Struct Type %s", typ.Name())
@@ -164,7 +171,7 @@ func (d *Db) Create(instance interface{}) error {
 		return err
 	}
 
-	var dml = d.Overrider.Insert(table)
+	dml := d.Overrider.Insert(table)
 
 	_, err = dml.Submit(instance)
 	return err
@@ -173,7 +180,7 @@ func (d *Db) Create(instance interface{}) error {
 // struct field with `sql:"omit"` should be ignored if value is zero in an update.
 // in a Retrieve, this field with this tag is also ignored
 func (d *Db) acceptColumn(table *Table, t reflect.Type, handler func(*Column)) error {
-	mappings, err := PopulateMapping("", t, d.GetTranslator())
+	mappings, err := d.PopulateMapping("", t)
 	if err != nil {
 		return err
 	}
@@ -196,7 +203,7 @@ func (d *Db) Retrieve(instance interface{}, keys ...interface{}) (bool, error) {
 		return false, err
 	}
 
-	var dml = d.Overrider.Query(table)
+	dml := d.Overrider.Query(table)
 	if err := d.acceptColumn(table, t, func(c *Column) {
 		dml.Column(c)
 	}); err != nil {
@@ -220,6 +227,107 @@ func (d *Db) Retrieve(instance interface{}, keys ...interface{}) (bool, error) {
 	return dml.SelectTo(instance)
 }
 
+func (d *Db) PopulateMapping(prefix string, typ reflect.Type) (map[string]*EntityProperty, error) {
+	if typ.Kind() == reflect.Ptr {
+		typ = typ.Elem()
+	}
+	elem, ok := d.cache.Load(typ)
+	if !ok {
+		// create an attribute data structure as a map of types keyed by a string.
+		attrs := map[string]*StructProperty{}
+
+		err := d.walkTreeStruct(typ, attrs, nil)
+		if err != nil {
+			return nil, err
+		}
+		elem, _ = d.cache.LoadOrStore(typ, attrs)
+	}
+
+	attrs := elem.(map[string]*StructProperty)
+	mappings := map[string]*EntityProperty{}
+
+	for k, v := range attrs {
+		if prefix != "" {
+			k = prefix + k
+		}
+		mappings[k] = &EntityProperty{
+			StructProperty: *v,
+		}
+	}
+	return mappings, nil
+}
+
+func (d *Db) walkTreeStruct(typ reflect.Type, attrs map[string]*StructProperty, index []int) error {
+	// if a pointer to a struct is passed, get the type of the dereferenced object
+	if typ.Kind() == reflect.Ptr {
+		typ = typ.Elem()
+	}
+
+	// Only structs are supported so return an empty result if the passed object
+	// isn't a struct
+	if typ.Kind() != reflect.Struct {
+		return nil
+	}
+
+	// loop through the struct's fields and set the map
+	num := typ.NumField()
+	for i := 0; i < num; i++ {
+		p := typ.Field(i)
+		var omit, embeded bool
+		var converter Converter
+		sqlVal := p.Tag.Get(sqlKey)
+		if sqlVal != "" {
+			splits := strings.Split(sqlVal, ",")
+			for _, s := range splits {
+				v := strings.TrimSpace(s)
+				switch v {
+				case sqlOmitionVal:
+					omit = true
+				case sqlEmbededVal:
+					embeded = true
+				default:
+					if strings.HasPrefix(v, converterTag) {
+						cn := v[len(converterTag):]
+						converter = d.Translator.GetConverter(cn)
+						if converter == nil {
+							return faults.Errorf("Converter %s is not registered", cn)
+						}
+					}
+				}
+			}
+		}
+		x := append(index, i)
+		if p.Anonymous {
+			if err := d.walkTreeStruct(p.Type, attrs, x); err != nil {
+				return err
+			}
+		} else if embeded {
+			if err := d.walkTreeStruct(p.Type, attrs, x); err != nil {
+				return err
+			}
+		} else {
+			ep := &StructProperty{}
+			ep.getter = makeGetter(x)
+			ep.setter = makeSetter(x)
+			capitalized := strings.ToUpper(p.Name[:1]) + p.Name[1:]
+			attrs[capitalized] = ep
+			ep.Omit = omit
+			ep.converter = converter
+			// we want pointers. only pointer are addressable
+			if p.Type.Kind() == reflect.Ptr || p.Type.Kind() == reflect.Slice || p.Type.Kind() == reflect.Array {
+				ep.Type = p.Type
+			} else {
+				ep.Type = reflect.PtrTo(p.Type)
+			}
+
+			if p.Type.Kind() == reflect.Slice || p.Type.Kind() == reflect.Array {
+				ep.InnerType = p.Type.Elem()
+			}
+		}
+	}
+	return nil
+}
+
 func isZero(x interface{}) bool {
 	if x == nil {
 		return true
@@ -241,7 +349,7 @@ func (d *Db) buildCriteria(table *Table, example interface{}) ([]*Criteria, erro
 
 	s := reflect.ValueOf(example)
 	t := reflect.TypeOf(example)
-	mappings, err := PopulateMapping("", t, d.GetTranslator())
+	mappings, err := d.PopulateMapping("", t)
 	if err != nil {
 		return nil, err
 	}
@@ -306,7 +414,7 @@ func (d *Db) Modify(instance interface{}) (bool, error) {
 		return false, err
 	}
 
-	var dml = d.Overrider.Update(table)
+	dml := d.Overrider.Update(table)
 
 	var key int64
 	key, err = dml.Submit(instance)
@@ -319,7 +427,7 @@ func (d *Db) Remove(instance interface{}) (bool, error) {
 		return false, err
 	}
 
-	var dml = d.Overrider.Delete(table)
+	dml := d.Overrider.Delete(table)
 
 	var deleted int64
 	deleted, err = dml.Submit(instance)
@@ -333,7 +441,7 @@ func (d *Db) RemoveAll(instance interface{}) (int64, error) {
 		return 0, err
 	}
 
-	var dml = d.Overrider.Delete(table)
+	dml := d.Overrider.Delete(table)
 	criterias, err := d.buildCriteria(table, instance)
 	if err != nil {
 		return 0, err

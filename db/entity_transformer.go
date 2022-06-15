@@ -1,14 +1,13 @@
 package db
 
 import (
+	"database/sql"
+	"reflect"
 	"strings"
 
 	"github.com/quintans/goSQL/dbx"
 	coll "github.com/quintans/toolkit/collections"
 	"github.com/quintans/toolkit/ext"
-
-	"database/sql"
-	"reflect"
 )
 
 type EntityTransformerOverrider interface {
@@ -80,7 +79,7 @@ func (e *EntityTransformer) PopulateMapping(tableAlias string, typ reflect.Type)
 		prefix = tableAlias + "."
 	}
 
-	mappings, err := PopulateMapping(prefix, typ, e.Query.GetDb().GetTranslator())
+	mappings, err := e.Query.GetDb().PopulateMapping(prefix, typ)
 	if err != nil {
 		return nil, err
 	}

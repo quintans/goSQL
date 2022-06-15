@@ -1,12 +1,12 @@
 package db
 
 import (
-	"github.com/quintans/faults"
-	coll "github.com/quintans/toolkit/collections"
-
 	"database/sql/driver"
 	"reflect"
 	"time"
+
+	"github.com/quintans/faults"
+	coll "github.com/quintans/toolkit/collections"
 )
 
 type AutoKeyStrategy int
@@ -53,9 +53,9 @@ func (i *Insert) Alias(alias string) *Insert {
 	return i
 }
 
-//Definies if the auto key should be retrieved.
-//Returning an Id could mean one more query execution.
-//It returns the Id by default.
+// Definies if the auto key should be retrieved.
+// Returning an Id could mean one more query execution.
+// It returns the Id by default.
 func (i *Insert) ReturnId(returnId bool) *Insert {
 	i.returnId = returnId
 	return i
@@ -136,7 +136,7 @@ func (i *Insert) Submit(instance interface{}) (int64, error) {
 		mappings = i.lastMappings
 	} else {
 		var err error
-		mappings, err = PopulateMapping("", typ, i.GetDb().GetTranslator())
+		mappings, err = i.GetDb().PopulateMapping("", typ)
 		if err != nil {
 			return 0, err
 		}
@@ -164,7 +164,7 @@ func (i *Insert) Submit(instance interface{}) (int64, error) {
 		} else {
 			bp := mappings[column.GetAlias()]
 			if bp != nil {
-				var marked = !useMarks || marks[column.GetAlias()]
+				marked := !useMarks || marks[column.GetAlias()]
 				v := bp.Get(elem)
 				if v.IsValid() && (!useMarks || marked) {
 					if v.Kind() == reflect.Ptr && v.IsNil() {

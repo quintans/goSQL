@@ -1,12 +1,12 @@
 package db
 
 import (
-	"github.com/quintans/faults"
-	"github.com/quintans/goSQL/dbx"
-
 	"fmt"
 	"reflect"
 	"time"
+
+	"github.com/quintans/faults"
+	"github.com/quintans/goSQL/dbx"
 )
 
 type PreDeleter interface {
@@ -45,7 +45,7 @@ func (d *Delete) Submit(value interface{}) (int64, error) {
 		mappings = d.lastMappings
 	} else {
 		var err error
-		mappings, err = PopulateMapping("", typ, d.GetDb().GetTranslator())
+		mappings, err = d.GetDb().PopulateMapping("", typ)
 		if err != nil {
 			return 0, err
 		}

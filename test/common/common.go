@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -22,8 +23,8 @@ import (
 var logger = log.LoggerFor("github.com/quintans/goSQL/test")
 
 // custom Db - for setting default parameters
-func NewMyDb(connection dbx.IConnection, translator db.Translator, lang string) *MyDb {
-	baseDb := db.NewDb(connection, translator)
+func NewMyDb(connection dbx.IConnection, translator db.Translator, cache *sync.Map, lang string) *MyDb {
+	baseDb := db.NewDb(connection, translator, cache)
 	return &MyDb{baseDb, lang}
 }
 
@@ -68,8 +69,8 @@ func InitDB(driverName, dataSourceName string, translator db.Translator, initSql
 		// database
 		mydb,
 		// databse context factory
-		func(c dbx.IConnection) db.IDb {
-			return NewMyDb(c, translator, "pt")
+		func(c dbx.IConnection, cache *sync.Map) db.IDb {
+			return NewMyDb(c, translator, cache, "pt")
 		},
 		// statement cache
 		1000,
@@ -132,8 +133,8 @@ type Tester struct {
 
 func (tt Tester) RunAll(t *testing.T) {
 	t.Run("RunRetrieveOther", tt.RunRetrieveOther)
-	t.Run("RunEmbeded", tt.RunEmbeded)
-	t.Run("RunEmbededPtr", tt.RunEmbededPtr)
+	t.Run("RunEmbedded", tt.RunEmbedded)
+	t.Run("RunEmbeddedPtr", tt.RunEmbeddedPtr)
 	t.Run("RunConverter", tt.RunConverter)
 	t.Run("RunQueryIntoUnexportedFields", tt.RunQueryIntoUnexportedFields)
 	t.Run("RunSelectUTF8", tt.RunSelectUTF8)
@@ -248,7 +249,7 @@ func ResetDB(TM db.ITransactionManager) {
 			return err
 		}
 
-		insert.Values(3, 1, "Scrapbook", 6.5, time.Date(2012, time.April, 01, 0, 0, 0, 0, time.UTC), 2)
+		insert.Values(3, 1, "Scrapbook", 6.5, time.Date(2012, time.April, 0o1, 0, 0, 0, 0, time.UTC), 2)
 		_, err = insert.Execute()
 		if err != nil {
 			return err
@@ -579,7 +580,7 @@ func (tt Tester) RunSelectUTF8(t *testing.T) {
 	// get the database context
 	store := tt.Tm.Store()
 	// the target entity
-	var publisher = Publisher{}
+	publisher := Publisher{}
 
 	ok, err := store.Query(PUBLISHER).
 		All().
@@ -653,7 +654,6 @@ func (tt Tester) RunQueryIntoUnexportedFields(t *testing.T) {
 		All().
 		Where(AUTHOR_C_ID.Matches(3)).
 		SelectTo(&author)
-
 	if err != nil {
 		t.Fatalf("Failed RunRetrieveIntoUnexportedFields: %s", err)
 	}
@@ -699,7 +699,7 @@ func (tt Tester) RunOmitField(t *testing.T) {
 
 	// get the database context
 	store := tt.Tm.Store()
-	var author = Author{}
+	author := Author{}
 	ok, err := store.Retrieve(&author, 1)
 	if !ok || err != nil {
 		t.Fatalf("Failed RunOmitField: Unable to Retrieve - %s", err)
@@ -820,7 +820,7 @@ func (tt Tester) RunInsertStructReturningKey(t *testing.T) {
 			t.Fatal("The Auto Insert Key for the ID field was not set")
 		}
 
-		var pubPtr = new(Publisher)
+		pubPtr := new(Publisher)
 		pubPtr.Name = ext.String("Untited Editors")
 		key, err = store.Insert(PUBLISHER).Submit(pubPtr)
 		if err != nil {
@@ -1029,7 +1029,6 @@ func (tt Tester) RunUpdateSubquery(t *testing.T) {
 		}
 
 		return nil
-
 	}); err != nil {
 		t.Fatalf("Failed Update with Subquery Test: %s", err)
 	}
@@ -1267,7 +1266,6 @@ func (tt Tester) RunListFlatTree(t *testing.T) {
 		Fetch(). // add all columns off book in the query
 		Where(PUBLISHER_C_ID.Matches(2)).
 		ListFlatTree(&publishers)
-
 	if err != nil {
 		t.Fatalf("%s", err)
 	}
@@ -1313,7 +1311,6 @@ func (tt Tester) RunListFlatTree(t *testing.T) {
 			t.Fatalf("The list of books for the publisher with id 2 was incorrectly retrieved. Expected 1 got %v", len(publisher.Books))
 		}
 	}
-
 }
 
 func (tt Tester) RunListTreeOf(t *testing.T) {
@@ -1411,7 +1408,6 @@ func (tt Tester) RunSearchedCase(t *testing.T) {
 				End(),
 		).As("Classification").
 		List(&dtos)
-
 	if err != nil {
 		t.Fatalf("Failed RunSearchedCase: %s", err)
 	}
@@ -1439,7 +1435,6 @@ func (tt Tester) RunSimpleCase(t *testing.T) {
 					End(),
 			),
 		).SelectInto(&sale)
-
 	if err != nil {
 		t.Fatalf("Failed RunSimpleCase: %s", err)
 	}
@@ -1464,7 +1459,6 @@ func (tt Tester) RunColumnSubquery(t *testing.T) {
 		Column(PUBLISHER_C_NAME).
 		Column(subquery).As("Value").
 		List(&dtos)
-
 	if err != nil {
 		t.Fatalf("Failed TestColumnSubquery: %s", err)
 	}
@@ -1498,7 +1492,6 @@ func (tt Tester) RunWhereSubquery(t *testing.T) {
 		Join().
 		Where(PUBLISHER_C_ID.In(subquery)).
 		List(&dtos)
-
 	if err != nil {
 		t.Fatalf("Failed TestWhereSubquery: %s", err)
 	}
@@ -1517,7 +1510,7 @@ func (tt Tester) RunInnerOn(t *testing.T) {
 
 	// gets all publishers that had a book published before 2013
 	store := tt.Tm.Store()
-	var publishers = make([]*Publisher, 0)
+	publishers := make([]*Publisher, 0)
 	_, err := store.Query(PUBLISHER).
 		All().
 		Distinct().
@@ -1527,7 +1520,6 @@ func (tt Tester) RunInnerOn(t *testing.T) {
 		ListInto(func(publisher *Publisher) {
 			publishers = append(publishers, publisher)
 		})
-
 	if err != nil {
 		t.Fatalf("Failed TestInnerOn: %s", err)
 	}
@@ -1558,7 +1550,6 @@ func (tt Tester) RunInnerOn2(t *testing.T) {
 		On(AUTHOR_C_NAME.Like("%Doe")).
 		Join().
 		List(&publishers)
-
 	if err != nil {
 		t.Fatalf("Failed TestInnerOn: %s", err)
 	}
@@ -1588,7 +1579,6 @@ func (tt Tester) RunOuterFetchOrder(t *testing.T) {
 		Outer(BOOK_A_AUTHORS).OrderBy(AUTHOR_C_ID).Desc(). // order a column belonging to AUTHOR
 		Fetch().                                           // this marks the end of the branch and that the results should populate a struct tree
 		ListTreeOf((*Publisher)(nil))
-
 	if err != nil {
 		t.Fatalf("Failed RunOuterFetchOrder: %s", err)
 	}
@@ -1655,7 +1645,6 @@ func (tt Tester) RunOuterFetchOrderAs(t *testing.T) {
 		OrderAs(BOOK_C_ID.For("book")).
 		OrderAs(AUTHOR_C_ID.For("auth")).Desc().
 		ListTreeOf((*Publisher)(nil))
-
 	if err != nil {
 		t.Fatalf("Failed RunOuterFetchOrderAs: %s", err)
 	}
@@ -1719,7 +1708,6 @@ func (tt Tester) RunGroupBy(t *testing.T) {
 		Join().
 		GroupByPos(1).
 		List(&dtos)
-
 	if err != nil {
 		t.Fatalf("Failed RunGroupBy: %s", err)
 	}
@@ -1737,14 +1725,13 @@ func (tt Tester) RunOrderBy(t *testing.T) {
 	ResetDB(tt.Tm)
 
 	store := tt.Tm.Store()
-	var publishers = make([]*Publisher, 0)
+	publishers := []*Publisher{}
 	_, err := store.Query(PUBLISHER).
 		All().
 		OrderBy(PUBLISHER_C_NAME).
 		ListInto(func(publisher *Publisher) {
 			publishers = append(publishers, publisher)
 		})
-
 	if err != nil {
 		t.Fatalf("Failed RunOrderBy: %s", err)
 	}
@@ -1778,7 +1765,6 @@ func (tt Tester) RunPagination(t *testing.T) {
 		Skip(2).  // skip the first 2 records
 		Limit(3). // limit to 3 records
 		ListFlatTree(&publishers)
-
 	if err != nil {
 		t.Fatalf("Failed TestPagination: %s", err)
 	}
@@ -1805,7 +1791,6 @@ func (tt Tester) RunAssociationDiscriminator(t *testing.T) {
 		Fetch().
 		Order(PROJECT_C_NAME).
 		ListTreeOf((*Project)(nil))
-
 	if err != nil {
 		t.Fatalf("Failed TestAssociationDiscriminator: %s", err)
 	}
@@ -1864,7 +1849,6 @@ func (tt Tester) RunAssociationDiscriminatorReverse(t *testing.T) {
 			}
 		}
 	}
-
 }
 
 func (tt Tester) RunTableDiscriminator(t *testing.T) {
@@ -1875,7 +1859,6 @@ func (tt Tester) RunTableDiscriminator(t *testing.T) {
 	err := store.Query(STATUS).
 		All().
 		List(&statuses)
-
 	if err != nil {
 		t.Fatalf("Failed Query in TestTableDiscriminator: %s", err)
 	}
@@ -1921,7 +1904,6 @@ func (tt Tester) RunTableDiscriminator(t *testing.T) {
 	if tmp == 0 {
 		t.Fatal("Expected Id different of 0")
 	}
-
 }
 
 func (tt Tester) RunJoinTableDiscriminator(t *testing.T) {
@@ -1934,7 +1916,6 @@ func (tt Tester) RunJoinTableDiscriminator(t *testing.T) {
 		Outer(PROJECT_A_STATUS).
 		Fetch().
 		ListFlatTree(&result)
-
 	if err != nil {
 		t.Fatalf("Failed TestJoinTableDiscriminator: %s", err)
 	}
@@ -1967,7 +1948,6 @@ func (tt Tester) RunCustomFunction(t *testing.T) {
 				Greater(1000),
 		).
 		List(&books)
-
 	if err != nil {
 		t.Fatalf("Failed TestCustomFunction: %s", err)
 	}
@@ -1995,7 +1975,6 @@ func (tt Tester) RunRawSQL1(t *testing.T) {
 		func(name string) { // we calso use pointers: func(name *string)
 			result = append(result, name)
 		}, "%book")
-
 	if err != nil {
 		t.Fatalf("Failed TestRawSQL1: %s", err)
 	}
@@ -2024,7 +2003,6 @@ func (tt Tester) RunRawSQL2(t *testing.T) {
 			result = append(result, name)
 			return nil
 		}, "%book")
-
 	if err != nil {
 		t.Fatalf("Failed TestRawSQL2: %s", err)
 	}
@@ -2053,7 +2031,6 @@ func (tt Tester) RunHaving(t *testing.T) {
 		ListInto(func(sale *PublisherSales) {
 			sales = append(sales, sale)
 		})
-
 	if err != nil {
 		t.Fatalf("Failed TestHaving: %s", err)
 	}
@@ -2081,7 +2058,7 @@ func (tt Tester) RunUnion(t *testing.T) {
 		On(
 			db.Range(
 				BOOK_C_PUBLISHED,
-				time.Date(2013, time.January, 01, 0, 0, 0, 0, time.UTC),
+				time.Date(2013, time.January, 0o1, 0, 0, 0, 0, time.UTC),
 				time.Date(2013, time.December, 31, 23, 59, 59, 1e9-1, time.UTC),
 			),
 		).
@@ -2098,7 +2075,7 @@ func (tt Tester) RunUnion(t *testing.T) {
 				On(
 					db.Range(
 						BOOK_C_PUBLISHED,
-						time.Date(2012, time.January, 01, 0, 0, 0, 0, time.UTC),
+						time.Date(2012, time.January, 0o1, 0, 0, 0, 0, time.UTC),
 						time.Date(2012, time.December, 31, 23, 59, 59, 1e9-1, time.UTC),
 					),
 				).
@@ -2120,7 +2097,6 @@ func (tt Tester) RunUnion(t *testing.T) {
 				sales = append(sales, sale)
 			}
 		})
-
 	if err != nil {
 		t.Fatalf("Failed TestUnion: %s", err)
 	}
@@ -2128,7 +2104,6 @@ func (tt Tester) RunUnion(t *testing.T) {
 	for k, v := range sales {
 		logger.Debugf("sales[%v] = %s", k, v.String())
 	}
-
 }
 
 func (tt Tester) RunConverter(t *testing.T) {
@@ -2172,7 +2147,7 @@ func getColor(db db.IDb, id int64) string {
 	return raw
 }
 
-func (tt Tester) RunEmbeded(t *testing.T) {
+func (tt Tester) RunEmbedded(t *testing.T) {
 	db := tt.Tm.Store()
 	// clear catalog
 	if _, err := db.Delete(EMPLOYEE).Execute(); err != nil {
@@ -2227,7 +2202,7 @@ func getNames(db db.IDb, id int64) (string, string) {
 	return first, last
 }
 
-func (tt Tester) RunEmbededPtr(t *testing.T) {
+func (tt Tester) RunEmbeddedPtr(t *testing.T) {
 	db := tt.Tm.Store()
 	// clear catalog
 	if _, err := db.Delete(EMPLOYEE).Execute(); err != nil {
