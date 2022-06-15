@@ -103,25 +103,33 @@ func NewTransactionManager(database *sql.DB, dbFactory func(dbx.IConnection, *sy
 	return t
 }
 
-func NewDefaultTransactionManager(database *sql.DB, translator Translator) *TransactionManager {
+func TmWithCacheSize(capacity int) func(*TransactionManager) {
+	return func(t *TransactionManager) {
+		if capacity > 1 {
+			t.stmtCache = cache.NewLRUCache(capacity)
+		}
+	}
+}
+
+func TmWithDbFactor(dbFactory func(dbx.IConnection, *sync.Map) IDb) func(*TransactionManager) {
+	return func(t *TransactionManager) {
+		t.dbFactory = dbFactory
+	}
+}
+
+func NewDefaultTransactionManager(database *sql.DB, translator Translator, options ...func(*TransactionManager)) *TransactionManager {
 	// transaction manager
-	return NewTransactionManager(
+	tm := NewTransactionManager(
 		database,
 		func(c dbx.IConnection, cache *sync.Map) IDb {
 			return NewDb(c, translator, cache)
 		},
 		1000,
 	)
-}
-
-func (t *TransactionManager) SetCacheSize(capacity int) {
-	if capacity > 1 {
-		t.stmtCache = cache.NewLRUCache(capacity)
+	for _, o := range options {
+		o(tm)
 	}
-}
-
-func (t *TransactionManager) SetDbFactory(dbFactory func(dbx.IConnection, *sync.Map) IDb) {
-	t.dbFactory = dbFactory
+	return tm
 }
 
 func (t *TransactionManager) With(db IDb) ITransactionManager {
