@@ -1,15 +1,18 @@
 package db
 
 import (
-	"github.com/quintans/goSQL/dbx"
-	"github.com/quintans/toolkit/cache"
-
 	"database/sql"
 	"runtime/debug"
+	"sync"
+
+	"github.com/quintans/goSQL/dbx"
+	"github.com/quintans/toolkit/cache"
 )
 
-var _ dbx.IConnection = &MyTx{}
-var _ dbx.IConnection = &NoTx{}
+var (
+	_ dbx.IConnection = &MyTx{}
+	_ dbx.IConnection = &NoTx{}
+)
 
 type MyTx struct {
 	*sql.Tx
@@ -80,8 +83,9 @@ type ITransactionManager interface {
 var _ ITransactionManager = (*TransactionManager)(nil)
 
 type TransactionManager struct {
+	cache     sync.Map
 	database  *sql.DB
-	dbFactory func(dbx.IConnection) IDb
+	dbFactory func(dbx.IConnection, *sync.Map) IDb
 	stmtCache *cache.LRUCache
 }
 
@@ -89,7 +93,7 @@ type TransactionManager struct {
 // database is the connection pool
 // dbFactory is a database connection factory. This factory accepts boolean flag that indicates if the created IDb is still valid.
 // This may be useful if an Entity holds a reference to the IDb to do lazy loading.
-func NewTransactionManager(database *sql.DB, dbFactory func(dbx.IConnection) IDb, capacity int) *TransactionManager {
+func NewTransactionManager(database *sql.DB, dbFactory func(dbx.IConnection, *sync.Map) IDb, capacity int) *TransactionManager {
 	t := new(TransactionManager)
 	t.database = database
 	t.dbFactory = dbFactory
@@ -99,25 +103,33 @@ func NewTransactionManager(database *sql.DB, dbFactory func(dbx.IConnection) IDb
 	return t
 }
 
-func NewDefaultTransactionManager(database *sql.DB, translator Translator) *TransactionManager {
-	// transaction manager
-	return NewTransactionManager(
-		database,
-		func(c dbx.IConnection) IDb {
-			return NewDb(c, translator)
-		},
-		1000,
-	)
-}
-
-func (t *TransactionManager) SetCacheSize(capacity int) {
-	if capacity > 1 {
-		t.stmtCache = cache.NewLRUCache(capacity)
+func TmWithCacheSize(capacity int) func(*TransactionManager) {
+	return func(t *TransactionManager) {
+		if capacity > 1 {
+			t.stmtCache = cache.NewLRUCache(capacity)
+		}
 	}
 }
 
-func (t *TransactionManager) SetDbFactory(dbFactory func(dbx.IConnection) IDb) {
-	t.dbFactory = dbFactory
+func TmWithDbFactor(dbFactory func(dbx.IConnection, *sync.Map) IDb) func(*TransactionManager) {
+	return func(t *TransactionManager) {
+		t.dbFactory = dbFactory
+	}
+}
+
+func NewDefaultTransactionManager(database *sql.DB, translator Translator, options ...func(*TransactionManager)) *TransactionManager {
+	// transaction manager
+	tm := NewTransactionManager(
+		database,
+		func(c dbx.IConnection, cache *sync.Map) IDb {
+			return NewDb(c, translator, cache)
+		},
+		1000,
+	)
+	for _, o := range options {
+		o(tm)
+	}
+	return tm
 }
 
 func (t *TransactionManager) With(db IDb) ITransactionManager {
@@ -130,33 +142,41 @@ func (t *TransactionManager) With(db IDb) ITransactionManager {
 func (t *TransactionManager) Transaction(handler func(db IDb) error) error {
 	logger.Debugf("Transaction begin")
 	tx, err := t.database.Begin()
-
 	if err != nil {
 		return err
 	}
 	defer func() {
 		err := recover()
 		if err != nil {
-			logger.Debug("Transaction end in panic: ROLLBACK")
-			tx.Rollback()
+			logger.Errorf("Transaction end in panic: %v", err)
+			rerr := tx.Rollback()
+			if rerr != nil {
+				logger.Errorf("failed to rollback: %v", rerr)
+			}
 			panic(err) // up you go
 		}
 	}()
 
-	var myTx = new(MyTx)
+	myTx := new(MyTx)
 	myTx.Tx = tx
 	myTx.stmtCache = t.stmtCache
 
 	inTx := new(bool)
 	*inTx = true
-	err = handler(t.dbFactory(myTx))
+	err = handler(t.dbFactory(myTx, &t.cache))
 	*inTx = false
 	if err == nil {
 		logger.Debug("Transaction end: COMMIT")
-		tx.Commit()
+		cerr := tx.Commit()
+		if cerr != nil {
+			logger.Errorf("failed to commit: %v", cerr)
+		}
 	} else {
 		logger.Debug("Transaction end: ROLLBACK")
-		tx.Rollback()
+		rerr := tx.Rollback()
+		if rerr != nil {
+			logger.Errorf("failed to rollback: %v", rerr)
+		}
 	}
 	return err
 }
@@ -171,13 +191,13 @@ func (t *TransactionManager) NoTransaction(handler func(db IDb) error) error {
 		}
 	}()
 
-	var myTx = new(NoTx)
+	myTx := new(NoTx)
 	myTx.DB = t.database
 	myTx.stmtCache = t.stmtCache
 
 	inTx := new(bool)
 	*inTx = true
-	err := handler(t.dbFactory(myTx))
+	err := handler(t.dbFactory(myTx, &t.cache))
 	*inTx = false
 	logger.Debugf("TransactionLESS End")
 	return err
@@ -191,7 +211,7 @@ func (this TransactionManager) WithoutTransaction(handler func(db IDb) error) er
 */
 
 func (t *TransactionManager) Store() IDb {
-	return t.dbFactory(t.database)
+	return t.dbFactory(t.database, &t.cache)
 }
 
 var _ ITransactionManager = HollowTransactionManager{}

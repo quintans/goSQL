@@ -2,14 +2,15 @@ package db
 
 import (
 	"reflect"
-	"strings"
 	"unsafe"
-
-	"github.com/quintans/faults"
 )
 
 type EntityProperty struct {
-	Position  int
+	StructProperty
+	Position int
+}
+
+type StructProperty struct {
 	Type      reflect.Type
 	InnerType reflect.Type
 	Key       bool
@@ -87,92 +88,6 @@ func makeGetter(index []int) getter {
 
 func (e *EntityProperty) Get(instance reflect.Value) reflect.Value {
 	return e.getter(instance)
-}
-
-func PopulateMapping(prefix string, typ reflect.Type, translator Translator) (map[string]*EntityProperty, error) {
-	// create an attribute data structure as a map of types keyed by a string.
-	attrs := make(map[string]*EntityProperty)
-
-	err := walkTreeStruct(prefix, typ, attrs, translator, nil)
-
-	return attrs, err
-}
-
-func walkTreeStruct(prefix string, typ reflect.Type, attrs map[string]*EntityProperty, translator Translator, index []int) error {
-	// if a pointer to a struct is passed, get the type of the dereferenced object
-	if typ.Kind() == reflect.Ptr {
-		typ = typ.Elem()
-	}
-
-	// Only structs are supported so return an empty result if the passed object
-	// isn't a struct
-	if typ.Kind() != reflect.Struct {
-		return nil
-	}
-
-	// loop through the struct's fields and set the map
-	num := typ.NumField()
-	for i := 0; i < num; i++ {
-		p := typ.Field(i)
-		var omit, embeded bool
-		var converter Converter
-		sqlVal := p.Tag.Get(sqlKey)
-		if sqlVal != "" {
-			splits := strings.Split(sqlVal, ",")
-			for _, s := range splits {
-				v := strings.TrimSpace(s)
-				switch v {
-				case sqlOmitionVal:
-					omit = true
-				case sqlEmbededVal:
-					embeded = true
-				default:
-					if strings.HasPrefix(v, converterTag) {
-						cn := v[len(converterTag):]
-						converter = translator.GetConverter(cn)
-						if converter == nil {
-							return faults.Errorf("Converter %s is not registered", cn)
-						}
-					}
-				}
-			}
-		}
-		x := append(index, i)
-		if p.Anonymous {
-			if err := walkTreeStruct(prefix, p.Type, attrs, translator, x); err != nil {
-				return err
-			}
-		} else if embeded {
-			if err := walkTreeStruct(prefix, p.Type, attrs, translator, x); err != nil {
-				return err
-			}
-		} else {
-			ep := &EntityProperty{}
-			ep.getter = makeGetter(x)
-			ep.setter = makeSetter(x)
-
-			var key strings.Builder
-			if prefix != "" {
-				key.WriteString(prefix)
-			}
-			key.WriteString(strings.ToUpper(p.Name[:1]))
-			key.WriteString(p.Name[1:])
-			attrs[key.String()] = ep
-			ep.Omit = omit
-			ep.converter = converter
-			// we want pointers. only pointer are addressable
-			if p.Type.Kind() == reflect.Ptr || p.Type.Kind() == reflect.Slice || p.Type.Kind() == reflect.Array {
-				ep.Type = p.Type
-			} else {
-				ep.Type = reflect.PtrTo(p.Type)
-			}
-
-			if p.Type.Kind() == reflect.Slice || p.Type.Kind() == reflect.Array {
-				ep.InnerType = p.Type.Elem()
-			}
-		}
-	}
-	return nil
 }
 
 const converterTag = "converter="

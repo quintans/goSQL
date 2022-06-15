@@ -1,14 +1,14 @@
 package db
 
 import (
+	"database/sql"
+	"reflect"
+	"time"
+
 	"github.com/quintans/faults"
 	"github.com/quintans/goSQL/dbx"
 	tk "github.com/quintans/toolkit"
 	coll "github.com/quintans/toolkit/collections"
-
-	"database/sql"
-	"reflect"
-	"time"
 )
 
 type Group struct {
@@ -16,8 +16,10 @@ type Group struct {
 	Token    Tokener
 }
 
-const OFFSET_PARAM = "OFFSET_PARAM"
-const LIMIT_PARAM = "LIMIT_PARAM"
+const (
+	OFFSET_PARAM = "OFFSET_PARAM"
+	LIMIT_PARAM  = "LIMIT_PARAM"
+)
 
 type PostRetriever interface {
 	PostRetrieve(store IDb)
@@ -318,9 +320,9 @@ func (q *Query) OrderOn(column *Column, associations ...*Association) *Query {
 	}
 }
 
-//Defines the column to order by.
-//The column belongs to the table targeted by the last defined association.
-//If there is no last association, the column belongs to the driving table
+// Defines the column to order by.
+// The column belongs to the table targeted by the last defined association.
+// If there is no last association, the column belongs to the driving table
 func (q *Query) OrderBy(column *Column) *Query {
 	if q.err != nil {
 		return q
@@ -342,7 +344,7 @@ func (q *Query) OrderBy(column *Column) *Query {
 	}
 }
 
-//Defines the column alias to order by.
+// Defines the column alias to order by.
 func (q *Query) OrderByAs(column string) *Query {
 	if q.err != nil {
 		return q
@@ -443,7 +445,7 @@ func (q *Query) Fetch() *Query {
 	return q
 }
 
-//indicates that the path should be used to join only
+// indicates that the path should be used to join only
 func (q *Query) Join() *Query {
 	if q.err != nil {
 		return q
@@ -497,7 +499,7 @@ func pathElementAlias(pe *PathElement) string {
 	}
 }
 
-//adds tokens refering the last defined association
+// adds tokens refering the last defined association
 func (q *Query) Include(columns ...interface{}) *Query {
 	if q.err != nil {
 		return q
@@ -533,7 +535,7 @@ func (q *Query) includeInPath(lastPath *PathElement, columns ...interface{}) {
 	}
 }
 
-//Restriction to apply to the previous association
+// Restriction to apply to the previous association
 func (q *Query) On(criteria ...*Criteria) *Query {
 	if q.err != nil {
 		return q
@@ -711,8 +713,8 @@ func (q *Query) GroupByAs(aliases ...string) *Query {
 	return q
 }
 
-//Adds a Having clause to the query.
-//The tokens are not processed. You will have to explicitly set all table alias.
+// Adds a Having clause to the query.
+// The tokens are not processed. You will have to explicitly set all table alias.
 func (q *Query) Having(having ...*Criteria) *Query {
 	if q.err != nil {
 		return q
@@ -784,19 +786,25 @@ func (q *Query) ListSimple(closure func(), instances ...interface{}) error {
 	})
 }
 
-//List using the closure arguments.
-//A function is used to build the result list.
-//The types for scanning are supplied by the function arguments. Arguments can be pointers or not.
-//Reflection is used to determine the arguments types.
-//The argument can also be a function with the signature func(*struct).
-//The results will not be assembled in as a tree.
+// List using the closure arguments.
 //
-//ex:
-//  roles = make([]string, 0)
-//  var role string
-//  q.ListInto(func(role *string) {
-//	  roles = append(roles, *role)
-//  })
+// A function is used to build the result list.
+//
+// The types for scanning are supplied by the function arguments. Arguments can be pointers or not.
+//
+// Reflection is used to determine the arguments types.
+//
+// The argument can also be a function with the signature func(*struct).
+//
+// The results will not be assembled in as a tree.
+//
+//
+// ex:
+//   roles = make([]string, 0)
+//   var role string
+//   q.ListInto(func(role *string) {
+//	   roles = append(roles, *role)
+//   })
 func (q *Query) ListInto(closure interface{}) ([]interface{}, error) {
 	if q.err != nil {
 		return nil, q.err
@@ -866,8 +874,8 @@ func (q *Query) listClosure(transformer func(rows *sql.Rows) error) error {
 	return nil
 }
 
-//Executes a query and transform the results according to the transformer
-//Accepts a row transformer and returns a collection of transformed results
+// Executes a query and transform the results according to the transformer
+// Accepts a row transformer and returns a collection of transformed results
 func (q *Query) list(rowMapper dbx.IRowTransformer) (coll.Collection, error) {
 	// if no columns were added, add all columns of the driving table
 	if len(q.Columns) == 0 {
@@ -969,7 +977,7 @@ func checkSlice(i interface{}) (func(val reflect.Value) reflect.Value, reflect.T
 	// so a slice is created so that it can be different from nil.
 	slice := reflect.MakeSlice(arr.Type(), 0, 0)
 	arr.Set(slice)
-	//slice := reflect.New(arr.Type()).Elem()
+	// slice := reflect.New(arr.Type()).Elem()
 	slicer := func(val reflect.Value) reflect.Value {
 		var v reflect.Value
 		// slice elements are pointers
@@ -1053,10 +1061,10 @@ func (q *Query) ListFlatTreeOf(template interface{}) (coll.Collection, error) {
 	return q.list(NewEntityTreeTransformer(q, false, template))
 }
 
-//Executes a query, putting the result in a slice, passed as an argument or
-//delegating the responsability of building the result to a processor function.
-//The argument must be a function with the signature func(<<*>struct>) or a slice like *[]<*>struct.
-//See also List.
+// Executes a query, putting the result in a slice, passed as an argument or
+// delegating the responsability of building the result to a processor function.
+// The argument must be a function with the signature func(<<*>struct>) or a slice like *[]<*>struct.
+// See also List.
 func (q *Query) ListFlatTree(target interface{}) error {
 	if q.err != nil {
 		return q.err
@@ -1132,8 +1140,8 @@ func (q *Query) selectTree(typ interface{}, reuse bool) (interface{}, error) {
 	return q.selectTransformer(NewEntityTreeTransformer(q, false, typ))
 }
 
-//The first result of the query is put in the passed struct.
-//Returns true if a result was found, false if no result
+// The first result of the query is put in the passed struct.
+// Returns true if a result was found, false if no result
 func (q *Query) SelectTo(instance interface{}) (bool, error) {
 	if q.err != nil {
 		return false, q.err
@@ -1154,12 +1162,12 @@ func (q *Query) SelectTo(instance interface{}) (bool, error) {
 	return false, nil
 }
 
-//Executes the query and builds a struct tree, reusing previously obtained entities,
-//putting the first element in the supplied struct pointer.
-//Since the struct instances are going to be reused it is mandatory that all the structs
-//participating in the result tree implement the toolkit.Hasher interface.
-//Returns true if a result was found, false if no result.
-//See also SelectFlatTree.
+// Executes the query and builds a struct tree, reusing previously obtained entities,
+// putting the first element in the supplied struct pointer.
+// Since the struct instances are going to be reused it is mandatory that all the structs
+// participating in the result tree implement the toolkit.Hasher interface.
+// Returns true if a result was found, false if no result.
+// See also SelectFlatTree.
 func (q *Query) SelectTree(instance tk.Hasher) (bool, error) {
 	if q.err != nil {
 		return false, q.err
@@ -1168,10 +1176,10 @@ func (q *Query) SelectTree(instance tk.Hasher) (bool, error) {
 	return q.selectTreeTo(instance, true)
 }
 
-//Executes the query and builds a flat struct tree putting the first element in the supplied struct pointer.
-//Since the struct instances are not going to be reused it is not mandatory that the structs implement the toolkit.Hasher interface.
-//Returns true if a result was found, false if no result.
-//See also SelectTree.
+// Executes the query and builds a flat struct tree putting the first element in the supplied struct pointer.
+// Since the struct instances are not going to be reused it is not mandatory that the structs implement the toolkit.Hasher interface.
+// Returns true if a result was found, false if no result.
+// See also SelectTree.
 func (q *Query) SelectFlatTree(instance interface{}) (bool, error) {
 	if q.err != nil {
 		return false, q.err

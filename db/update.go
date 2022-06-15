@@ -1,14 +1,14 @@
 package db
 
 import (
-	"github.com/quintans/faults"
-	"github.com/quintans/goSQL/dbx"
-	coll "github.com/quintans/toolkit/collections"
-
 	"database/sql/driver"
 	"fmt"
 	"reflect"
 	"time"
+
+	"github.com/quintans/faults"
+	"github.com/quintans/goSQL/dbx"
+	coll "github.com/quintans/toolkit/collections"
 )
 
 type PreUpdater interface {
@@ -50,8 +50,8 @@ func (u *Update) Values(vals ...interface{}) *Update {
 	return u
 }
 
-//Updates all the columns of the table to matching struct fields.
-//Returns the number of affected rows
+// Updates all the columns of the table to matching struct fields.
+// Returns the number of affected rows
 func (u *Update) Submit(instance interface{}) (int64, error) {
 	var invalid bool
 	typ := reflect.TypeOf(instance)
@@ -75,7 +75,7 @@ func (u *Update) Submit(instance interface{}) (int64, error) {
 		mappings = u.lastMappings
 	} else {
 		var err error
-		mappings, err = PopulateMapping("", typ, u.GetDb().GetTranslator())
+		mappings, err = u.GetDb().PopulateMapping("", typ)
 		if err != nil {
 			return 0, err
 		}
@@ -146,7 +146,7 @@ func (u *Update) Submit(instance interface{}) (int64, error) {
 					verColumn = column
 				}
 			} else {
-				var marked = useMarks && marks[column.GetAlias()]
+				marked := useMarks && marks[column.GetAlias()]
 				if val.IsValid() && (!useMarks || marked) {
 					var isNil bool
 					if val.Kind() == reflect.Ptr {
