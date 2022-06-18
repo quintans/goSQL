@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/quintans/faults"
 	"github.com/quintans/goSQL/dbx"
 	coll "github.com/quintans/toolkit/collections"
 	"github.com/quintans/toolkit/ext"
@@ -137,7 +138,7 @@ func (e *EntityTransformer) Transform(rows *sql.Rows) (interface{}, error) {
 		var err error
 		e.Properties, err = e.Overrider.PopulateMapping("", val.Type())
 		if err != nil {
-			return nil, err
+			return nil, faults.Wrap(err)
 		}
 	}
 
@@ -146,7 +147,7 @@ func (e *EntityTransformer) Transform(rows *sql.Rows) (interface{}, error) {
 		// using the entity properties as reference for instantiating the types
 		cols, err := rows.Columns()
 		if err != nil {
-			return nil, err
+			return nil, faults.Wrap(err)
 		}
 		length := len(cols)
 		e.TemplateData = make([]interface{}, length)
@@ -155,20 +156,21 @@ func (e *EntityTransformer) Transform(rows *sql.Rows) (interface{}, error) {
 		for i := 0; i < len(e.TemplateData); i++ {
 			e.TemplateData[i] = &ext.Any{}
 		}
-		// instanciate all target types
+		// instantiate all target types
 		e.Overrider.InitRowData(e.TemplateData, e.Properties)
 	}
+
 	// makes a copy
 	rowData := make([]interface{}, len(e.TemplateData), cap(e.TemplateData))
 	copy(rowData, e.TemplateData)
 
 	// Scan result set
 	if err := rows.Scan(rowData...); err != nil {
-		return nil, err
+		return nil, faults.Wrap(err)
 	}
 
 	if _, err := e.Overrider.ToEntity(rowData, val, e.Properties, nil); err != nil {
-		return nil, err
+		return nil, faults.Wrap(err)
 	}
 
 	instance := val.Interface()
@@ -179,18 +181,12 @@ func (e *EntityTransformer) Transform(rows *sql.Rows) (interface{}, error) {
 
 	if e.Returner == nil {
 		return instance, nil
-		/*
-			if H, isH := instance.(tk.Hasher); isH {
-				return H, nil
-			}
-		*/
 	} else {
 		v := e.Returner(val)
 		if v.IsValid() {
 			return v.Interface(), nil
 		}
 	}
-
 	return nil, nil
 }
 

@@ -118,7 +118,7 @@ func (e *EntityTreeTransformer) InitFullRowData(
 ) error {
 	lastProps, err := e.getCachedProperties(alias, typ)
 	if err != nil {
-		return err
+		return faults.Wrap(err)
 	}
 	// instanciate all target types for the driving entity
 	e.Overrider.InitRowData(row, lastProps)

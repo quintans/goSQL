@@ -2,8 +2,6 @@ package db
 
 import (
 	"reflect"
-	"strings"
-	"sync"
 
 	"github.com/quintans/faults"
 	"github.com/quintans/goSQL/dbx"
@@ -58,6 +56,10 @@ type TableNamer interface {
 	TableName() string
 }
 
+type Mapper interface {
+	Mappings(typ reflect.Type) (map[string]*StructProperty, error)
+}
+
 type IDb interface {
 	PopulateMapping(prefix string, typ reflect.Type) (map[string]*EntityProperty, error)
 	GetTranslator() Translator
@@ -83,12 +85,12 @@ type IDb interface {
 
 var _ IDb = &Db{}
 
-func NewDb(connection dbx.IConnection, translator Translator, cache *sync.Map) *Db {
+func NewDb(connection dbx.IConnection, translator Translator, cacher Mapper) *Db {
 	this := new(Db)
 	this.Overrider = this
 	this.Connection = connection
 	this.Translator = translator
-	this.cache = cache
+	this.mapper = cacher
 	return this
 }
 
@@ -98,7 +100,7 @@ type Db struct {
 	Translator Translator
 
 	attributes map[string]interface{}
-	cache      *sync.Map
+	mapper     Mapper
 }
 
 func (d *Db) GetTranslator() Translator {
@@ -168,13 +170,13 @@ func structName(instance interface{}) (*Table, reflect.Type, error) {
 func (d *Db) Create(instance interface{}) error {
 	table, _, err := structName(instance)
 	if err != nil {
-		return err
+		return faults.Wrap(err)
 	}
 
 	dml := d.Overrider.Insert(table)
 
 	_, err = dml.Submit(instance)
-	return err
+	return faults.Wrap(err)
 }
 
 // struct field with `sql:"omit"` should be ignored if value is zero in an update.
@@ -182,7 +184,7 @@ func (d *Db) Create(instance interface{}) error {
 func (d *Db) acceptColumn(table *Table, t reflect.Type, handler func(*Column)) error {
 	mappings, err := d.PopulateMapping("", t)
 	if err != nil {
-		return err
+		return faults.Wrap(err)
 	}
 	cols := table.GetColumns().Elements()
 	for _, e := range cols {
@@ -231,19 +233,11 @@ func (d *Db) PopulateMapping(prefix string, typ reflect.Type) (map[string]*Entit
 	if typ.Kind() == reflect.Ptr {
 		typ = typ.Elem()
 	}
-	elem, ok := d.cache.Load(typ)
-	if !ok {
-		// create an attribute data structure as a map of types keyed by a string.
-		attrs := map[string]*StructProperty{}
-
-		err := d.walkTreeStruct(typ, attrs, nil)
-		if err != nil {
-			return nil, err
-		}
-		elem, _ = d.cache.LoadOrStore(typ, attrs)
+	attrs, err := d.mapper.Mappings(typ)
+	if err != nil {
+		return nil, faults.Wrap(err)
 	}
 
-	attrs := elem.(map[string]*StructProperty)
 	mappings := map[string]*EntityProperty{}
 
 	for k, v := range attrs {
@@ -255,77 +249,6 @@ func (d *Db) PopulateMapping(prefix string, typ reflect.Type) (map[string]*Entit
 		}
 	}
 	return mappings, nil
-}
-
-func (d *Db) walkTreeStruct(typ reflect.Type, attrs map[string]*StructProperty, index []int) error {
-	// if a pointer to a struct is passed, get the type of the dereferenced object
-	if typ.Kind() == reflect.Ptr {
-		typ = typ.Elem()
-	}
-
-	// Only structs are supported so return an empty result if the passed object
-	// isn't a struct
-	if typ.Kind() != reflect.Struct {
-		return nil
-	}
-
-	// loop through the struct's fields and set the map
-	num := typ.NumField()
-	for i := 0; i < num; i++ {
-		p := typ.Field(i)
-		var omit, embeded bool
-		var converter Converter
-		sqlVal := p.Tag.Get(sqlKey)
-		if sqlVal != "" {
-			splits := strings.Split(sqlVal, ",")
-			for _, s := range splits {
-				v := strings.TrimSpace(s)
-				switch v {
-				case sqlOmitionVal:
-					omit = true
-				case sqlEmbededVal:
-					embeded = true
-				default:
-					if strings.HasPrefix(v, converterTag) {
-						cn := v[len(converterTag):]
-						converter = d.Translator.GetConverter(cn)
-						if converter == nil {
-							return faults.Errorf("Converter %s is not registered", cn)
-						}
-					}
-				}
-			}
-		}
-		x := append(index, i)
-		if p.Anonymous {
-			if err := d.walkTreeStruct(p.Type, attrs, x); err != nil {
-				return err
-			}
-		} else if embeded {
-			if err := d.walkTreeStruct(p.Type, attrs, x); err != nil {
-				return err
-			}
-		} else {
-			ep := &StructProperty{}
-			ep.getter = makeGetter(x)
-			ep.setter = makeSetter(x)
-			capitalized := strings.ToUpper(p.Name[:1]) + p.Name[1:]
-			attrs[capitalized] = ep
-			ep.Omit = omit
-			ep.converter = converter
-			// we want pointers. only pointer are addressable
-			if p.Type.Kind() == reflect.Ptr || p.Type.Kind() == reflect.Slice || p.Type.Kind() == reflect.Array {
-				ep.Type = p.Type
-			} else {
-				ep.Type = reflect.PtrTo(p.Type)
-			}
-
-			if p.Type.Kind() == reflect.Slice || p.Type.Kind() == reflect.Array {
-				ep.InnerType = p.Type.Elem()
-			}
-		}
-	}
-	return nil
 }
 
 func isZero(x interface{}) bool {
@@ -403,7 +326,7 @@ func (d *Db) FindFirst(instance interface{}, example interface{}) (bool, error) 
 func (d *Db) FindAll(instance interface{}, example interface{}) error {
 	query, err := d.find(instance, example)
 	if err != nil {
-		return err
+		return faults.Wrap(err)
 	}
 	return query.List(instance)
 }

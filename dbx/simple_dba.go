@@ -163,7 +163,7 @@ func (s *SimpleDBA) QueryInto(
 	err := s.QueryClosure(query, func(rows *sql.Rows) error {
 		err := rows.Scan(instances...)
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 		values := make([]reflect.Value, size)
 		for k, v := range instances {
@@ -189,10 +189,7 @@ func (s *SimpleDBA) QueryInto(
 		return nil
 	}, params...)
 
-	if err != nil {
-		return nil, err
-	}
-	return results, nil
+	return results, faults.Wrap(err)
 }
 
 // Execute an SQL SELECT query with named parameters returning the first result.

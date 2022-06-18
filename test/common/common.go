@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -23,7 +22,7 @@ import (
 var logger = log.LoggerFor("github.com/quintans/goSQL/test")
 
 // custom Db - for setting default parameters
-func NewMyDb(connection dbx.IConnection, translator db.Translator, cache *sync.Map, lang string) *MyDb {
+func NewMyDb(connection dbx.IConnection, translator db.Translator, cache db.Mapper, lang string) *MyDb {
 	baseDb := db.NewDb(connection, translator, cache)
 	return &MyDb{baseDb, lang}
 }
@@ -53,7 +52,7 @@ func init() {
 
 var RAW_SQL string
 
-func InitDB(driverName, dataSourceName string, translator db.Translator, initSqlFile string) (db.ITransactionManager, *sql.DB, error) {
+func InitDB(driverName, dataSourceName string, translator db.Translator, initSqlFile string) (*db.TransactionManager, *sql.DB, error) {
 	translator.RegisterConverter("color", ColorConverter{})
 
 	mydb, err := Connect(driverName, dataSourceName)
@@ -68,12 +67,11 @@ func InitDB(driverName, dataSourceName string, translator db.Translator, initSql
 	return db.NewTransactionManager(
 		// database
 		mydb,
+		translator,
 		// databse context factory
-		func(c dbx.IConnection, cache *sync.Map) db.IDb {
-			return NewMyDb(c, translator, cache, "pt")
-		},
-		// statement cache
-		1000,
+		db.TmWithDbFactory(func(c dbx.IConnection, m db.Mapper) db.IDb {
+			return NewMyDb(c, translator, m, "pt")
+		}),
 	), mydb, nil
 }
 
@@ -132,57 +130,57 @@ type Tester struct {
 }
 
 func (tt Tester) RunAll(t *testing.T) {
-	t.Run("RunRetrieveOther", tt.RunRetrieveOther)
-	t.Run("RunEmbedded", tt.RunEmbedded)
-	t.Run("RunEmbeddedPtr", tt.RunEmbeddedPtr)
-	t.Run("RunConverter", tt.RunConverter)
-	t.Run("RunQueryIntoUnexportedFields", tt.RunQueryIntoUnexportedFields)
-	t.Run("RunSelectUTF8", tt.RunSelectUTF8)
-	t.Run("RunRetrieve", tt.RunRetrieve)
-	t.Run("RunFindFirst", tt.RunFindFirst)
-	t.Run("RunFindAll", tt.RunFindAll)
-	t.Run("RunOmitField", tt.RunOmitField)
-	t.Run("RunModifyField", tt.RunModifyField)
-	t.Run("RunRemoveAll", tt.RunRemoveAll)
-	t.Run("RunInsertReturningKey", tt.RunInsertReturningKey)
-	t.Run("RunInsertStructReturningKey", tt.RunInsertStructReturningKey)
-	t.Run("RunSimpleUpdate", tt.RunSimpleUpdate)
-	t.Run("RunStructUpdate", tt.RunStructUpdate)
-	t.Run("RunStructSaveAndRetrieve", tt.RunStructSaveAndRetrieve)
-	t.Run("RunUpdateSubquery", tt.RunUpdateSubquery)
-	t.Run("RunSimpleDelete", tt.RunSimpleDelete)
-	t.Run("RunStructDelete", tt.RunStructDelete)
-	t.Run("RunSelectInto", tt.RunSelectInto)
-	t.Run("RunSelectTree", tt.RunSelectTree)
-	t.Run("RunSelectTreeTwoBranches", tt.RunSelectTreeTwoBranches)
-	t.Run("RunSelectFlatTree", tt.RunSelectFlatTree)
-	t.Run("RunListInto", tt.RunListInto)
-	t.Run("RunListOf", tt.RunListOf)
-	t.Run("RunList", tt.RunList) // <===
-	t.Run("RunListFlatTree", tt.RunListFlatTree)
-	t.Run("RunListTreeOf", tt.RunListTreeOf)
-	t.Run("RunListForSlice", tt.RunListForSlice)
-	t.Run("RunListSimple", tt.RunListSimple)
-	t.Run("RunSimpleCase", tt.RunSimpleCase)
-	t.Run("RunSearchedCase", tt.RunSearchedCase)
-	t.Run("RunColumnSubquery", tt.RunColumnSubquery)
-	t.Run("RunWhereSubquery", tt.RunWhereSubquery)
-	t.Run("RunInnerOn", tt.RunInnerOn)
-	t.Run("RunInnerOn2", tt.RunInnerOn2)
-	t.Run("RunOuterFetchOrder", tt.RunOuterFetchOrder)
-	t.Run("RunOuterFetchOrderAs", tt.RunOuterFetchOrderAs)
-	t.Run("RunGroupBy", tt.RunGroupBy)
-	t.Run("RunOrderBy", tt.RunOrderBy)
-	t.Run("RunPagination", tt.RunPagination)
-	t.Run("RunAssociationDiscriminator", tt.RunAssociationDiscriminator)
-	t.Run("RunAssociationDiscriminatorReverse", tt.RunAssociationDiscriminatorReverse)
-	t.Run("RunTableDiscriminator", tt.RunTableDiscriminator)
-	t.Run("RunJoinTableDiscriminator", tt.RunJoinTableDiscriminator)
-	t.Run("RunCustomFunction", tt.RunCustomFunction)
-	t.Run("RunRawSQL1", tt.RunRawSQL1)
-	t.Run("RunRawSQL2", tt.RunRawSQL2)
-	t.Run("RunHaving", tt.RunHaving)
-	t.Run("RunUnion", tt.RunUnion)
+	// t.Run("RunRetrieveOther", tt.RunRetrieveOther)
+	// t.Run("RunEmbedded", tt.RunEmbedded)
+	// t.Run("RunEmbeddedPtr", tt.RunEmbeddedPtr)
+	// t.Run("RunConverter", tt.RunConverter)
+	// t.Run("RunQueryIntoUnexportedFields", tt.RunQueryIntoUnexportedFields)
+	// t.Run("RunSelectUTF8", tt.RunSelectUTF8)
+	// t.Run("RunRetrieve", tt.RunRetrieve)
+	// t.Run("RunFindFirst", tt.RunFindFirst)
+	// t.Run("RunFindAll", tt.RunFindAll)
+	// t.Run("RunOmitField", tt.RunOmitField)
+	// t.Run("RunModifyField", tt.RunModifyField)
+	// t.Run("RunRemoveAll", tt.RunRemoveAll)
+	// t.Run("RunInsertReturningKey", tt.RunInsertReturningKey)
+	// t.Run("RunInsertStructReturningKey", tt.RunInsertStructReturningKey)
+	// t.Run("RunSimpleUpdate", tt.RunSimpleUpdate)
+	// t.Run("RunStructUpdate", tt.RunStructUpdate)
+	// t.Run("RunStructSaveAndRetrieve", tt.RunStructSaveAndRetrieve)
+	// t.Run("RunUpdateSubquery", tt.RunUpdateSubquery)
+	// t.Run("RunSimpleDelete", tt.RunSimpleDelete)
+	// t.Run("RunStructDelete", tt.RunStructDelete)
+	// t.Run("RunSelectInto", tt.RunSelectInto)
+	// t.Run("RunSelectTree", tt.RunSelectTree)
+	// t.Run("RunSelectTreeTwoBranches", tt.RunSelectTreeTwoBranches)
+	// t.Run("RunSelectFlatTree", tt.RunSelectFlatTree)
+	// t.Run("RunListInto", tt.RunListInto)
+	// t.Run("RunListOf", tt.RunListOf)
+	t.Run("RunList", tt.RunList)
+	// t.Run("RunListFlatTree", tt.RunListFlatTree)
+	// t.Run("RunListTreeOf", tt.RunListTreeOf)
+	// t.Run("RunListForSlice", tt.RunListForSlice)
+	// t.Run("RunListSimple", tt.RunListSimple)
+	// t.Run("RunSimpleCase", tt.RunSimpleCase)
+	// t.Run("RunSearchedCase", tt.RunSearchedCase)
+	// t.Run("RunColumnSubquery", tt.RunColumnSubquery)
+	// t.Run("RunWhereSubquery", tt.RunWhereSubquery)
+	// t.Run("RunInnerOn", tt.RunInnerOn)
+	// t.Run("RunInnerOn2", tt.RunInnerOn2)
+	// t.Run("RunOuterFetchOrder", tt.RunOuterFetchOrder)
+	// t.Run("RunOuterFetchOrderAs", tt.RunOuterFetchOrderAs)
+	// t.Run("RunGroupBy", tt.RunGroupBy)
+	// t.Run("RunOrderBy", tt.RunOrderBy)
+	// t.Run("RunPagination", tt.RunPagination)
+	// t.Run("RunAssociationDiscriminator", tt.RunAssociationDiscriminator)
+	// t.Run("RunAssociationDiscriminatorReverse", tt.RunAssociationDiscriminatorReverse)
+	// t.Run("RunTableDiscriminator", tt.RunTableDiscriminator)
+	// t.Run("RunJoinTableDiscriminator", tt.RunJoinTableDiscriminator)
+	// t.Run("RunCustomFunction", tt.RunCustomFunction)
+	// t.Run("RunRawSQL1", tt.RunRawSQL1)
+	// t.Run("RunRawSQL2", tt.RunRawSQL2)
+	// t.Run("RunHaving", tt.RunHaving)
+	// t.Run("RunUnion", tt.RunUnion)
 }
 
 func ResetDB(TM db.ITransactionManager) {
@@ -191,32 +189,32 @@ func ResetDB(TM db.ITransactionManager) {
 
 		// clear author_books
 		if _, err = DB.Delete(AUTHOR_BOOK).Execute(); err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 
 		// clear authors
 		if _, err = DB.Delete(AUTHOR).Execute(); err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 
 		// clear books_i18n
 		if _, err = DB.Delete(BOOK_I18N).Execute(); err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 
 		// clear books_bin
 		if _, err = DB.Delete(BOOK_BIN).Execute(); err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 
 		// clear books
 		if _, err = DB.Delete(BOOK).Execute(); err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 
 		// clear publishers
 		if _, err = DB.Delete(PUBLISHER).Execute(); err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 
 		// insert publisher
@@ -225,14 +223,14 @@ func ResetDB(TM db.ITransactionManager) {
 			Values(1, 1, "Geek Publications")
 		_, err = insert.Execute()
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 
 		// test UTF8
 		insert.Values(2, 1, PUBLISHER_UTF8_NAME)
 		_, err = insert.Execute()
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 
 		// insert book
@@ -241,57 +239,57 @@ func ResetDB(TM db.ITransactionManager) {
 			Values(1, 1, "Once Upon a Time...", 34.5, time.Date(2012, time.November, 10, 0, 0, 0, 0, time.UTC), 1)
 		_, err = insert.Execute()
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 
 		insert.Values(2, 1, "Cookbook", 12.5, time.Date(2013, time.July, 24, 0, 0, 0, 0, time.UTC), 2)
 		_, err = insert.Execute()
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 
 		insert.Values(3, 1, "Scrapbook", 6.5, time.Date(2012, time.April, 0o1, 0, 0, 0, 0, time.UTC), 2)
 		_, err = insert.Execute()
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 
 		// insert book_bin
 		var cover []byte
 		cover, err = ioutil.ReadFile("../apple.jpg")
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 		insert = DB.Insert(BOOK_BIN).
 			Columns(BOOK_BIN_C_ID, BOOK_BIN_C_VERSION, BOOK_BIN_C_HARDCOVER).
 			Values(1, 1, cover)
 		_, err = insert.Execute()
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 
 		cover, err = ioutil.ReadFile("../cook-owl.png")
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 		insert = DB.Insert(BOOK_BIN).
 			Columns(BOOK_BIN_C_ID, BOOK_BIN_C_VERSION, BOOK_BIN_C_HARDCOVER).
 			Values(2, 1, cover)
 		_, err = insert.Execute()
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 
 		cover, err = ioutil.ReadFile("../scrapbook.png")
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 		insert = DB.Insert(BOOK_BIN).
 			Columns(BOOK_BIN_C_ID, BOOK_BIN_C_VERSION, BOOK_BIN_C_HARDCOVER).
 			Values(3, 1, cover)
 		_, err = insert.Execute()
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 
 		// insert book_i18n
@@ -300,7 +298,7 @@ func ResetDB(TM db.ITransactionManager) {
 			Values(1, 1, 1, LANG, BOOK_LANG_TITLE)
 		_, err = insert.Execute()
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 
 		// insert Author
@@ -309,19 +307,19 @@ func ResetDB(TM db.ITransactionManager) {
 			Values(1, 1, "John Doe", "@xpto")
 		_, err = insert.Execute()
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 
 		insert.Values(2, 1, "Jane Doe", "947590245")
 		_, err = insert.Execute()
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 
 		insert.Values(3, 1, AUTHOR_UTF8_NAME, "#$%&!")
 		_, err = insert.Execute()
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 
 		// insert Author-Book
@@ -331,35 +329,35 @@ func ResetDB(TM db.ITransactionManager) {
 			Values(1, 3)
 		_, err = insert.Execute()
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 
 		// Jane Doe - Scrapbook
 		insert.Values(2, 3)
 		_, err = insert.Execute()
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 
 		// Graça Tostão - Once Upon a Time...
 		insert.Values(3, 1)
 		_, err = insert.Execute()
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 
 		// Jane Doe - Cookbook
 		insert.Values(1, 2)
 		_, err = insert.Execute()
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 
 		// Graça Tostão - Cookbook
 		insert.Values(3, 2)
 		_, err = insert.Execute()
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 
 		return nil
@@ -375,17 +373,17 @@ func ResetDB2(TM db.ITransactionManager) {
 
 		// clear projects
 		if _, err = DB.Delete(PROJECT).Execute(); err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 
 		// clear emplyees
 		if _, err = DB.Delete(EMPLOYEE).Execute(); err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 
 		// clear consultant
 		if _, err = DB.Delete(CONSULTANT).Execute(); err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 
 		// insert CONSULTANT
@@ -394,7 +392,7 @@ func ResetDB2(TM db.ITransactionManager) {
 			Values(1, 1, "John")
 		_, err = insert.Execute()
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 
 		// insert employee
@@ -403,13 +401,13 @@ func ResetDB2(TM db.ITransactionManager) {
 			Values(1, 1, "Mary")
 		_, err = insert.Execute()
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 
 		insert.Values(2, 1, "Kate")
 		_, err = insert.Execute()
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 
 		// insert Project
@@ -418,22 +416,22 @@ func ResetDB2(TM db.ITransactionManager) {
 			Values(1, 1, "Bridge", 1, "C", "ANA")
 		_, err = insert.Execute()
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 
 		_, err = insert.Values(2, 1, "Plane", 1, "E", "DEV").Execute()
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 
 		_, err = insert.Values(3, 1, "Car", 2, "E", "DEV").Execute()
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 
 		_, err = insert.Values(4, 1, "House", 2, "E", "TEST").Execute()
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 
 		return nil
@@ -449,7 +447,7 @@ func ResetDB3(TM db.ITransactionManager) {
 
 		// clear catalog
 		if _, err = DB.Delete(CATALOG).Execute(); err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 
 		// insert publisher
@@ -458,32 +456,32 @@ func ResetDB3(TM db.ITransactionManager) {
 
 		_, err = insert.Values(1, 1, "GENDER", "M", "Male").Execute()
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 
 		_, err = insert.Values(2, 1, "GENDER", "F", "Female").Execute()
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 
 		_, err = insert.Values(3, 1, "STATUS", "ANA", "Analysis").Execute()
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 
 		_, err = insert.Values(4, 1, "STATUS", "DEV", "Development").Execute()
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 
 		_, err = insert.Values(5, 1, "STATUS", "TEST", "Testing").Execute()
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 
 		_, err = insert.Values(6, 1, "STATUS", "PROD", "Production").Execute()
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 
 		return nil
@@ -496,7 +494,7 @@ func ResetDB3(TM db.ITransactionManager) {
 func (tt Tester) RunBench(driver string, dns string, table string, b *testing.B) {
 	ResetDB(tt.Tm)
 
-	const maxRows = 1000
+	const maxRows = 100
 	type Employee struct {
 		Id        *int
 		FirstName *string
@@ -771,7 +769,7 @@ func (tt Tester) RunInsertReturningKey(t *testing.T) {
 			Values(nil, 1, "New Editions").
 			Execute()
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 
 		if key == 0 {
@@ -787,7 +785,7 @@ func (tt Tester) RunInsertReturningKey(t *testing.T) {
 			Values(1, "Second Editions").
 			Execute()
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 
 		if key == 0 {
@@ -811,7 +809,7 @@ func (tt Tester) RunInsertStructReturningKey(t *testing.T) {
 		pub.Name = ext.String("Untited Editors")
 		key, err := store.Insert(PUBLISHER).Submit(&pub) // passing as a pointer
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 
 		if key == 0 {
@@ -826,7 +824,7 @@ func (tt Tester) RunInsertStructReturningKey(t *testing.T) {
 		pubPtr.Name = ext.String("Untited Editors")
 		key, err = store.Insert(PUBLISHER).Submit(pubPtr)
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 
 		if key == 0 {
@@ -837,7 +835,7 @@ func (tt Tester) RunInsertStructReturningKey(t *testing.T) {
 		pubPtr.Name = ext.String("Untited Editors")
 		err = store.Create(&pub)
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 
 		if pub.Id == nil || *pub.Id == 0 {
@@ -868,7 +866,7 @@ func (tt Tester) RunSimpleUpdate(t *testing.T) {
 			).
 			Execute()
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 
 		if affectedRows != 1 {
@@ -1023,7 +1021,7 @@ func (tt Tester) RunUpdateSubquery(t *testing.T) {
 			Where(db.Exists(sub)).
 			Execute()
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 
 		if affectedRows != 1 {
@@ -1046,7 +1044,7 @@ func (tt Tester) RunSimpleDelete(t *testing.T) {
 
 		affectedRows, err := store.Delete(BOOK).Where(BOOK_C_ID.Matches(2)).Execute()
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 		if affectedRows != 1 {
 			t.Fatal("The record was not deleted")
@@ -1267,6 +1265,16 @@ func (tt Tester) RunList(t *testing.T) {
 		List(&books)
 	require.NoError(t, err)
 	require.Len(t, books, 3)
+
+	// books = nil
+	// err = store.Query(BOOK).
+	// 	Column(BOOK_C_NAME, BOOK_C_PRICE).
+	// 	OrderBy(BOOK_C_ID).Asc().
+	// 	List(func(b *Book) {
+	// 		books = append(books, b)
+	// 	})
+	// require.NoError(t, err)
+	// require.Len(t, books, 3)
 }
 
 func (tt Tester) RunListFlatTree(t *testing.T) {
@@ -2013,7 +2021,7 @@ func (tt Tester) RunRawSQL2(t *testing.T) {
 		func(rows *sql.Rows) error {
 			var name string
 			if err := rows.Scan(&name); err != nil {
-				return err
+				return faults.Wrap(err)
 			}
 			result = append(result, name)
 			return nil

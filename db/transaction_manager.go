@@ -2,11 +2,13 @@ package db
 
 import (
 	"database/sql"
+	"reflect"
 	"runtime/debug"
+	"strings"
 	"sync"
 
+	"github.com/quintans/faults"
 	"github.com/quintans/goSQL/dbx"
-	"github.com/quintans/toolkit/cache"
 )
 
 var (
@@ -16,61 +18,10 @@ var (
 
 type MyTx struct {
 	*sql.Tx
-	stmtCache *cache.LRUCache
-}
-
-// The implementor of Prepare should cache the prepared statements
-func (t *MyTx) Prepare(query string) (*sql.Stmt, error) {
-	var err error
-	var stmt *sql.Stmt
-	if t.stmtCache == nil {
-		stmt, err = t.Tx.Prepare(query)
-	} else {
-		s, _ := t.stmtCache.GetIfPresent(query)
-		stmt, _ = s.(*sql.Stmt)
-		if stmt == nil {
-			stmt, err = t.Tx.Prepare(query)
-			if err == nil {
-				t.stmtCache.Put(query, stmt)
-			}
-		} else {
-			stmt = t.Tx.Stmt(stmt)
-		}
-	}
-	return stmt, err
 }
 
 type NoTx struct {
 	*sql.DB
-	stmtCache *cache.LRUCache
-}
-
-// The implementor of Prepare should cache the prepared statements
-func (t *NoTx) Prepare(query string) (*sql.Stmt, error) {
-	// 6.12.2013
-	// At the moment there is no way to reassign a statement to another connection,
-	// so this code is commented
-	/*
-		var err error
-		var stmt *sql.Stmt
-		if this.stmtCache == nil {
-			stmt, err = this.DB.Prepare(query)
-		} else {
-			s, _ := this.stmtCache.GetIfPresent(query)
-			stmt, _ = s.(*sql.Stmt)
-			if stmt == nil {
-				stmt, err = this.DB.Prepare(query)
-				if err == nil {
-					this.stmtCache.Put(query, stmt)
-				}
-			} else {
-				stmt = this.DB.Stmt(stmt)
-			}
-		}
-		return stmt, err
-	*/
-
-	return t.DB.Prepare(query)
 }
 
 type ITransactionManager interface {
@@ -83,53 +34,127 @@ type ITransactionManager interface {
 var _ ITransactionManager = (*TransactionManager)(nil)
 
 type TransactionManager struct {
-	cache     sync.Map
-	database  *sql.DB
-	dbFactory func(dbx.IConnection, *sync.Map) IDb
-	stmtCache *cache.LRUCache
+	cache      sync.Map
+	database   *sql.DB
+	translator Translator
+	dbFactory  func(dbx.IConnection, Mapper) IDb
 }
 
-// NewTransactionManager creates a new Transaction Manager
-// database is the connection pool
-// dbFactory is a database connection factory. This factory accepts boolean flag that indicates if the created IDb is still valid.
-// This may be useful if an Entity holds a reference to the IDb to do lazy loading.
-func NewTransactionManager(database *sql.DB, dbFactory func(dbx.IConnection, *sync.Map) IDb, capacity int) *TransactionManager {
-	t := new(TransactionManager)
-	t.database = database
-	t.dbFactory = dbFactory
-	if capacity > 1 {
-		t.stmtCache = cache.NewLRUCache(capacity)
-	}
-	return t
-}
-
-func TmWithCacheSize(capacity int) func(*TransactionManager) {
-	return func(t *TransactionManager) {
-		if capacity > 1 {
-			t.stmtCache = cache.NewLRUCache(capacity)
-		}
-	}
-}
-
-func TmWithDbFactor(dbFactory func(dbx.IConnection, *sync.Map) IDb) func(*TransactionManager) {
+func TmWithDbFactory(dbFactory func(dbx.IConnection, Mapper) IDb) func(*TransactionManager) {
 	return func(t *TransactionManager) {
 		t.dbFactory = dbFactory
 	}
 }
 
-func NewDefaultTransactionManager(database *sql.DB, translator Translator, options ...func(*TransactionManager)) *TransactionManager {
-	// transaction manager
-	tm := NewTransactionManager(
-		database,
-		func(c dbx.IConnection, cache *sync.Map) IDb {
+// NewTransactionManager creates a new Transaction Manager
+func NewTransactionManager(database *sql.DB, translator Translator, options ...func(*TransactionManager)) *TransactionManager {
+	t := &TransactionManager{
+		database:   database,
+		translator: translator,
+		dbFactory: func(c dbx.IConnection, cache Mapper) IDb {
 			return NewDb(c, translator, cache)
 		},
-		1000,
-	)
-	for _, o := range options {
-		o(tm)
 	}
-	return tm
+
+	for _, o := range options {
+		o(t)
+	}
+	return t
+}
+
+func (d *TransactionManager) RegisterType(v interface{}) error {
+	_, err := d.Mappings(reflect.TypeOf(v))
+	return faults.Wrap(err)
+}
+
+func (t *TransactionManager) Mappings(typ reflect.Type) (map[string]*StructProperty, error) {
+	if typ.Kind() == reflect.Ptr {
+		typ = typ.Elem()
+	}
+	elem, ok := t.cache.Load(typ)
+	if !ok {
+		// create an attribute data structure as a map of types keyed by a string.
+		attrs := map[string]*StructProperty{}
+
+		err := t.walkTreeStruct(typ, attrs, nil)
+		if err != nil {
+			return nil, faults.Wrap(err)
+		}
+
+		elem, _ = t.cache.LoadOrStore(typ, attrs)
+	}
+	return elem.(map[string]*StructProperty), nil
+}
+
+func (t *TransactionManager) walkTreeStruct(typ reflect.Type, attrs map[string]*StructProperty, index []int) error {
+	// if a pointer to a struct is passed, get the type of the dereferenced object
+	if typ.Kind() == reflect.Ptr {
+		typ = typ.Elem()
+	}
+
+	// Only structs are supported so return an empty result if the passed object
+	// isn't a struct
+	if typ.Kind() != reflect.Struct {
+		return nil
+	}
+
+	// loop through the struct's fields and set the map
+	num := typ.NumField()
+	for i := 0; i < num; i++ {
+		p := typ.Field(i)
+		var omit, embeded bool
+		var converter Converter
+		sqlVal := p.Tag.Get(sqlKey)
+		if sqlVal != "" {
+			splits := strings.Split(sqlVal, ",")
+			for _, s := range splits {
+				v := strings.TrimSpace(s)
+				switch v {
+				case sqlOmitionVal:
+					omit = true
+				case sqlEmbededVal:
+					embeded = true
+				default:
+					if strings.HasPrefix(v, converterTag) {
+						cn := v[len(converterTag):]
+						converter = t.translator.GetConverter(cn)
+						if converter == nil {
+							return faults.Errorf("Converter %s is not registered", cn)
+						}
+					}
+				}
+			}
+		}
+		x := append(index, i)
+		if p.Anonymous {
+			if err := t.walkTreeStruct(p.Type, attrs, x); err != nil {
+				return faults.Wrap(err)
+			}
+		} else if embeded {
+			if err := t.walkTreeStruct(p.Type, attrs, x); err != nil {
+				return faults.Wrap(err)
+			}
+		} else {
+			ep := &StructProperty{}
+			ep.getter = makeGetter(x)
+			ep.setter = makeSetter(x)
+			capitalized := strings.ToUpper(p.Name[:1]) + p.Name[1:]
+			attrs[capitalized] = ep
+			ep.Omit = omit
+			ep.converter = converter
+			// we want pointers. only pointer are addressable
+			if p.Type.Kind() == reflect.Ptr || p.Type.Kind() == reflect.Slice || p.Type.Kind() == reflect.Array {
+				ep.Type = p.Type
+			} else {
+				ep.Type = reflect.PtrTo(p.Type)
+			}
+
+			if p.Type.Kind() == reflect.Slice || p.Type.Kind() == reflect.Array {
+				ep.InnerType = p.Type.Elem()
+			}
+		}
+	}
+	return nil
 }
 
 func (t *TransactionManager) With(db IDb) ITransactionManager {
@@ -143,7 +168,7 @@ func (t *TransactionManager) Transaction(handler func(db IDb) error) error {
 	logger.Debugf("Transaction begin")
 	tx, err := t.database.Begin()
 	if err != nil {
-		return err
+		return faults.Wrap(err)
 	}
 	defer func() {
 		err := recover()
@@ -159,11 +184,10 @@ func (t *TransactionManager) Transaction(handler func(db IDb) error) error {
 
 	myTx := new(MyTx)
 	myTx.Tx = tx
-	myTx.stmtCache = t.stmtCache
 
 	inTx := new(bool)
 	*inTx = true
-	err = handler(t.dbFactory(myTx, &t.cache))
+	err = handler(t.dbFactory(myTx, t))
 	*inTx = false
 	if err == nil {
 		logger.Debug("Transaction end: COMMIT")
@@ -178,7 +202,7 @@ func (t *TransactionManager) Transaction(handler func(db IDb) error) error {
 			logger.Errorf("failed to rollback: %v", rerr)
 		}
 	}
-	return err
+	return faults.Wrap(err)
 }
 
 func (t *TransactionManager) NoTransaction(handler func(db IDb) error) error {
@@ -193,14 +217,13 @@ func (t *TransactionManager) NoTransaction(handler func(db IDb) error) error {
 
 	myTx := new(NoTx)
 	myTx.DB = t.database
-	myTx.stmtCache = t.stmtCache
 
 	inTx := new(bool)
 	*inTx = true
-	err := handler(t.dbFactory(myTx, &t.cache))
+	err := handler(t.dbFactory(myTx, t))
 	*inTx = false
 	logger.Debugf("TransactionLESS End")
-	return err
+	return faults.Wrap(err)
 }
 
 /*
@@ -211,7 +234,7 @@ func (this TransactionManager) WithoutTransaction(handler func(db IDb) error) er
 */
 
 func (t *TransactionManager) Store() IDb {
-	return t.dbFactory(t.database, &t.cache)
+	return t.dbFactory(t.database, t)
 }
 
 var _ ITransactionManager = HollowTransactionManager{}

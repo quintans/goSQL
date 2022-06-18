@@ -110,7 +110,7 @@ func (q *QueryBuilder) Column(query *db.Query) error {
 	for k, token := range query.Columns {
 		s, err := q.translator.Translate(db.QUERY, token)
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 		q.columnPart.Add(s)
 		a := q.translator.ColumnAlias(token, k+1)
@@ -153,7 +153,7 @@ func (q *QueryBuilder) JoinAssociation(fk *db.Association, inner bool) error {
 		}
 		args, err := Translate(q.translator.Translate, db.QUERY, rel.From, rel.To)
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 		q.joinPart.Add(args[0], " = ", args[1])
 	}
@@ -175,7 +175,7 @@ func Translate(translator func(db.DmlType, db.Tokener) (string, error), dmlType 
 func (q *QueryBuilder) JoinCriteria(criteria *db.Criteria) error {
 	s, err := q.translator.Translate(db.QUERY, criteria)
 	if err != nil {
-		return err
+		return faults.Wrap(err)
 	}
 	q.joinPart.Add(" AND ", s)
 	return nil
@@ -186,7 +186,7 @@ func (q *QueryBuilder) Where(query *db.Query) error {
 	if criteria != nil {
 		s, err := q.translator.Translate(db.QUERY, criteria)
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 		q.wherePart.Add(s)
 	}
@@ -199,7 +199,7 @@ func (q *QueryBuilder) Group(query *db.Query) error {
 		//this.groupPart.Add(this.translator.ColumnAlias(group.Token, group.Position))
 		s, err := q.translator.Translate(db.QUERY, group.Token)
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 		q.groupPart.Add(s)
 	}
@@ -211,7 +211,7 @@ func (q *QueryBuilder) Having(query *db.Query) error {
 	if having != nil {
 		s, err := q.translator.Translate(db.QUERY, having)
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 		q.havingPart.Add(s)
 	}
@@ -224,7 +224,7 @@ func (q *QueryBuilder) Order(query *db.Query) error {
 		if ord.GetHolder() != nil {
 			s, err := q.translator.Translate(db.QUERY, ord.GetHolder())
 			if err != nil {
-				return err
+				return faults.Wrap(err)
 			}
 			q.orderPart.Add(s)
 		} else {
@@ -310,7 +310,7 @@ func (u *UpdateBuilder) Column(update *db.Update) error {
 		token := entry.Value.(db.Tokener)
 		s, err := u.translator.Translate(db.UPDATE, token)
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 		u.columnPart.AddAsOne(tableAlias, ".",
 			u.translator.ColumnName(column),
@@ -331,7 +331,7 @@ func (u *UpdateBuilder) Where(update *db.Update) error {
 	if criteria != nil {
 		s, err := u.translator.Translate(db.UPDATE, criteria)
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 		u.wherePart.Add(s)
 	}
@@ -390,7 +390,7 @@ func (d *DeleteBuilder) Where(del *db.Delete) error {
 	if criteria != nil {
 		s, err := d.translator.Translate(db.DELETE, criteria)
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 		d.wherePart.Add(s)
 	}
@@ -460,14 +460,14 @@ func (i *InsertBuilder) Column(insert *db.Insert) error {
 				var err error
 				val, err = i.translator.Translate(db.INSERT, token)
 				if err != nil {
-					return err
+					return faults.Wrap(err)
 				}
 			}
 		} else {
 			var err error
 			val, err = i.translator.Translate(db.INSERT, token)
 			if err != nil {
-				return err
+				return faults.Wrap(err)
 			}
 		}
 
