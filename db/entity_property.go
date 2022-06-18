@@ -8,12 +8,12 @@ import (
 type EntityProperty struct {
 	StructProperty
 	Position int
+	Key      bool
 }
 
 type StructProperty struct {
 	Type      reflect.Type
 	InnerType reflect.Type
-	Key       bool
 	Omit      bool
 	converter Converter
 	getter    getter

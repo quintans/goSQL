@@ -5,7 +5,6 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/quintans/faults"
 	"github.com/quintans/goSQL/dbx"
@@ -511,15 +510,6 @@ func (d *DmlBase) dumpParameters(params map[string]interface{}) string {
 	}
 
 	return str.String()
-}
-
-func (d *DmlBase) debugTime(when time.Time, depth int) {
-	elapsed := time.Since(when)
-	if lgr.IsActive(log.DEBUG) {
-		lgr.CallerAt(depth+1).Debugf("%s", func() string {
-			return fmt.Sprintf("executed in: %f secs", elapsed.Seconds())
-		})
-	}
 }
 
 func (d *DmlBase) debugSQL(sql string, depth int) {

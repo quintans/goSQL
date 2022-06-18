@@ -4,7 +4,6 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"reflect"
-	"time"
 
 	"github.com/quintans/faults"
 	"github.com/quintans/goSQL/dbx"
@@ -241,13 +240,11 @@ func (u *Update) Execute() (int64, error) {
 	rsql := u.getCachedSql()
 	u.debugSQL(rsql.OriSql, 1)
 
-	now := time.Now()
 	params, err := rsql.BuildValues(u.DmlBase.parameters)
 	if err != nil {
 		return 0, err
 	}
 	affectedRows, e := u.DmlBase.dba.Update(rsql.Sql, params...)
-	u.debugTime(now, 1)
 	if e != nil {
 		return 0, e
 	}

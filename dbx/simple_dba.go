@@ -24,42 +24,6 @@ func NewSimpleDBA(connection IConnection) *SimpleDBA {
 	return this
 }
 
-func closeResources(rows *sql.Rows, stmt *sql.Stmt) error {
-	var err error
-	if rows != nil {
-		err = rows.Close()
-		if err != nil {
-			return err
-		}
-	}
-
-	if stmt != nil {
-		err = stmt.Close()
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (s *SimpleDBA) fetchRows(sql string, params ...interface{}) (*sql.Rows, *sql.Stmt, error) {
-	stmt, err := s.connection.Prepare(sql)
-	if err != nil {
-		logger.Errorf("%T.fetchRows PREPARE %s", s, err)
-		return nil, nil, rethrow(FAULT_PREP_STATEMENT, err, sql, params...)
-	}
-
-	rows, err := stmt.Query(params...)
-	if err != nil {
-		stmt.Close()
-		logger.Errorf("%T.fetchRows QUERY %s: %s %s", s, err, sql, params)
-		return nil, nil, rethrow(FAULT_QUERY, err, sql, params...)
-	}
-
-	return rows, stmt, nil
-}
-
 // Execute an SQL SELECT with named replacement parameters.<br>
 // The caller is responsible for closing the connection.
 //
@@ -72,22 +36,27 @@ func (s *SimpleDBA) QueryCollection(
 	rt IRowTransformer,
 	params ...interface{},
 ) (coll.Collection, error) {
-	rows, stmt, fail := s.fetchRows(sql, params...)
-	if fail != nil {
-		return nil, fail
+	rows, err := s.connection.Query(sql, params...)
+	if err != nil {
+		return nil, rethrow(err, "executing query collection", sql, params...)
 	}
-	defer closeResources(rows, stmt)
+	defer rows.Close()
 
 	result := rt.BeforeAll()
-	defer rt.AfterAll(result)
 
 	for rows.Next() {
 		instance, err := rt.Transform(rows)
 		if err != nil {
-			return nil, rethrow(FAULT_TRANSFORM, err, sql, params...)
+			return nil, rethrow(err, "query collection transform", sql, params...)
 		}
 		rt.OnTransformation(result, instance)
 	}
+
+	if err = rows.Err(); err != nil {
+		return nil, rethrow(err, "closing rows for query collection", sql, params...)
+	}
+
+	rt.AfterAll(result)
 
 	return result, nil
 }
@@ -97,19 +66,23 @@ func (s *SimpleDBA) Query(
 	transformer func(rows *sql.Rows) (interface{}, error),
 	params ...interface{},
 ) ([]interface{}, error) {
-	rows, stmt, fail := s.fetchRows(sql, params...)
-	if fail != nil {
-		return nil, fail
+	rows, err := s.connection.Query(sql, params...)
+	if err != nil {
+		return nil, rethrow(err, "executing query", sql, params...)
 	}
-	defer closeResources(rows, stmt)
+	defer rows.Close()
 
 	results := make([]interface{}, 0, 10)
 	for rows.Next() {
 		result, err := transformer(rows)
 		if err != nil {
-			return nil, rethrow(FAULT_PARSE_STATEMENT, err, sql, params...)
+			return nil, rethrow(err, "query transform", sql, params...)
 		}
 		results = append(results, result)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, faults.Errorf("closing rows for query: %w", err)
 	}
 
 	return results, nil
@@ -121,17 +94,21 @@ func (s *SimpleDBA) QueryClosure(
 	transformer func(rows *sql.Rows) error,
 	params ...interface{},
 ) error {
-	rows, stmt, fail := s.fetchRows(query, params...)
-	if fail != nil {
-		return fail
+	rows, err := s.connection.Query(query, params...)
+	if err != nil {
+		return rethrow(err, "executing query closure", query, params...)
 	}
-	defer closeResources(rows, stmt)
+	defer rows.Close()
 
 	for rows.Next() {
 		err := transformer(rows)
 		if err != nil {
-			return rethrow(FAULT_PARSE_STATEMENT, err, query, params...)
+			return rethrow(err, "query closure transform", query, params...)
 		}
+	}
+
+	if err = rows.Err(); err != nil {
+		return faults.Errorf("closing rows for query closure: %w", err)
 	}
 
 	return nil
@@ -257,53 +234,22 @@ func (s *SimpleDBA) QueryFirst(
 //            The named parameters.
 // @return if there was a row scan and error
 func (s *SimpleDBA) QueryRow(
-	sql string,
+	query string,
 	params []interface{},
 	dest ...interface{},
 ) (bool, error) {
-	rows, stmt, err := s.fetchRows(sql, params...)
+	err := s.connection.QueryRow(query, params...).Scan(dest...)
 	if err != nil {
-		return false, err
-	}
-	defer closeResources(rows, stmt)
-
-	var ok bool
-	if rows.Next() {
-		err = rows.Scan(dest...)
-		if err != nil {
-			return false, err
+		if err == sql.ErrNoRows {
+			return false, nil
 		}
-		ok = true
+		return false, rethrow(err, "executing query row", query, params...)
 	}
 
-	return ok, nil
+	return true, nil
 }
 
 ////////////////////////////////////////////////////////////////////////
-
-// Execute an SQL INSERT, UPDATE, or DELETE query.
-//
-// param conn
-//            The connection to use to run the query.
-// param sql
-//            The SQL to execute.
-// param params
-//            The query replacement parameters.
-// @return The number of rows affected.
-func (s *SimpleDBA) execute(sql string, params ...interface{}) (sql.Result, *sql.Stmt, error) {
-	stmt, err := s.connection.Prepare(sql)
-	if err != nil {
-		return nil, nil, rethrow(FAULT_PREP_STATEMENT, err, sql, params...)
-	}
-
-	result, err := stmt.Exec(params...)
-	if err != nil {
-		stmt.Close()
-		return nil, nil, rethrow(FAULT_EXEC_STATEMENT, err, sql, params...)
-	}
-
-	return result, stmt, nil
-}
 
 ///**
 // Execute an SQL INSERT, UPDATE, or DELETE query.
@@ -317,11 +263,10 @@ func (s *SimpleDBA) execute(sql string, params ...interface{}) (sql.Result, *sql
 // @return The number of rows affected.
 // */
 func (s *SimpleDBA) Update(sql string, params ...interface{}) (int64, error) {
-	result, stmt, err := s.execute(sql, params...)
+	result, err := s.connection.Exec(sql, params...)
 	if err != nil {
-		return 0, err
+		return 0, rethrow(err, "update", sql, params...)
 	}
-	defer closeResources(nil, stmt)
 	return result.RowsAffected()
 }
 
@@ -330,11 +275,11 @@ func (s *SimpleDBA) Delete(sql string, params ...interface{}) (int64, error) {
 }
 
 func (s *SimpleDBA) Insert(sql string, params ...interface{}) (int64, error) {
-	_, stmt, err := s.execute(sql, params...)
+	_, err := s.connection.Exec(sql, params...)
 	if err != nil {
-		return 0, err
+		return 0, rethrow(err, "executing", sql, params...)
 	}
-	defer closeResources(nil, stmt)
+
 	// not supported in all drivers (ex: pq)
 	// return result.LastInsertId()
 	return 0, nil
@@ -362,9 +307,9 @@ func (s *SimpleDBA) InsertReturning(sql string, params ...interface{}) (int64, e
 //            The query replacement parameters; <code>nil</code> is a
 //            valid value to pass in.
 
-func rethrow(code string, cause error, sql string, params ...interface{}) error {
+func rethrow(cause error, what string, sql string, params ...interface{}) error {
 	msg := tk.NewStrBuffer()
-	msg.Addf("[%s] ", code).Add("\nSQL: ", sql, "\nParameters: ")
+	msg.Add(what).Add("\nSQL: ", sql, "\nParameters: ")
 	if params != nil {
 		msg.Addf("%v", params)
 	}

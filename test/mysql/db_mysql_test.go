@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/docker/go-connections/nat"
 	_ "github.com/go-sql-driver/mysql"
 	. "github.com/quintans/goSQL/db"
 	"github.com/quintans/goSQL/test/common"
@@ -14,7 +15,7 @@ import (
 
 var logger = log.LoggerFor("github.com/quintans/goSQL/test")
 
-func StartContainer() (func(), ITransactionManager, *sql.DB, error) {
+func StartContainer() (func(), ITransactionManager, *sql.DB, nat.Port, error) {
 	expPort := "3306/tcp"
 	ctx, server, port, err := common.Container(
 		"mysql:5.7",
@@ -26,7 +27,7 @@ func StartContainer() (func(), ITransactionManager, *sql.DB, error) {
 	)
 
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, "", err
 	}
 
 	closer := func() {
@@ -36,15 +37,15 @@ func StartContainer() (func(), ITransactionManager, *sql.DB, error) {
 	tm, theDB, err := InitMySQL5(port.Port())
 	if err != nil {
 		closer()
-		return nil, nil, nil, err
+		return nil, nil, nil, "", err
 	}
-	return closer, tm, theDB, nil
+	return closer, tm, theDB, port, nil
 }
 
 func TestMySQL5(t *testing.T) {
 	logger.Infof("******* Using MySQL5 *******\n")
 
-	closer, tm, theDB, err := StartContainer()
+	closer, tm, theDB, _, err := StartContainer()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,8 +56,27 @@ func TestMySQL5(t *testing.T) {
 	theDB.Close()
 }
 
+func BenchmarkLoadValues(b *testing.B) {
+	logger.Infof("******* Benchmarking Using MySQL *******\n")
+	log.Register("/", log.ERROR)
+	closer, tm, theDB, port, err := StartContainer()
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer closer()
+
+	tester := common.Tester{DbName: common.MySQL, Tm: tm}
+	tester.RunBench(
+		"mysql",
+		fmt.Sprintf("root:secret@tcp(localhost:%s)/mysql?parseTime=true", port.Port()),
+		"EMPLOYEE",
+		b,
+	)
+	theDB.Close()
+}
+
 func InitMySQL5(port string) (ITransactionManager, *sql.DB, error) {
-	common.RAW_SQL = "SELECT `NAME` FROM `BOOK` WHERE `NAME` LIKE ?"
+	common.RAW_SQL = "SELECT NAME FROM BOOK WHERE NAME LIKE ?"
 
 	translator := translators.NewMySQL5Translator()
 	/*

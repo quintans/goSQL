@@ -3,7 +3,6 @@ package db
 import (
 	"fmt"
 	"reflect"
-	"time"
 
 	"github.com/quintans/faults"
 	"github.com/quintans/goSQL/dbx"
@@ -145,13 +144,11 @@ func (d *Delete) Execute() (int64, error) {
 	rsql := d.getCachedSql()
 	d.debugSQL(rsql.OriSql, 1)
 
-	now := time.Now()
 	params, err := rsql.BuildValues(d.DmlBase.parameters)
 	if err != nil {
 		return 0, err
 	}
 	affectedRows, e := d.DmlBase.dba.Delete(rsql.Sql, params...)
-	d.debugTime(now, 1)
 	if e != nil {
 		return 0, e
 	}

@@ -66,7 +66,12 @@ func BenchmarkLoadValues(b *testing.B) {
 	defer closer()
 
 	tester := common.Tester{DbName: common.Postgres, Tm: tm}
-	tester.RunBench("postgres", fmt.Sprintf("dbname=postgres user=postgres password=secret port=%s sslmode=disable", port.Port()), b)
+	tester.RunBench(
+		"postgres",
+		fmt.Sprintf("dbname=postgres user=postgres password=secret port=%s sslmode=disable", port.Port()),
+		"employee",
+		b,
+	)
 	theDB.Close()
 }
 

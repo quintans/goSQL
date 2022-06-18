@@ -3,7 +3,6 @@ package db
 import (
 	"database/sql/driver"
 	"reflect"
-	"time"
 
 	"github.com/quintans/faults"
 	coll "github.com/quintans/toolkit/collections"
@@ -272,7 +271,6 @@ func (i *Insert) Execute() (int64, error) {
 
 	var err error
 	var lastId int64
-	var now time.Time
 	strategy := i.db.GetTranslator().GetAutoKeyStrategy()
 	singleKeyColumn := i.table.GetSingleKeyColumn()
 
@@ -290,32 +288,26 @@ func (i *Insert) Execute() (int64, error) {
 		if err != nil {
 			return 0, err
 		}
-		now = time.Now()
 		_, err = i.dba.Insert(sql, params...)
-		i.debugTime(now, 1)
 	case AUTOKEY_RETURNING:
 		sql, params, err = i.prepareSQL()
 		if err != nil {
 			return 0, err
 		}
-		now = time.Now()
 		if i.HasKeyValue || singleKeyColumn == nil {
 			_, err = i.dba.Insert(sql, params...)
 		} else {
 			lastId, err = i.dba.InsertReturning(sql, params...)
 		}
-		i.debugTime(now, 1)
 	case AUTOKEY_AFTER:
 		sql, params, err = i.prepareSQL()
 		if err != nil {
 			return 0, err
 		}
-		now = time.Now()
 		_, err = i.dba.Insert(sql, params...)
 		if err != nil {
 			return 0, err
 		}
-		i.debugTime(now, 1)
 		if i.returnId && !i.HasKeyValue && singleKeyColumn != nil {
 			if lastId, err = i.getAutoNumber(singleKeyColumn); err != nil {
 				return 0, err
@@ -345,9 +337,7 @@ func (i *Insert) getAutoNumber(column *Column) (int64, error) {
 	}
 	var id int64
 	i.debugSQL(sql, 2)
-	now := time.Now()
 	_, err := i.dba.QueryRow(sql, []interface{}{}, &id)
-	i.debugTime(now, 2)
 	if err != nil {
 		return 0, err
 	}

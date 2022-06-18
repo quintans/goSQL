@@ -3,7 +3,6 @@ package db
 import (
 	"database/sql"
 	"reflect"
-	"time"
 
 	"github.com/quintans/faults"
 	"github.com/quintans/goSQL/dbx"
@@ -838,13 +837,11 @@ func (q *Query) listIntoClosure(transformer interface{}) ([]interface{}, error) 
 	rsql := q.getCachedSql()
 	q.debugSQL(rsql.OriSql, 2)
 
-	now := time.Now()
 	params, err := rsql.BuildValues(q.DmlBase.parameters)
 	if err != nil {
 		return nil, err
 	}
 	r, e := q.DmlBase.dba.QueryInto(rsql.Sql, transformer, params...)
-	q.debugTime(now, 2)
 	if e != nil {
 		return nil, e
 	}
@@ -861,13 +858,11 @@ func (q *Query) listClosure(transformer func(rows *sql.Rows) error) error {
 	rsql := q.getCachedSql()
 	q.debugSQL(rsql.OriSql, 2)
 
-	now := time.Now()
 	params, err := rsql.BuildValues(q.DmlBase.parameters)
 	if err != nil {
 		return err
 	}
 	e := q.DmlBase.dba.QueryClosure(rsql.Sql, transformer, params...)
-	q.debugTime(now, 2)
 	if e != nil {
 		return e
 	}
@@ -885,13 +880,11 @@ func (q *Query) list(rowMapper dbx.IRowTransformer) (coll.Collection, error) {
 	rsql := q.getCachedSql()
 	q.debugSQL(rsql.OriSql, 2)
 
-	now := time.Now()
 	params, err := rsql.BuildValues(q.DmlBase.parameters)
 	if err != nil {
 		return nil, err
 	}
 	list, e := q.DmlBase.dba.QueryCollection(rsql.Sql, rowMapper, params...)
-	q.debugTime(now, 2)
 	if e != nil {
 		return nil, e
 	}
@@ -975,7 +968,7 @@ func checkSlice(i interface{}) (func(val reflect.Value) reflect.Value, reflect.T
 
 	// A non initialized array is the same as nil,
 	// so a slice is created so that it can be different from nil.
-	slice := reflect.MakeSlice(arr.Type(), 0, 0)
+	slice := reflect.MakeSlice(arr.Type(), 0, 20)
 	arr.Set(slice)
 	// slice := reflect.New(arr.Type()).Elem()
 	slicer := func(val reflect.Value) reflect.Value {
@@ -1097,13 +1090,11 @@ func (q *Query) SelectInto(dest ...interface{}) (bool, error) {
 	rsql := q.getCachedSql()
 	q.debugSQL(rsql.OriSql, 1)
 
-	now := time.Now()
 	params, err := rsql.BuildValues(q.DmlBase.parameters)
 	if err != nil {
 		return false, err
 	}
 	found, e := q.dba.QueryRow(rsql.Sql, params, dest...)
-	q.debugTime(now, 1)
 	if e != nil {
 		return false, e
 	}

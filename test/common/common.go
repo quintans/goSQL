@@ -158,6 +158,7 @@ func (tt Tester) RunAll(t *testing.T) {
 	t.Run("RunSelectFlatTree", tt.RunSelectFlatTree)
 	t.Run("RunListInto", tt.RunListInto)
 	t.Run("RunListOf", tt.RunListOf)
+	t.Run("RunList", tt.RunList) // <===
 	t.Run("RunListFlatTree", tt.RunListFlatTree)
 	t.Run("RunListTreeOf", tt.RunListTreeOf)
 	t.Run("RunListForSlice", tt.RunListForSlice)
@@ -492,10 +493,10 @@ func ResetDB3(TM db.ITransactionManager) {
 	}
 }
 
-func (tt Tester) RunBench(driver string, dns string, b *testing.B) {
+func (tt Tester) RunBench(driver string, dns string, table string, b *testing.B) {
 	ResetDB(tt.Tm)
 
-	const maxRows = 10000
+	const maxRows = 1000
 	type Employee struct {
 		Id        *int
 		FirstName *string
@@ -519,7 +520,7 @@ func (tt Tester) RunBench(driver string, dns string, b *testing.B) {
 
 	store := tt.Tm.Store()
 	for n := 10; n <= maxRows; n *= 10 {
-		query := fmt.Sprintf("SELECT * FROM employee ORDER BY id ASC LIMIT %d", n)
+		q := fmt.Sprintf("SELECT * FROM EMPLOYEE ORDER BY id ASC LIMIT %d", n)
 
 		b.Run(fmt.Sprintf("sqlx_%d", n), func(b *testing.B) {
 			b.StopTimer()
@@ -531,7 +532,7 @@ func (tt Tester) RunBench(driver string, dns string, b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				var emps []*Employee
 				b.StartTimer()
-				err := db.SelectContext(context.Background(), &emps, query)
+				err := db.SelectContext(context.Background(), &emps, q)
 				b.StopTimer()
 				require.NoError(b, err)
 				require.Len(b, emps, n)
@@ -548,7 +549,7 @@ func (tt Tester) RunBench(driver string, dns string, b *testing.B) {
 					Column(EMPLOYEE_C_FIRST_NAME, EMPLOYEE_C_LAST_NAME).
 					OrderBy(EMPLOYEE_C_ID).Asc().
 					Limit(int64(n)).
-					ListFlatTree(&emps)
+					List(&emps)
 				b.StopTimer()
 				require.NoError(b, err)
 				require.Len(b, emps, n)
@@ -558,7 +559,7 @@ func (tt Tester) RunBench(driver string, dns string, b *testing.B) {
 		b.Run(fmt.Sprintf("gorm_%d", n), func(b *testing.B) {
 			b.StopTimer()
 			db, err := gorm.Open(driver, dns)
-			db = db.Order("id asc").Limit(n)
+			db = db.Table(table).Order("ID ASC").Limit(n)
 			db.SingularTable(true)
 			require.NoError(b, err)
 			defer db.Close()
@@ -566,7 +567,8 @@ func (tt Tester) RunBench(driver string, dns string, b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				var emps []*Employee
 				b.StartTimer()
-				db.Find(&emps)
+				err := db.Find(&emps).Error
+				require.NoError(b, err)
 				b.StopTimer()
 				require.Len(b, emps, n)
 			}
@@ -1254,6 +1256,19 @@ func (tt Tester) RunListOf(t *testing.T) {
 	}
 }
 
+func (tt Tester) RunList(t *testing.T) {
+	ResetDB(tt.Tm)
+
+	store := tt.Tm.Store()
+	var books []*Book
+	err := store.Query(BOOK).
+		Column(BOOK_C_NAME, BOOK_C_PRICE).
+		OrderBy(BOOK_C_ID).Asc().
+		List(&books)
+	require.NoError(t, err)
+	require.Len(t, books, 3)
+}
+
 func (tt Tester) RunListFlatTree(t *testing.T) {
 	ResetDB(tt.Tm)
 
@@ -1868,7 +1883,7 @@ func (tt Tester) RunTableDiscriminator(t *testing.T) {
 	}
 
 	for k, v := range statuses {
-		logger.Debugf("Statuss[%v] = %s", k, v.String())
+		logger.Debugf("Statuses[%v] = %s", k, v.String())
 		if v.Id == nil {
 			t.Fatal("Expected a valid Id, but got nil")
 		}
