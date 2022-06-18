@@ -73,7 +73,7 @@ func (e *EntityTreeTransformer) Transform(rows *sql.Rows) (interface{}, error) {
 		// using the entity properties as reference for instantiating the types
 		cols, err := rows.Columns()
 		if err != nil {
-			return nil, err
+			return nil, faults.Wrap(err)
 		}
 		e.TemplateData = make([]interface{}, len(cols))
 		// set default for unused columns, in case of a projection of a result
@@ -92,12 +92,12 @@ func (e *EntityTreeTransformer) Transform(rows *sql.Rows) (interface{}, error) {
 
 	// Scan result set
 	if err := rows.Scan(rowData...); err != nil {
-		return nil, err
+		return nil, faults.Wrap(err)
 	}
 
 	instance, err := e.transformEntity(rowData, val, alias)
 	if err != nil {
-		return nil, err
+		return nil, faults.Wrap(err)
 	}
 
 	if e.Returner == nil {
@@ -157,7 +157,7 @@ func (e *EntityTreeTransformer) transformEntity(
 	var valid bool
 	lastProps, err := e.getCachedProperties(alias, parent.Type())
 	if err != nil {
-		return nil, err
+		return nil, faults.Wrap(err)
 	}
 	entity := parent.Interface()
 	hasher, isHasher := entity.(tk.Hasher)
@@ -166,7 +166,7 @@ func (e *EntityTreeTransformer) transformEntity(
 		// for performance, loads only key, because it's sufficient for searching the cache
 		valid, err = e.LoadInstanceKeys(row, parent, lastProps, true)
 		if err != nil {
-			return nil, err
+			return nil, faults.Wrap(err)
 		} else if valid {
 			// searches the cache
 			b, _ := e.entities.Get(hasher)
@@ -177,7 +177,7 @@ func (e *EntityTreeTransformer) transformEntity(
 			} else {
 				valid, err = e.LoadInstanceKeys(row, parent, lastProps, false)
 				if err != nil {
-					return nil, err
+					return nil, faults.Wrap(err)
 				} else if valid {
 					e.entities.Put(hasher, hasher)
 				} else {
@@ -211,7 +211,7 @@ func (e *EntityTreeTransformer) transformEntity(
 	} else {
 		valid, err = e.Overrider.ToEntity(row, parent, lastProps, &emptyBean)
 		if err != nil {
-			return nil, err
+			return nil, faults.Wrap(err)
 		}
 	}
 
@@ -247,7 +247,7 @@ func (e *EntityTreeTransformer) transformEntity(
 				}
 				child, err := e.transformEntity(row, childVal, fkAlias)
 				if err != nil {
-					return nil, err
+					return nil, faults.Wrap(err)
 				} else if child != nil {
 					childVal = reflect.ValueOf(child)
 					if bp.IsMany() { // Collection
@@ -314,7 +314,7 @@ func (e *EntityTreeTransformer) LoadInstanceKeys(
 			position := bp.Position
 			value, err := bp.ConvertFromDb(row[position-1])
 			if err != nil {
-				return false, err
+				return false, faults.Wrap(err)
 			}
 
 			v := reflect.ValueOf(value)
@@ -339,7 +339,7 @@ func (e *EntityTreeTransformer) getCachedProperties(alias string, typ reflect.Ty
 		var err error
 		properties, err = e.Overrider.PopulateMapping(alias, typ)
 		if err != nil {
-			return nil, err
+			return nil, faults.Wrap(err)
 		}
 		e.cachedEntityMappings[alias] = properties
 	}

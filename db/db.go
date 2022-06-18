@@ -202,14 +202,14 @@ func (d *Db) acceptColumn(table *Table, t reflect.Type, handler func(*Column)) e
 func (d *Db) Retrieve(instance interface{}, keys ...interface{}) (bool, error) {
 	table, t, err := structName(instance)
 	if err != nil {
-		return false, err
+		return false, faults.Wrap(err)
 	}
 
 	dml := d.Overrider.Query(table)
 	if err := d.acceptColumn(table, t, func(c *Column) {
 		dml.Column(c)
 	}); err != nil {
-		return false, err
+		return false, faults.Wrap(err)
 	}
 
 	criterias := make([]*Criteria, 0)
@@ -274,7 +274,7 @@ func (d *Db) buildCriteria(table *Table, example interface{}) ([]*Criteria, erro
 	t := reflect.TypeOf(example)
 	mappings, err := d.PopulateMapping("", t)
 	if err != nil {
-		return nil, err
+		return nil, faults.Wrap(err)
 	}
 	cols := table.GetColumns().Elements()
 	for _, e := range cols {
@@ -293,19 +293,19 @@ func (d *Db) buildCriteria(table *Table, example interface{}) ([]*Criteria, erro
 func (d *Db) find(instance interface{}, example interface{}) (*Query, error) {
 	table, t, err := structName(instance)
 	if err != nil {
-		return nil, err
+		return nil, faults.Wrap(err)
 	}
 
 	query := d.Overrider.Query(table)
 	if err := d.acceptColumn(table, t, func(c *Column) {
 		query.Column(c)
 	}); err != nil {
-		return nil, err
+		return nil, faults.Wrap(err)
 	}
 
 	criterias, err := d.buildCriteria(table, example)
 	if err != nil {
-		return nil, err
+		return nil, faults.Wrap(err)
 	}
 	if len(criterias) > 0 {
 		query.Where(criterias...)
@@ -317,7 +317,7 @@ func (d *Db) find(instance interface{}, example interface{}) (*Query, error) {
 func (d *Db) FindFirst(instance interface{}, example interface{}) (bool, error) {
 	query, err := d.find(instance, example)
 	if err != nil {
-		return false, err
+		return false, faults.Wrap(err)
 	}
 	return query.Limit(1).
 		SelectTo(instance)
@@ -334,40 +334,40 @@ func (d *Db) FindAll(instance interface{}, example interface{}) error {
 func (d *Db) Modify(instance interface{}) (bool, error) {
 	table, _, err := structName(instance)
 	if err != nil {
-		return false, err
+		return false, faults.Wrap(err)
 	}
 
 	dml := d.Overrider.Update(table)
 
 	var key int64
 	key, err = dml.Submit(instance)
-	return key != 0, err
+	return key != 0, faults.Wrap(err)
 }
 
 func (d *Db) Remove(instance interface{}) (bool, error) {
 	table, _, err := structName(instance)
 	if err != nil {
-		return false, err
+		return false, faults.Wrap(err)
 	}
 
 	dml := d.Overrider.Delete(table)
 
 	var deleted int64
 	deleted, err = dml.Submit(instance)
-	return deleted != 0, err
+	return deleted != 0, faults.Wrap(err)
 }
 
 // removes all that match the criteria defined by the non zero values by the struct.
 func (d *Db) RemoveAll(instance interface{}) (int64, error) {
 	table, _, err := structName(instance)
 	if err != nil {
-		return 0, err
+		return 0, faults.Wrap(err)
 	}
 
 	dml := d.Overrider.Delete(table)
 	criterias, err := d.buildCriteria(table, instance)
 	if err != nil {
-		return 0, err
+		return 0, faults.Wrap(err)
 	}
 	if len(criterias) > 0 {
 		dml.Where(criterias...)
@@ -375,7 +375,7 @@ func (d *Db) RemoveAll(instance interface{}) (int64, error) {
 
 	var deleted int64
 	deleted, err = dml.Execute()
-	return deleted, err
+	return deleted, faults.Wrap(err)
 }
 
 //Inserts or Updates a record depending on the value of the Version.
@@ -385,7 +385,7 @@ func (d *Db) RemoveAll(instance interface{}) (int64, error) {
 func (d *Db) Save(instance interface{}) (bool, error) {
 	table, _, err := structName(instance)
 	if err != nil {
-		return false, err
+		return false, faults.Wrap(err)
 	}
 
 	verColumn := table.GetVersionColumn()
@@ -414,10 +414,10 @@ func (d *Db) Save(instance interface{}) (bool, error) {
 
 	if ver == 0 {
 		k, err := d.Overrider.Insert(table).Submit(instance)
-		return k != 0, err
+		return k != 0, faults.Wrap(err)
 	} else {
 		k, err := d.Overrider.Update(table).Submit(instance)
-		return k != 0, err
+		return k != 0, faults.Wrap(err)
 	}
 }
 

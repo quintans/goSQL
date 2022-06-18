@@ -120,5 +120,5 @@ func Container(
 	if err == nil {
 		port, err = server.MappedPort(ctx, nat.Port(exPort))
 	}
-	return ctx, server, port, err
+	return ctx, server, port, faults.Wrap(err)
 }

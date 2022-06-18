@@ -819,7 +819,7 @@ func (q *Query) ListInto(closure interface{}) ([]interface{}, error) {
 	if ok {
 		coll, err := q.list(NewEntityFactoryTransformer(q, typ, caller))
 		if err != nil {
-			return nil, err
+			return nil, faults.Wrap(err)
 		}
 		return coll.Elements(), nil
 	} else {
@@ -839,7 +839,7 @@ func (q *Query) listIntoClosure(transformer interface{}) ([]interface{}, error) 
 
 	params, err := rsql.BuildValues(q.DmlBase.parameters)
 	if err != nil {
-		return nil, err
+		return nil, faults.Wrap(err)
 	}
 	r, e := q.DmlBase.dba.QueryInto(rsql.Sql, transformer, params...)
 	if e != nil {
@@ -1095,7 +1095,7 @@ func (q *Query) SelectInto(dest ...interface{}) (bool, error) {
 
 	params, err := rsql.BuildValues(q.DmlBase.parameters)
 	if err != nil {
-		return false, err
+		return false, faults.Wrap(err)
 	}
 	found, e := q.dba.QueryRow(rsql.Sql, params, dest...)
 	if e != nil {
@@ -1121,7 +1121,7 @@ func (q *Query) selectTree(typ interface{}, reuse bool) (interface{}, error) {
 
 		list, err := q.list(NewEntityTreeTransformer(q, true, typ))
 		if err != nil {
-			return nil, err
+			return nil, faults.Wrap(err)
 		}
 
 		if list.Size() == 0 {
@@ -1143,7 +1143,7 @@ func (q *Query) SelectTo(instance interface{}) (bool, error) {
 
 	res, err := q.selectTransformer(NewEntityTransformer(q, instance))
 	if err != nil {
-		return false, err
+		return false, faults.Wrap(err)
 	}
 	if res != nil {
 		tk.Set(instance, res)
@@ -1199,7 +1199,7 @@ func (q *Query) SelectFlatTree(instance interface{}) (bool, error) {
 func (q *Query) selectTreeTo(instance interface{}, reuse bool) (bool, error) {
 	res, err := q.selectTree(instance, reuse)
 	if err != nil {
-		return false, err
+		return false, faults.Wrap(err)
 	}
 	if res != nil {
 		tk.Set(instance, res)
@@ -1219,7 +1219,7 @@ func (q *Query) selectTransformer(rowMapper dbx.IRowTransformer) (interface{}, e
 
 	list, err := q.list(rowMapper)
 	if err != nil {
-		return nil, err
+		return nil, faults.Wrap(err)
 	}
 
 	if list.Size() == 0 {

@@ -82,7 +82,7 @@ func (e *EntityTransformer) PopulateMapping(tableAlias string, typ reflect.Type)
 
 	mappings, err := e.Query.GetDb().PopulateMapping(prefix, typ)
 	if err != nil {
-		return nil, err
+		return nil, faults.Wrap(err)
 	}
 
 	// Matches the columns with the bean properties
@@ -221,7 +221,7 @@ func (e *EntityTransformer) ToEntity(
 			position := bp.Position
 			value, err := bp.ConvertFromDb(row[position-1])
 			if err != nil {
-				return false, err
+				return false, faults.Wrap(err)
 			}
 
 			isPtr := false

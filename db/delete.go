@@ -46,7 +46,7 @@ func (d *Delete) Submit(value interface{}) (int64, error) {
 		var err error
 		mappings, err = d.GetDb().PopulateMapping("", typ)
 		if err != nil {
-			return 0, err
+			return 0, faults.Wrap(err)
 		}
 		criterias = make([]*Criteria, 0)
 		d.criteria = nil
@@ -116,13 +116,13 @@ func (d *Delete) Submit(value interface{}) (int64, error) {
 	if t, isT := value.(PreDeleter); isT {
 		err := t.PreDelete(d.GetDb())
 		if err != nil {
-			return 0, err
+			return 0, faults.Wrap(err)
 		}
 	}
 
 	affectedRows, err := d.Execute()
 	if err != nil {
-		return 0, err
+		return 0, faults.Wrap(err)
 	}
 	if affectedRows == 0 && mustSucceed {
 		return 0, dbx.NewOptimisticLockFail(fmt.Sprintf("goSQL: Optimistic Lock Fail when deleting record for %+v", value))
@@ -146,7 +146,7 @@ func (d *Delete) Execute() (int64, error) {
 
 	params, err := rsql.BuildValues(d.DmlBase.parameters)
 	if err != nil {
-		return 0, err
+		return 0, faults.Wrap(err)
 	}
 	affectedRows, e := d.DmlBase.dba.Delete(rsql.Sql, params...)
 	if e != nil {

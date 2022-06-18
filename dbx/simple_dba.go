@@ -82,7 +82,7 @@ func (s *SimpleDBA) Query(
 	}
 
 	if err = rows.Err(); err != nil {
-		return nil, faults.Errorf("closing rows for query: %w", err)
+		return nil, faults.Errorf("closing rows for query: %w", faults.Wrap(err))
 	}
 
 	return results, nil
@@ -108,7 +108,7 @@ func (s *SimpleDBA) QueryClosure(
 	}
 
 	if err = rows.Err(); err != nil {
-		return faults.Errorf("closing rows for query closure: %w", err)
+		return faults.Errorf("closing rows for query closure: %w", faults.Wrap(err))
 	}
 
 	return nil
@@ -286,7 +286,7 @@ func (s *SimpleDBA) InsertReturning(sql string, params ...interface{}) (int64, e
 	var id int64
 	_, err := s.QueryRow(sql, params, &id)
 	if err != nil {
-		return 0, err
+		return 0, faults.Wrap(err)
 	}
 	return id, nil
 }

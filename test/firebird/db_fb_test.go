@@ -1,6 +1,7 @@
 package firebird
 
 import (
+	"github.com/quintans/faults"
 	. "github.com/quintans/goSQL/db"
 	"github.com/quintans/goSQL/test/common"
 	"github.com/quintans/goSQL/translators"
@@ -31,7 +32,7 @@ func StartContainer() (func(), ITransactionManager, *sql.DB, error) {
 	)
 
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, faults.Wrap(err)
 	}
 	closer := func() {
 		server.Terminate(ctx)
@@ -40,7 +41,7 @@ func StartContainer() (func(), ITransactionManager, *sql.DB, error) {
 	tm, theDB, err := InitFirebirdSQL(port.Port())
 	if err != nil {
 		closer()
-		return nil, nil, nil, err
+		return nil, nil, nil, faults.Wrap(err)
 	}
 	return closer, tm, theDB, nil
 }
@@ -70,7 +71,7 @@ func InitFirebirdSQL(port string) (ITransactionManager, *sql.DB, error) {
 			m := token.GetMembers()
 			args, err := translators.Translate(tx.Translate, dmlType, m...)
 			if err != nil {
-				return "", err
+				return "", faults.Wrap(err)
 			}
 			return fmt.Sprintf(
 				"DATEDIFF(SECOND, %s, %s)",

@@ -57,11 +57,11 @@ func InitDB(driverName, dataSourceName string, translator db.Translator, initSql
 
 	mydb, err := Connect(driverName, dataSourceName)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, faults.Wrap(err)
 	}
 
 	if err := CreateTables(mydb, initSqlFile); err != nil {
-		return nil, nil, err
+		return nil, nil, faults.Wrap(err)
 	}
 
 	return db.NewTransactionManager(
@@ -78,7 +78,7 @@ func InitDB(driverName, dataSourceName string, translator db.Translator, initSql
 func Connect(driverName, dataSourceName string) (*sql.DB, error) {
 	mydb, err := sql.Open(driverName, dataSourceName)
 	if err != nil {
-		return nil, err
+		return nil, faults.Wrap(err)
 	}
 
 	// wake up the database pool
@@ -94,7 +94,7 @@ func CreateTables(db *sql.DB, initSqlFile string) error {
 
 	sql, err := ioutil.ReadFile(initSqlFile)
 	if err != nil {
-		return faults.Errorf("Unable to read file %s: %w", initSqlFile, err)
+		return faults.Errorf("Unable to read file %s: %w", initSqlFile, faults.Wrap(err))
 	}
 
 	stmts := strings.Split(string(sql), ";\n")
@@ -105,7 +105,7 @@ func CreateTables(db *sql.DB, initSqlFile string) error {
 		if stmt != "" {
 			_, err := db.Exec(stmt)
 			if err != nil {
-				return faults.Errorf("sql: %s: %w", stmt, err)
+				return faults.Errorf("sql: %s: %w", stmt, faults.Wrap(err))
 			}
 		}
 	}
