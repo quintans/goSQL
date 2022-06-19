@@ -55,7 +55,7 @@ a ORM like library in Go (golang) that makes SQL easier to use.
 	* [Order By](#order-by)
 	* [Union](#union)
 	* [Pagination](#pagination)
-* [Embeded Structs](#embeded-structs)
+* [Embedded Structs](#embedded-structs)
 * [Converters](#converters)
 * [Struct Triggers](#struct-triggers)
 * [Table Triggers](#table-triggers)
@@ -129,7 +129,7 @@ store.WithContext(context.Background())
  - CRUD actions using structs
  - Simple join declaration
  - Populate struct tree with query results containing joins
- - Embeded Structs
+ - Embedded Structs
  - Subqueries
  - Automatic setting of primary keys for inserts
  - Optimistic Locking with automatic version increment
@@ -765,7 +765,7 @@ Lists simple variables using a closure to assemble the result list, or to do som
 The types for scanning are supplied by the instances parameter.
 
 ```go
-names := make([]string, 0)
+var names []string
 var name string
 store.Query(PUBLISHER).
 	Column(PUBLISHER_C_NAME).
@@ -1298,9 +1298,9 @@ not forgetting to register the converter
 translator.RegisterConverter("color", ColorConverter{})
 ```
 
-## Embeded Structs
+## Embedded Structs
 
-If we want to group columns into a complex type (`struct`) we just have to tag the field as `sql:"embeded"`.
+If we want to group columns into a complex type (`struct`) we just have to tag the field as `sql:"embedded"`.
 This is handy when working with Value Objects.
 
 Consider the table
@@ -1321,7 +1321,7 @@ and the structs
 type Supervisor struct {
 	EntityBase
 
-	FullName FullNameVO `sql:"embeded"`
+	FullName FullNameVO `sql:"embedded"`
 }
 
 type FullNameVO struct {

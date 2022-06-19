@@ -102,7 +102,7 @@ func (t *TransactionManager) walkTreeStruct(typ reflect.Type, attrs map[string]*
 	num := typ.NumField()
 	for i := 0; i < num; i++ {
 		p := typ.Field(i)
-		var omit, embeded bool
+		var omit, embedded bool
 		var converter Converter
 		sqlVal := p.Tag.Get(sqlKey)
 		if sqlVal != "" {
@@ -112,8 +112,8 @@ func (t *TransactionManager) walkTreeStruct(typ reflect.Type, attrs map[string]*
 				switch v {
 				case sqlOmissionVal:
 					omit = true
-				case sqlEmbeddedVal:
-					embeded = true
+				case sqlEmbededVal, sqlEmbeddedVal:
+					embedded = true
 				default:
 					if strings.HasPrefix(v, converterTag) {
 						cn := v[len(converterTag):]
@@ -130,7 +130,7 @@ func (t *TransactionManager) walkTreeStruct(typ reflect.Type, attrs map[string]*
 			if err := t.walkTreeStruct(p.Type, attrs, x); err != nil {
 				return faults.Wrap(err)
 			}
-		} else if embeded {
+		} else if embedded {
 			if err := t.walkTreeStruct(p.Type, attrs, x); err != nil {
 				return faults.Wrap(err)
 			}

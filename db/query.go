@@ -929,27 +929,39 @@ func (q *Query) List(target interface{}) error {
 		return q.err
 	}
 
-	caller, typ, isStruct := checkSlice(target)
-	if !isStruct {
+	caller, typ, isStruct, isSlice := checkSlice(target)
+	if !isSlice {
 		var ok bool
 		caller, typ, ok = checkCollector(target)
 		if !ok {
 			return faults.Errorf("expected a slice of type *[]<*>struct or a function with the signature func(<<*>struct>). got %s", typ)
 		}
+		_, err := q.list(NewEntityFactoryTransformer(q, typ, caller))
+		return faults.Wrap(err)
 	}
 
-	_, err := q.list(NewEntityFactoryTransformer(q, typ, caller))
-	return faults.Wrap(err)
-
+	if isStruct {
+		_, err := q.list(NewEntityFactoryTransformer(q, typ, caller))
+		return faults.Wrap(err)
+	} else {
+		holder := reflect.New(typ).Interface()
+		return q.listClosure(func(rows *sql.Rows) error {
+			if err := rows.Scan(holder); err != nil {
+				return err
+			}
+			caller(reflect.ValueOf(holder).Elem())
+			return nil
+		})
+	}
 }
 
-func checkSlice(i interface{}) (func(val reflect.Value) reflect.Value, reflect.Type, bool) {
+func checkSlice(i interface{}) (func(val reflect.Value) reflect.Value, reflect.Type, bool, bool) {
 	arr := reflect.ValueOf(i)
-	// pointer to the slice
+	// if slice, needs to be a pointer
 	if arr.Kind() == reflect.Ptr {
 		arr = arr.Elem()
 	} else {
-		return nil, nil, false
+		return nil, nil, false, false
 	}
 
 	// slice element
@@ -957,7 +969,7 @@ func checkSlice(i interface{}) (func(val reflect.Value) reflect.Value, reflect.T
 	if arr.Kind() == reflect.Slice {
 		typ = arr.Type().Elem()
 	} else {
-		return nil, nil, false
+		return nil, nil, false, false
 	}
 
 	isStruct := typ.Kind() == reflect.Struct || typ.Kind() == reflect.Ptr && typ.Elem().Kind() == reflect.Struct
@@ -987,7 +999,7 @@ func checkSlice(i interface{}) (func(val reflect.Value) reflect.Value, reflect.T
 		return reflect.Value{}
 	}
 
-	return slicer, typ, isStruct
+	return slicer, typ, isStruct, true
 }
 
 func checkCollector(collector interface{}) (func(val reflect.Value) reflect.Value, reflect.Type, bool) {
@@ -1065,17 +1077,30 @@ func (q *Query) ListFlatTree(target interface{}) error {
 		return q.err
 	}
 
-	caller, typ, isStruct := checkSlice(target)
-	if !isStruct {
+	caller, typ, isStruct, isSlice := checkSlice(target)
+	if !isSlice {
 		var ok bool
 		caller, typ, ok = checkCollector(target)
 		if !ok {
-			return faults.Errorf("goSQL: Expected a slice of type *[]<*>struct or a function with the signature func(<<*>struct>). got %s", typ)
+			return faults.Errorf("expected a slice of type *[]<*>struct or a function with the signature func(<<*>struct>). got %s", typ)
 		}
+		_, err := q.list(NewEntityTreeFactoryTransformer(q, typ, caller))
+		return faults.Wrap(err)
 	}
 
-	_, err := q.list(NewEntityTreeFactoryTransformer(q, typ, caller))
-	return faults.Wrap(err)
+	if isStruct {
+		_, err := q.list(NewEntityTreeFactoryTransformer(q, typ, caller))
+		return faults.Wrap(err)
+	} else {
+		holder := reflect.New(typ).Interface()
+		return q.listClosure(func(rows *sql.Rows) error {
+			if err := rows.Scan(holder); err != nil {
+				return err
+			}
+			caller(reflect.ValueOf(holder).Elem())
+			return nil
+		})
+	}
 }
 
 // the result of the query is put in the passed interface array.

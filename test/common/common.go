@@ -3,6 +3,7 @@ package common
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"strings"
@@ -130,57 +131,57 @@ type Tester struct {
 }
 
 func (tt Tester) RunAll(t *testing.T) {
-	// t.Run("RunRetrieveOther", tt.RunRetrieveOther)
-	// t.Run("RunEmbedded", tt.RunEmbedded)
-	// t.Run("RunEmbeddedPtr", tt.RunEmbeddedPtr)
-	// t.Run("RunConverter", tt.RunConverter)
-	// t.Run("RunQueryIntoUnexportedFields", tt.RunQueryIntoUnexportedFields)
-	// t.Run("RunSelectUTF8", tt.RunSelectUTF8)
-	// t.Run("RunRetrieve", tt.RunRetrieve)
-	// t.Run("RunFindFirst", tt.RunFindFirst)
-	// t.Run("RunFindAll", tt.RunFindAll)
-	// t.Run("RunOmitField", tt.RunOmitField)
-	// t.Run("RunModifyField", tt.RunModifyField)
-	// t.Run("RunRemoveAll", tt.RunRemoveAll)
-	// t.Run("RunInsertReturningKey", tt.RunInsertReturningKey)
-	// t.Run("RunInsertStructReturningKey", tt.RunInsertStructReturningKey)
-	// t.Run("RunSimpleUpdate", tt.RunSimpleUpdate)
-	// t.Run("RunStructUpdate", tt.RunStructUpdate)
-	// t.Run("RunStructSaveAndRetrieve", tt.RunStructSaveAndRetrieve)
-	// t.Run("RunUpdateSubquery", tt.RunUpdateSubquery)
-	// t.Run("RunSimpleDelete", tt.RunSimpleDelete)
-	// t.Run("RunStructDelete", tt.RunStructDelete)
-	// t.Run("RunSelectInto", tt.RunSelectInto)
-	// t.Run("RunSelectTree", tt.RunSelectTree)
-	// t.Run("RunSelectTreeTwoBranches", tt.RunSelectTreeTwoBranches)
-	// t.Run("RunSelectFlatTree", tt.RunSelectFlatTree)
-	// t.Run("RunListInto", tt.RunListInto)
-	// t.Run("RunListOf", tt.RunListOf)
+	t.Run("RunRetrieveOther", tt.RunRetrieveOther)
+	t.Run("RunEmbedded", tt.RunEmbedded)
+	t.Run("RunEmbeddedPtr", tt.RunEmbeddedPtr)
+	t.Run("RunConverter", tt.RunConverter)
+	t.Run("RunQueryIntoUnexportedFields", tt.RunQueryIntoUnexportedFields)
+	t.Run("RunSelectUTF8", tt.RunSelectUTF8)
+	t.Run("RunRetrieve", tt.RunRetrieve)
+	t.Run("RunFindFirst", tt.RunFindFirst)
+	t.Run("RunFindAll", tt.RunFindAll)
+	t.Run("RunOmitField", tt.RunOmitField)
+	t.Run("RunModifyField", tt.RunModifyField)
+	t.Run("RunRemoveAll", tt.RunRemoveAll)
+	t.Run("RunInsertReturningKey", tt.RunInsertReturningKey)
+	t.Run("RunInsertStructReturningKey", tt.RunInsertStructReturningKey)
+	t.Run("RunSimpleUpdate", tt.RunSimpleUpdate)
+	t.Run("RunStructUpdate", tt.RunStructUpdate)
+	t.Run("RunStructSaveAndRetrieve", tt.RunStructSaveAndRetrieve)
+	t.Run("RunUpdateSubquery", tt.RunUpdateSubquery)
+	t.Run("RunSimpleDelete", tt.RunSimpleDelete)
+	t.Run("RunStructDelete", tt.RunStructDelete)
+	t.Run("RunSelectInto", tt.RunSelectInto)
+	t.Run("RunSelectTree", tt.RunSelectTree)
+	t.Run("RunSelectTreeTwoBranches", tt.RunSelectTreeTwoBranches)
+	t.Run("RunSelectFlatTree", tt.RunSelectFlatTree)
+	t.Run("RunListInto", tt.RunListInto)
+	t.Run("RunListOf", tt.RunListOf)
 	t.Run("RunList", tt.RunList)
-	// t.Run("RunListFlatTree", tt.RunListFlatTree)
-	// t.Run("RunListTreeOf", tt.RunListTreeOf)
-	// t.Run("RunListForSlice", tt.RunListForSlice)
-	// t.Run("RunListSimple", tt.RunListSimple)
-	// t.Run("RunSimpleCase", tt.RunSimpleCase)
-	// t.Run("RunSearchedCase", tt.RunSearchedCase)
-	// t.Run("RunColumnSubquery", tt.RunColumnSubquery)
-	// t.Run("RunWhereSubquery", tt.RunWhereSubquery)
-	// t.Run("RunInnerOn", tt.RunInnerOn)
-	// t.Run("RunInnerOn2", tt.RunInnerOn2)
-	// t.Run("RunOuterFetchOrder", tt.RunOuterFetchOrder)
-	// t.Run("RunOuterFetchOrderAs", tt.RunOuterFetchOrderAs)
-	// t.Run("RunGroupBy", tt.RunGroupBy)
-	// t.Run("RunOrderBy", tt.RunOrderBy)
-	// t.Run("RunPagination", tt.RunPagination)
-	// t.Run("RunAssociationDiscriminator", tt.RunAssociationDiscriminator)
-	// t.Run("RunAssociationDiscriminatorReverse", tt.RunAssociationDiscriminatorReverse)
-	// t.Run("RunTableDiscriminator", tt.RunTableDiscriminator)
-	// t.Run("RunJoinTableDiscriminator", tt.RunJoinTableDiscriminator)
-	// t.Run("RunCustomFunction", tt.RunCustomFunction)
-	// t.Run("RunRawSQL1", tt.RunRawSQL1)
-	// t.Run("RunRawSQL2", tt.RunRawSQL2)
-	// t.Run("RunHaving", tt.RunHaving)
-	// t.Run("RunUnion", tt.RunUnion)
+	t.Run("RunListFlatTree", tt.RunListFlatTree)
+	t.Run("RunListTreeOf", tt.RunListTreeOf)
+	t.Run("RunListForSlice", tt.RunListForSlice)
+	t.Run("RunListSimple", tt.RunListSimple)
+	t.Run("RunSimpleCase", tt.RunSimpleCase)
+	t.Run("RunSearchedCase", tt.RunSearchedCase)
+	t.Run("RunColumnSubquery", tt.RunColumnSubquery)
+	t.Run("RunWhereSubquery", tt.RunWhereSubquery)
+	t.Run("RunInnerOn", tt.RunInnerOn)
+	t.Run("RunInnerOn2", tt.RunInnerOn2)
+	t.Run("RunOuterFetchOrder", tt.RunOuterFetchOrder)
+	t.Run("RunOuterFetchOrderAs", tt.RunOuterFetchOrderAs)
+	t.Run("RunGroupBy", tt.RunGroupBy)
+	t.Run("RunOrderBy", tt.RunOrderBy)
+	t.Run("RunPagination", tt.RunPagination)
+	t.Run("RunAssociationDiscriminator", tt.RunAssociationDiscriminator)
+	t.Run("RunAssociationDiscriminatorReverse", tt.RunAssociationDiscriminatorReverse)
+	t.Run("RunTableDiscriminator", tt.RunTableDiscriminator)
+	t.Run("RunJoinTableDiscriminator", tt.RunJoinTableDiscriminator)
+	t.Run("RunCustomFunction", tt.RunCustomFunction)
+	t.Run("RunRawSQL1", tt.RunRawSQL1)
+	t.Run("RunRawSQL2", tt.RunRawSQL2)
+	t.Run("RunHaving", tt.RunHaving)
+	t.Run("RunUnion", tt.RunUnion)
 }
 
 func ResetDB(TM db.ITransactionManager) {
@@ -958,7 +959,7 @@ func (tt Tester) RunStructSaveAndRetrieve(t *testing.T) {
 		}
 
 		// === save update ===
-		publisher.Name = ext.String("UPDDATE: Super Duper Test")
+		publisher.Name = ext.String("UPDATE: Super Duper Test")
 		ok, err = store.Save(&publisher)
 		if err != nil {
 			t.Fatalf("Failed RunStructSaveAndRetrieve: %s", err)
@@ -990,8 +991,8 @@ func (tt Tester) RunStructSaveAndRetrieve(t *testing.T) {
 		// === check optimistic lock ===
 		publisher.Version = 1 // invalid version
 		ok, err = store.Save(&publisher)
-		fail, _ := err.(*dbx.OptimisticLockFail)
-		if fail == nil {
+		var fail *dbx.OptimisticLockFail
+		if !errors.As(err, &fail) {
 			t.Fatalf("Failed RunStructSaveAndRetrieve: %s", err)
 		}
 
@@ -1372,20 +1373,10 @@ func (tt Tester) RunListForSlice(t *testing.T) {
 	err := store.Query(PUBLISHER).
 		Column(PUBLISHER_C_NAME).
 		List(&names)
-	if err != nil {
-		t.Fatalf("Failed RunListSlice: %s", err)
-	}
 
-	if len(names) != 2 {
-		t.Fatalf("Expected 2 Publisher names, but got %v", len(names))
-	}
-
-	for k, v := range names {
-		logger.Debugf("names[%v] = %s", k, v)
-		if v == "" {
-			t.Fatalf("Expected a value for names[%v], but got an empty string", k)
-		}
-	}
+	require.NoError(t, err)
+	require.Len(t, names, 2)
+	require.EqualValues(t, []string{"Geek Publications", PUBLISHER_UTF8_NAME}, names)
 }
 
 func (tt Tester) RunListSimple(t *testing.T) {
@@ -2186,34 +2177,24 @@ func (tt Tester) RunEmbedded(t *testing.T) {
 		},
 	}
 
-	if _, err := db.Insert(EMPLOYEE).Submit(&p); err != nil {
-		t.Fatalf("%+v", err)
-	}
-	actualFirst, actualLast := getNames(db, *p.Id)
+	_, err := db.Insert(EMPLOYEE).Submit(&p)
+	require.NoError(t, err)
 
-	if actualFirst != expectedFirst {
-		t.Fatalf("expected %q, got %q", expectedFirst, actualFirst)
-	}
-	if actualLast != expectedLast {
-		t.Fatalf("expected %q, got %q", expectedLast, actualLast)
-	}
+	actualFirst, actualLast := getNames(db, *p.Id)
+	require.Equal(t, expectedFirst, actualFirst)
+	require.Equal(t, expectedLast, actualLast)
 
 	p2 := Supervisor{}
-	_, err := db.Query(EMPLOYEE).
+	_, err = db.Query(EMPLOYEE).
 		Where(EMPLOYEE_C_ID.Matches(p.Id)).
 		SelectTo(&p2)
-	if err != nil {
-		t.Fatalf("%+v", err)
-	}
+	require.NoError(t, err)
 
 	fn := FullNameVO{
 		firstName: expectedFirst,
 		lastName:  expectedLast,
 	}
-
-	if p2.FullName != fn {
-		t.Fatalf("Expected %+v, got %+v", fn, p2.FullName)
-	}
+	require.Equal(t, fn, p2.FullName)
 }
 
 func getNames(db db.IDb, id int64) (string, string) {

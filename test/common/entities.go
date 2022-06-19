@@ -670,7 +670,7 @@ func (cc ColorConverter) FromDb(in interface{}) (interface{}, error) {
 type Supervisor struct {
 	EntityBase
 
-	FullName FullNameVO `sql:"embeded"`
+	FullName FullNameVO `sql:"embedded"`
 }
 
 type FullNameVO struct {
@@ -681,5 +681,5 @@ type FullNameVO struct {
 type Supervisor2 struct {
 	EntityBase
 
-	FullName *FullNameVO `sql:"embeded"`
+	FullName *FullNameVO `sql:"embedded"`
 }

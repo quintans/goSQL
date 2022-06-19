@@ -20,6 +20,7 @@ var (
 const (
 	sqlKey         = "sql"
 	sqlOmissionVal = "omit"
+	sqlEmbededVal  = "embeded" // fixing the typo will be a breaking change
 	sqlEmbeddedVal = "embedded"
 )
 
