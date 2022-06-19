@@ -33,7 +33,7 @@ type MyDb struct {
 }
 
 func (d *MyDb) Query(table *db.Table) *db.Query {
-	query := d.Overrider.Query(table)
+	query := d.Db.Query(table)
 	query.SetParameter("lang", d.Lang)
 	return query
 }
@@ -68,7 +68,7 @@ func InitDB(driverName, dataSourceName string, translator db.Translator, initSql
 		// database
 		mydb,
 		translator,
-		// databse context factory
+		// database context factory
 		db.TmWithDbFactory(func(c dbx.IConnection, m db.Mapper) db.IDb {
 			return NewMyDb(c, translator, m, "pt")
 		}),
@@ -494,7 +494,7 @@ func ResetDB3(TM db.ITransactionManager) {
 func (tt Tester) RunBench(driver string, dns string, table string, b *testing.B) {
 	ResetDB(tt.Tm)
 
-	const maxRows = 100
+	const maxRows = 1000
 	type Employee struct {
 		Id        *int
 		FirstName *string
@@ -1994,7 +1994,7 @@ func (tt Tester) RunRawSQL1(t *testing.T) {
 	dba := dbx.NewSimpleDBA(tt.Tm.Store().GetConnection())
 	var result []string
 
-	_, err := dba.QueryInto(RAW_SQL,
+	_, err := dba.QueryIntoX(context.Background(), RAW_SQL,
 		func(name string) { // we calso use pointers: func(name *string)
 			result = append(result, name)
 		}, "%book")
@@ -2017,7 +2017,7 @@ func (tt Tester) RunRawSQL2(t *testing.T) {
 	dba := dbx.NewSimpleDBA(tt.Tm.Store().GetConnection())
 	var result []string
 
-	err := dba.QueryClosure(RAW_SQL,
+	err := dba.QueryClosureX(context.Background(), RAW_SQL,
 		func(rows *sql.Rows) error {
 			var name string
 			if err := rows.Scan(&name); err != nil {

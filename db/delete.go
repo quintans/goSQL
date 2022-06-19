@@ -22,7 +22,7 @@ type Delete struct {
 
 func NewDelete(db IDb, table *Table) *Delete {
 	this := new(Delete)
-	this.Super(db, table)
+	this.init(db, table)
 	return this
 }
 
@@ -148,7 +148,7 @@ func (d *Delete) Execute() (int64, error) {
 	if err != nil {
 		return 0, faults.Wrap(err)
 	}
-	affectedRows, e := d.DmlBase.dba.Delete(rsql.Sql, params...)
+	affectedRows, e := d.DmlBase.dba.DeleteX(d.db.GetContext(), rsql.Sql, params...)
 	if e != nil {
 		return 0, e
 	}

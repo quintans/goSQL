@@ -57,11 +57,11 @@ type QueryBuilder struct {
 
 func NewQueryBuilder(translator db.Translator) *QueryBuilder {
 	this := new(QueryBuilder)
-	this.Super(translator)
+	this.init(translator)
 	return this
 }
 
-func (q *QueryBuilder) Super(translator db.Translator) {
+func (q *QueryBuilder) init(translator db.Translator) {
 	q.translator = translator
 	q.columnPart = tk.NewJoiner(", ")
 	q.fromPart = tk.NewJoiner(", ")
@@ -276,11 +276,11 @@ type UpdateBuilder struct {
 
 func NewUpdateBuilder(translator db.Translator) *UpdateBuilder {
 	this := new(UpdateBuilder)
-	this.Super(translator)
+	this.init(translator)
 	return this
 }
 
-func (u *UpdateBuilder) Super(translator db.Translator) {
+func (u *UpdateBuilder) init(translator db.Translator) {
 	u.translator = translator
 	u.columnPart = tk.NewJoiner(", ")
 	u.tablePart = tk.NewJoiner(", ")
@@ -359,11 +359,11 @@ type DeleteBuilder struct {
 
 func NewDeleteBuilder(translator db.Translator) *DeleteBuilder {
 	this := new(DeleteBuilder)
-	this.Super(translator)
+	this.init(translator)
 	return this
 }
 
-func (d *DeleteBuilder) Super(translator db.Translator) {
+func (d *DeleteBuilder) init(translator db.Translator) {
 	d.translator = translator
 
 	d.tablePart = tk.NewJoiner(", ")
@@ -420,11 +420,11 @@ type InsertBuilder struct {
 
 func NewInsertBuilder(translator db.Translator) *InsertBuilder {
 	this := new(InsertBuilder)
-	this.Super(translator)
+	this.init(translator)
 	return this
 }
 
-func (i *InsertBuilder) Super(translator db.Translator) {
+func (i *InsertBuilder) init(translator db.Translator) {
 	i.translator = translator
 	i.columnPart = tk.NewJoiner(", ")
 	i.valuePart = tk.NewJoiner(", ")

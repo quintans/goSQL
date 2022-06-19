@@ -68,7 +68,7 @@ type PgUpdateBuilder struct {
 
 func NewPgUpdateBuilder(translator db.Translator) *PgUpdateBuilder {
 	this := new(PgUpdateBuilder)
-	this.Super(translator)
+	this.init(translator)
 	return this
 }
 

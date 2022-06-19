@@ -27,7 +27,7 @@ func NewMySQL5Translator() *MySQL5Translator {
 
 func NewMySQL5DeleteBuilder(translator db.Translator) *MySQL5DeleteBuilder {
 	this := new(MySQL5DeleteBuilder)
-	this.Super(translator)
+	this.init(translator)
 	return this
 }
 

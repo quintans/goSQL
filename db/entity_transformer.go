@@ -41,7 +41,7 @@ func NewEntityFactoryTransformer(query *Query, typ reflect.Type, returner func(v
 	this.Overrider = this
 
 	// used as super by extenders
-	this.Super(query, createFactory(typ), returner)
+	this.init(query, createFactory(typ), returner)
 
 	return this
 }
@@ -59,7 +59,7 @@ func createFactory(typ reflect.Type) func() reflect.Value {
 	}
 }
 
-func (e *EntityTransformer) Super(query *Query, factory func() reflect.Value, returner func(val reflect.Value) reflect.Value) {
+func (e *EntityTransformer) init(query *Query, factory func() reflect.Value, returner func(val reflect.Value) reflect.Value) {
 	e.Query = query
 	e.Factory = factory
 	e.Returner = returner

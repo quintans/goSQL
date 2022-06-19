@@ -1,16 +1,14 @@
 package dbx
 
 import (
+	"context"
 	"database/sql"
 	"reflect"
 
 	"github.com/quintans/faults"
 	tk "github.com/quintans/toolkit"
 	coll "github.com/quintans/toolkit/collections"
-	"github.com/quintans/toolkit/log"
 )
-
-var logger = log.LoggerFor("github.com/quintans/goSQL/dbx")
 
 // Class that simplifies the execution o Database Access
 type SimpleDBA struct {
@@ -24,19 +22,37 @@ func NewSimpleDBA(connection IConnection) *SimpleDBA {
 	return this
 }
 
-// Execute an SQL SELECT with named replacement parameters.<br>
+// QueryCollectionX execute an SQL SELECT with named replacement parameters.<br>
 // The caller is responsible for closing the connection.
 //
-// param sql: The query to execute.
-// param params: The replacement parameters.
-// param rt: The handler that converts the results into an object.
-// return The Collection returned by the handler and a Fail if a database access error occurs
+//   param sql: The query to execute.
+//   param params: The replacement parameters.
+//   param rt: The handler that converts the results into an object.
+//   return The Collection returned by the handler and a Fail if a database access error occurs
+//
+// Deprecated: use QueryCollectionX
 func (s *SimpleDBA) QueryCollection(
 	sql string,
 	rt IRowTransformer,
 	params ...interface{},
 ) (coll.Collection, error) {
-	rows, err := s.connection.Query(sql, params...)
+	return s.QueryCollectionX(context.Background(), sql, rt, params...)
+}
+
+// QueryCollectionX execute an SQL SELECT with named replacement parameters.<br>
+// The caller is responsible for closing the connection.
+//
+//   param sql: The query to execute.
+//   param params: The replacement parameters.
+//   param rt: The handler that converts the results into an object.
+//   return The Collection returned by the handler and a Fail if a database access error occurs
+func (s *SimpleDBA) QueryCollectionX(
+	ctx context.Context,
+	sql string,
+	rt IRowTransformer,
+	params ...interface{},
+) (coll.Collection, error) {
+	rows, err := s.connection.QueryContext(ctx, sql, params...)
 	if err != nil {
 		return nil, rethrow(err, "executing query collection", sql, params...)
 	}
@@ -61,12 +77,22 @@ func (s *SimpleDBA) QueryCollection(
 	return result, nil
 }
 
+// Deprecated: use QueryX
 func (s *SimpleDBA) Query(
 	sql string,
 	transformer func(rows *sql.Rows) (interface{}, error),
 	params ...interface{},
 ) ([]interface{}, error) {
-	rows, err := s.connection.Query(sql, params...)
+	return s.QueryX(context.Background(), sql, transformer, params...)
+}
+
+func (s *SimpleDBA) QueryX(
+	ctx context.Context,
+	sql string,
+	transformer func(rows *sql.Rows) (interface{}, error),
+	params ...interface{},
+) ([]interface{}, error) {
+	rows, err := s.connection.QueryContext(ctx, sql, params...)
 	if err != nil {
 		return nil, rethrow(err, "executing query", sql, params...)
 	}
@@ -89,12 +115,24 @@ func (s *SimpleDBA) Query(
 }
 
 // the transformer will be responsible for creating  the result list
+//
+// Deprecated: use QueryClosureX
 func (s *SimpleDBA) QueryClosure(
 	query string,
 	transformer func(rows *sql.Rows) error,
 	params ...interface{},
 ) error {
-	rows, err := s.connection.Query(query, params...)
+	return s.QueryClosureX(context.Background(), query, transformer, params...)
+}
+
+// the transformer will be responsible for creating  the result list
+func (s *SimpleDBA) QueryClosureX(
+	ctx context.Context,
+	query string,
+	transformer func(rows *sql.Rows) error,
+	params ...interface{},
+) error {
+	rows, err := s.connection.QueryContext(ctx, query, params...)
 	if err != nil {
 		return rethrow(err, "executing query closure", query, params...)
 	}
@@ -125,7 +163,29 @@ func (s *SimpleDBA) QueryClosure(
 //  q.QueryInto(func(role *string) {
 //	  roles = append(roles, *role)
 //  })
+//
+// Deprecated: use QueryIntoX
 func (s *SimpleDBA) QueryInto(
+	query string,
+	closure interface{},
+	params ...interface{},
+) ([]interface{}, error) {
+	return s.QueryIntoX(context.Background(), query, closure, params...)
+}
+
+//List using the closure arguments.
+//A function is used to build the result list.
+//The types for scanning are supplied by the function arguments. Arguments can be pointers or not.
+//Reflection is used to determine the arguments types.
+//
+//ex:
+//  roles = make([]string, 0)
+//  var role string
+//  q.QueryInto(func(role *string) {
+//	  roles = append(roles, *role)
+//  })
+func (s *SimpleDBA) QueryIntoX(
+	ctx context.Context,
 	query string,
 	closure interface{},
 	params ...interface{},
@@ -160,7 +220,7 @@ func (s *SimpleDBA) QueryInto(
 		results = make([]interface{}, 0)
 	}
 
-	err := s.QueryClosure(query, func(rows *sql.Rows) error {
+	err := s.QueryClosureX(ctx, query, func(rows *sql.Rows) error {
 		err := rows.Scan(instances...)
 		if err != nil {
 			return faults.Wrap(err)
@@ -205,12 +265,36 @@ func (s *SimpleDBA) QueryInto(
 // param params
 //            The named parameters.
 // @return The transformed result
+//
+// Deprecated: use QueryFirstX
 func (s *SimpleDBA) QueryFirst(
 	sql string,
 	params map[string]interface{},
 	rt IRowTransformer,
 ) (interface{}, error) {
-	result, fail1 := s.QueryCollection(sql, rt, params)
+	return s.QueryFirstX(context.Background(), sql, params, rt)
+}
+
+// Execute an SQL SELECT query with named parameters returning the first result.
+//
+// param <T>
+//            the result object type
+// param conn
+//            The connection to execute the query in.
+// param sql
+//            The query to execute.
+// param rt
+//            The handler that converts the results into an object.
+// param params
+//            The named parameters.
+// @return The transformed result
+func (s *SimpleDBA) QueryFirstX(
+	ctx context.Context,
+	sql string,
+	params map[string]interface{},
+	rt IRowTransformer,
+) (interface{}, error) {
+	result, fail1 := s.QueryCollectionX(ctx, sql, rt, params)
 	if fail1 != nil {
 		return nil, fail1
 	}
@@ -230,12 +314,32 @@ func (s *SimpleDBA) QueryFirst(
 // param params
 //            The named parameters.
 // @return if there was a row scan and error
+//
+// Deprecated: use QueryRowX
 func (s *SimpleDBA) QueryRow(
 	query string,
 	params []interface{},
 	dest ...interface{},
 ) (bool, error) {
-	err := s.connection.QueryRow(query, params...).Scan(dest...)
+	return s.QueryRowX(context.Background(), query, params, dest...)
+}
+
+// Execute an SQL SELECT query with named parameters returning the first result.
+//
+// param conn
+//            The connection to execute the query in.
+// param sql
+//            The query to execute.
+// param params
+//            The named parameters.
+// @return if there was a row scan and error
+func (s *SimpleDBA) QueryRowX(
+	ctx context.Context,
+	query string,
+	params []interface{},
+	dest ...interface{},
+) (bool, error) {
+	err := s.connection.QueryRowContext(ctx, query, params...).Scan(dest...)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return false, nil
@@ -248,6 +352,11 @@ func (s *SimpleDBA) QueryRow(
 
 ////////////////////////////////////////////////////////////////////////
 
+// Deprecated: use UpdateX
+func (s *SimpleDBA) Update(sql string, params ...interface{}) (int64, error) {
+	return s.UpdateX(context.Background(), sql, params...)
+}
+
 ///**
 // Execute an SQL INSERT, UPDATE, or DELETE query.
 //
@@ -259,20 +368,29 @@ func (s *SimpleDBA) QueryRow(
 //            The query named parameters.
 // @return The number of rows affected.
 // */
-func (s *SimpleDBA) Update(sql string, params ...interface{}) (int64, error) {
-	result, err := s.connection.Exec(sql, params...)
+func (s *SimpleDBA) UpdateX(ctx context.Context, sql string, params ...interface{}) (int64, error) {
+	result, err := s.connection.ExecContext(ctx, sql, params...)
 	if err != nil {
 		return 0, rethrow(err, "update", sql, params...)
 	}
 	return result.RowsAffected()
 }
 
+// Deprecated: use DeleteX
 func (s *SimpleDBA) Delete(sql string, params ...interface{}) (int64, error) {
-	return s.Update(sql, params...)
+	return s.UpdateX(context.Background(), sql, params...)
+}
+func (s *SimpleDBA) DeleteX(ctx context.Context, sql string, params ...interface{}) (int64, error) {
+	return s.UpdateX(ctx, sql, params...)
 }
 
+// Deprecated: use InsertX
 func (s *SimpleDBA) Insert(sql string, params ...interface{}) (int64, error) {
-	_, err := s.connection.Exec(sql, params...)
+	return s.InsertX(context.Background(), sql, params...)
+}
+
+func (s *SimpleDBA) InsertX(ctx context.Context, sql string, params ...interface{}) (int64, error) {
+	_, err := s.connection.ExecContext(ctx, sql, params...)
 	if err != nil {
 		return 0, rethrow(err, "executing", sql, params...)
 	}
@@ -282,9 +400,14 @@ func (s *SimpleDBA) Insert(sql string, params ...interface{}) (int64, error) {
 	return 0, nil
 }
 
+// Deprecated: use InsertReturningX
 func (s *SimpleDBA) InsertReturning(sql string, params ...interface{}) (int64, error) {
+	return s.InsertReturningX(context.Background(), sql, params...)
+}
+
+func (s *SimpleDBA) InsertReturningX(ctx context.Context, sql string, params ...interface{}) (int64, error) {
 	var id int64
-	_, err := s.QueryRow(sql, params, &id)
+	_, err := s.QueryRowX(ctx, sql, params, &id)
 	if err != nil {
 		return 0, faults.Wrap(err)
 	}

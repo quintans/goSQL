@@ -36,7 +36,7 @@ func NewEntityTreeFactoryTransformer(query *Query, typ reflect.Type, returner fu
 	this := new(EntityTreeTransformer)
 	this.Overrider = this
 
-	this.Super(query, createFactory(typ), returner)
+	this.init(query, createFactory(typ), returner)
 	this.cachedEntityMappings = make(map[string]map[string]*EntityProperty)
 
 	return this

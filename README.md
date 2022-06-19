@@ -118,6 +118,10 @@ and the shortest version...
 store.Modify(&publisher)
 ```
 
+To specify the context we do
+```go
+store.WithContext(context.Background())
+```
 
 ## Features
 
@@ -215,7 +219,7 @@ func main() {
 	}
 
 	// transaction manager
-	tm = NewDefaultTransactionManager(mydb, trx.NewMySQL5Translator())
+	tm = NewTransactionManager(mydb, trx.NewMySQL5Translator())
 
 	// get the database context
 	store := tm.Store()
@@ -234,6 +238,11 @@ func main() {
 Source from [basic.go](./example/basic.go).
 
 You can also check out [common.go](./test/common/common.go) for a lot more examples.
+
+If you need to inject `context.Context` you can do so with
+```go
+store := tm.Store().WithContext(ctx)
+```
 
 <br>
 
