@@ -3,7 +3,6 @@ package db
 import (
 	"database/sql/driver"
 	"reflect"
-	"time"
 
 	"github.com/quintans/faults"
 	coll "github.com/quintans/toolkit/collections"
@@ -138,7 +137,7 @@ func (i *Insert) Submit(instance interface{}) (int64, error) {
 		var err error
 		mappings, err = i.GetDb().PopulateMapping("", typ)
 		if err != nil {
-			return 0, err
+			return 0, faults.Wrap(err)
 		}
 		i.lastMappings = mappings
 		i.lastType = typ
@@ -170,7 +169,7 @@ func (i *Insert) Submit(instance interface{}) (int64, error) {
 					if v.Kind() == reflect.Ptr && v.IsNil() {
 						value, err := bp.ConvertToDb(nil)
 						if err != nil {
-							return 0, err
+							return 0, faults.Wrap(err)
 						}
 						i.Set(column, value)
 					} else {
@@ -181,17 +180,17 @@ func (i *Insert) Submit(instance interface{}) (int64, error) {
 						case driver.Valuer:
 							value, err = T.Value()
 							if err != nil {
-								return 0, err
+								return 0, faults.Wrap(err)
 							}
 							value, err = bp.ConvertToDb(value)
 							if err != nil {
-								return 0, err
+								return 0, faults.Wrap(err)
 							}
 							i.Set(column, value)
 						default:
 							value, err = bp.ConvertToDb(val)
 							if err != nil {
-								return 0, err
+								return 0, faults.Wrap(err)
 							}
 							// if it is a key column its value
 							// has to be diferent than the zero value
@@ -213,14 +212,14 @@ func (i *Insert) Submit(instance interface{}) (int64, error) {
 	if t, isT := instance.(PreInserter); isT {
 		err := t.PreInsert(i.GetDb())
 		if err != nil {
-			return 0, err
+			return 0, faults.Wrap(err)
 		}
 	}
 
 	hadKeyValue := i.HasKeyValue
 	key, err := i.Execute()
 	if err != nil {
-		return 0, err
+		return 0, faults.Wrap(err)
 	}
 
 	if !hadKeyValue {
@@ -272,7 +271,6 @@ func (i *Insert) Execute() (int64, error) {
 
 	var err error
 	var lastId int64
-	var now time.Time
 	strategy := i.db.GetTranslator().GetAutoKeyStrategy()
 	singleKeyColumn := i.table.GetSingleKeyColumn()
 
@@ -282,49 +280,43 @@ func (i *Insert) Execute() (int64, error) {
 	case AUTOKEY_BEFORE:
 		if i.returnId && !i.HasKeyValue && singleKeyColumn != nil {
 			if lastId, err = i.getAutoNumber(singleKeyColumn); err != nil {
-				return 0, err
+				return 0, faults.Wrap(err)
 			}
 			i.Set(singleKeyColumn, lastId)
 		}
 		sql, params, err = i.prepareSQL()
 		if err != nil {
-			return 0, err
+			return 0, faults.Wrap(err)
 		}
-		now = time.Now()
 		_, err = i.dba.Insert(sql, params...)
-		i.debugTime(now, 1)
 	case AUTOKEY_RETURNING:
 		sql, params, err = i.prepareSQL()
 		if err != nil {
-			return 0, err
+			return 0, faults.Wrap(err)
 		}
-		now = time.Now()
 		if i.HasKeyValue || singleKeyColumn == nil {
 			_, err = i.dba.Insert(sql, params...)
 		} else {
 			lastId, err = i.dba.InsertReturning(sql, params...)
 		}
-		i.debugTime(now, 1)
 	case AUTOKEY_AFTER:
 		sql, params, err = i.prepareSQL()
 		if err != nil {
-			return 0, err
+			return 0, faults.Wrap(err)
 		}
-		now = time.Now()
 		_, err = i.dba.Insert(sql, params...)
 		if err != nil {
-			return 0, err
+			return 0, faults.Wrap(err)
 		}
-		i.debugTime(now, 1)
 		if i.returnId && !i.HasKeyValue && singleKeyColumn != nil {
 			if lastId, err = i.getAutoNumber(singleKeyColumn); err != nil {
-				return 0, err
+				return 0, faults.Wrap(err)
 			}
 		}
 	}
 
 	logger.Debugf("The inserted Id was: %v", lastId)
-	return lastId, err
+	return lastId, faults.Wrap(err)
 }
 
 func (i *Insert) prepareSQL() (string, []interface{}, error) {
@@ -332,7 +324,7 @@ func (i *Insert) prepareSQL() (string, []interface{}, error) {
 	i.debugSQL(rsql.OriSql, 1)
 	params, err := rsql.BuildValues(i.parameters)
 	if err != nil {
-		return "", nil, err
+		return "", nil, faults.Wrap(err)
 	}
 
 	return rsql.Sql, params, nil
@@ -345,11 +337,9 @@ func (i *Insert) getAutoNumber(column *Column) (int64, error) {
 	}
 	var id int64
 	i.debugSQL(sql, 2)
-	now := time.Now()
 	_, err := i.dba.QueryRow(sql, []interface{}{}, &id)
-	i.debugTime(now, 2)
 	if err != nil {
-		return 0, err
+		return 0, faults.Wrap(err)
 	}
 
 	return id, nil

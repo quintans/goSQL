@@ -110,7 +110,7 @@ func (q *QueryBuilder) Column(query *db.Query) error {
 	for k, token := range query.Columns {
 		s, err := q.translator.Translate(db.QUERY, token)
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 		q.columnPart.Add(s)
 		a := q.translator.ColumnAlias(token, k+1)
@@ -153,7 +153,7 @@ func (q *QueryBuilder) JoinAssociation(fk *db.Association, inner bool) error {
 		}
 		args, err := Translate(q.translator.Translate, db.QUERY, rel.From, rel.To)
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 		q.joinPart.Add(args[0], " = ", args[1])
 	}
@@ -166,7 +166,7 @@ func Translate(translator func(db.DmlType, db.Tokener) (string, error), dmlType 
 		var err error
 		args[k], err = translator(dmlType, t)
 		if err != nil {
-			return nil, err
+			return nil, faults.Wrap(err)
 		}
 	}
 	return args, nil
@@ -175,7 +175,7 @@ func Translate(translator func(db.DmlType, db.Tokener) (string, error), dmlType 
 func (q *QueryBuilder) JoinCriteria(criteria *db.Criteria) error {
 	s, err := q.translator.Translate(db.QUERY, criteria)
 	if err != nil {
-		return err
+		return faults.Wrap(err)
 	}
 	q.joinPart.Add(" AND ", s)
 	return nil
@@ -186,7 +186,7 @@ func (q *QueryBuilder) Where(query *db.Query) error {
 	if criteria != nil {
 		s, err := q.translator.Translate(db.QUERY, criteria)
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 		q.wherePart.Add(s)
 	}
@@ -199,7 +199,7 @@ func (q *QueryBuilder) Group(query *db.Query) error {
 		//this.groupPart.Add(this.translator.ColumnAlias(group.Token, group.Position))
 		s, err := q.translator.Translate(db.QUERY, group.Token)
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 		q.groupPart.Add(s)
 	}
@@ -211,7 +211,7 @@ func (q *QueryBuilder) Having(query *db.Query) error {
 	if having != nil {
 		s, err := q.translator.Translate(db.QUERY, having)
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 		q.havingPart.Add(s)
 	}
@@ -224,7 +224,7 @@ func (q *QueryBuilder) Order(query *db.Query) error {
 		if ord.GetHolder() != nil {
 			s, err := q.translator.Translate(db.QUERY, ord.GetHolder())
 			if err != nil {
-				return err
+				return faults.Wrap(err)
 			}
 			q.orderPart.Add(s)
 		} else {
@@ -310,7 +310,7 @@ func (u *UpdateBuilder) Column(update *db.Update) error {
 		token := entry.Value.(db.Tokener)
 		s, err := u.translator.Translate(db.UPDATE, token)
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 		u.columnPart.AddAsOne(tableAlias, ".",
 			u.translator.ColumnName(column),
@@ -331,7 +331,7 @@ func (u *UpdateBuilder) Where(update *db.Update) error {
 	if criteria != nil {
 		s, err := u.translator.Translate(db.UPDATE, criteria)
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 		u.wherePart.Add(s)
 	}
@@ -390,7 +390,7 @@ func (d *DeleteBuilder) Where(del *db.Delete) error {
 	if criteria != nil {
 		s, err := d.translator.Translate(db.DELETE, criteria)
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 		d.wherePart.Add(s)
 	}
@@ -460,14 +460,14 @@ func (i *InsertBuilder) Column(insert *db.Insert) error {
 				var err error
 				val, err = i.translator.Translate(db.INSERT, token)
 				if err != nil {
-					return err
+					return faults.Wrap(err)
 				}
 			}
 		} else {
 			var err error
 			val, err = i.translator.Translate(db.INSERT, token)
 			if err != nil {
-				return err
+				return faults.Wrap(err)
 			}
 		}
 
@@ -531,7 +531,7 @@ func (g *GenericTranslator) Init(overrider db.Translator) {
 		o := token.GetMembers()
 		args, err := Translate(tx.Translate, dmlType, o[0], o[1])
 		if err != nil {
-			return "", err
+			return "", faults.Wrap(err)
 		}
 		return fmt.Sprintf("%s = %s", args[0], args[1]), nil
 	})
@@ -560,7 +560,7 @@ func (g *GenericTranslator) Init(overrider db.Translator) {
 		m := token.GetMembers()
 		args, err := Translate(tx.Translate, dmlType, m...)
 		if err != nil {
-			return "", err
+			return "", faults.Wrap(err)
 		}
 		return fmt.Sprintf("UPPER(%s) = UPPER(%s)", args[0], args[1]), nil
 	})
@@ -570,7 +570,7 @@ func (g *GenericTranslator) Init(overrider db.Translator) {
 		m := token.GetMembers()
 		args, err := Translate(tx.Translate, dmlType, m...)
 		if err != nil {
-			return "", err
+			return "", faults.Wrap(err)
 		}
 		return fmt.Sprintf("%s <> %s", args[0], args[1]), nil
 	})
@@ -579,20 +579,20 @@ func (g *GenericTranslator) Init(overrider db.Translator) {
 		m := token.GetMembers()
 		field, err := tx.Translate(dmlType, m[0])
 		if err != nil {
-			return "", err
+			return "", faults.Wrap(err)
 		}
 		var bottom string
 		var top string
 		if m[1] != nil {
 			bottom, err = tx.Translate(dmlType, m[1])
 			if err != nil {
-				return "", err
+				return "", faults.Wrap(err)
 			}
 		}
 		if m[2] != nil {
 			top, err = tx.Translate(dmlType, m[2])
 			if err != nil {
-				return "", err
+				return "", faults.Wrap(err)
 			}
 		}
 
@@ -611,17 +611,17 @@ func (g *GenericTranslator) Init(overrider db.Translator) {
 		m := token.GetMembers()
 		bottom, err := tx.Translate(dmlType, m[0])
 		if err != nil {
-			return "", err
+			return "", faults.Wrap(err)
 		}
 		top, err := tx.Translate(dmlType, m[1])
 		if err != nil {
-			return "", err
+			return "", faults.Wrap(err)
 		}
 		var value string
 		if m[2] != nil {
 			value, err = tx.Translate(dmlType, m[2])
 			if err != nil {
-				return "", err
+				return "", faults.Wrap(err)
 			}
 		}
 
@@ -639,17 +639,17 @@ func (g *GenericTranslator) Init(overrider db.Translator) {
 		m := token.GetMembers()
 		bottom, err := tx.Translate(dmlType, m[0])
 		if err != nil {
-			return "", err
+			return "", faults.Wrap(err)
 		}
 		top, err := tx.Translate(dmlType, m[1])
 		if err != nil {
-			return "", err
+			return "", faults.Wrap(err)
 		}
 		var value string
 		if m[2] != nil {
 			value, err = tx.Translate(dmlType, m[2])
 			if err != nil {
-				return "", err
+				return "", faults.Wrap(err)
 			}
 		}
 
@@ -669,7 +669,7 @@ func (g *GenericTranslator) Init(overrider db.Translator) {
 		m := token.GetMembers()
 		args, err := Translate(tx.Translate, dmlType, m...)
 		if err != nil {
-			return "", err
+			return "", faults.Wrap(err)
 		}
 		roll := strings.Join(args[1:], ", ")
 
@@ -691,7 +691,7 @@ func (g *GenericTranslator) Init(overrider db.Translator) {
 		m := token.GetMembers()
 		args, err := Translate(tx.Translate, dmlType, m...)
 		if err != nil {
-			return "", err
+			return "", faults.Wrap(err)
 		}
 		var sb strings.Builder
 		sb.WriteString("(")
@@ -705,7 +705,7 @@ func (g *GenericTranslator) Init(overrider db.Translator) {
 		m := token.GetMembers()
 		args, err := Translate(tx.Translate, dmlType, m...)
 		if err != nil {
-			return "", err
+			return "", faults.Wrap(err)
 		}
 		return strings.Join(args, " AND "), nil
 	})
@@ -716,7 +716,7 @@ func (g *GenericTranslator) Init(overrider db.Translator) {
 		m := token.GetMembers()
 		args, err := Translate(tx.Translate, dmlType, m...)
 		if err != nil {
-			return "", err
+			return "", faults.Wrap(err)
 		}
 		sb := tk.NewStrBuffer(args[0], isNot(c), " LIKE ", args[1])
 		return sb.String(), nil
@@ -728,7 +728,7 @@ func (g *GenericTranslator) Init(overrider db.Translator) {
 		m := token.GetMembers()
 		args, err := Translate(tx.Translate, dmlType, m...)
 		if err != nil {
-			return "", err
+			return "", faults.Wrap(err)
 		}
 		sb := tk.NewStrBuffer("UPPER(", args[0], ")", isNot(c), " LIKE UPPER(", args[1], ")")
 		return sb.String(), nil
@@ -740,7 +740,7 @@ func (g *GenericTranslator) Init(overrider db.Translator) {
 		m := token.GetMembers()
 		args, err := Translate(tx.Translate, dmlType, m...)
 		if err != nil {
-			return "", err
+			return "", faults.Wrap(err)
 		}
 		sb := tk.NewStrBuffer(args[0], "IS", isNot(c), " NULL")
 		return sb.String(), nil
@@ -751,7 +751,7 @@ func (g *GenericTranslator) Init(overrider db.Translator) {
 		m := token.GetMembers()
 		args, err := Translate(tx.Translate, dmlType, m...)
 		if err != nil {
-			return "", err
+			return "", faults.Wrap(err)
 		}
 		sb := tk.NewStrBuffer(args[0], " > ", args[1])
 		return sb.String(), nil
@@ -762,7 +762,7 @@ func (g *GenericTranslator) Init(overrider db.Translator) {
 		m := token.GetMembers()
 		args, err := Translate(tx.Translate, dmlType, m...)
 		if err != nil {
-			return "", err
+			return "", faults.Wrap(err)
 		}
 		sb := tk.NewStrBuffer(args[0], " < ", args[1])
 		return sb.String(), nil
@@ -773,7 +773,7 @@ func (g *GenericTranslator) Init(overrider db.Translator) {
 		m := token.GetMembers()
 		args, err := Translate(tx.Translate, dmlType, m...)
 		if err != nil {
-			return "", err
+			return "", faults.Wrap(err)
 		}
 		sb := tk.NewStrBuffer(args[0], " >= ", args[1])
 		return sb.String(), nil
@@ -784,7 +784,7 @@ func (g *GenericTranslator) Init(overrider db.Translator) {
 		m := token.GetMembers()
 		args, err := Translate(tx.Translate, dmlType, m...)
 		if err != nil {
-			return "", err
+			return "", faults.Wrap(err)
 		}
 		sb := tk.NewStrBuffer(args[0], " <= ", args[1])
 		return sb.String(), nil
@@ -802,7 +802,7 @@ func (g *GenericTranslator) Init(overrider db.Translator) {
 		m := token.GetMembers()
 		args, err := Translate(tx.Translate, dmlType, m...)
 		if err != nil {
-			return "", err
+			return "", faults.Wrap(err)
 		}
 		sb := tk.NewStrBuffer("EXISTS ", args[0])
 		return sb.String(), nil
@@ -812,7 +812,7 @@ func (g *GenericTranslator) Init(overrider db.Translator) {
 		m := token.GetMembers()
 		args, err := Translate(tx.Translate, dmlType, m...)
 		if err != nil {
-			return "", err
+			return "", faults.Wrap(err)
 		}
 		sb := tk.NewStrBuffer("NOT ", args[0])
 		return sb.String(), nil
@@ -830,7 +830,7 @@ func (g *GenericTranslator) Init(overrider db.Translator) {
 		m := token.GetMembers()
 		args, err := Translate(tx.Translate, dmlType, m...)
 		if err != nil {
-			return "", err
+			return "", faults.Wrap(err)
 		}
 		sb := tk.NewStrBuffer("SUM(", strings.Join(args, ", "), ")")
 		return sb.String(), nil
@@ -840,7 +840,7 @@ func (g *GenericTranslator) Init(overrider db.Translator) {
 		m := token.GetMembers()
 		args, err := Translate(tx.Translate, dmlType, m...)
 		if err != nil {
-			return "", err
+			return "", faults.Wrap(err)
 		}
 		sb := tk.NewStrBuffer("MAX(", strings.Join(args, ", "), ")")
 		return sb.String(), nil
@@ -850,7 +850,7 @@ func (g *GenericTranslator) Init(overrider db.Translator) {
 		m := token.GetMembers()
 		args, err := Translate(tx.Translate, dmlType, m...)
 		if err != nil {
-			return "", err
+			return "", faults.Wrap(err)
 		}
 		sb := tk.NewStrBuffer("MIN(", strings.Join(args, ", "), ")")
 		return sb.String(), nil
@@ -860,7 +860,7 @@ func (g *GenericTranslator) Init(overrider db.Translator) {
 		m := token.GetMembers()
 		args, err := Translate(tx.Translate, dmlType, m...)
 		if err != nil {
-			return "", err
+			return "", faults.Wrap(err)
 		}
 		sb := tk.NewStrBuffer("UPPER(", strings.Join(args, ", "), ")")
 		return sb.String(), nil
@@ -870,7 +870,7 @@ func (g *GenericTranslator) Init(overrider db.Translator) {
 		m := token.GetMembers()
 		args, err := Translate(tx.Translate, dmlType, m...)
 		if err != nil {
-			return "", err
+			return "", faults.Wrap(err)
 		}
 		sb := tk.NewStrBuffer("LOWER(", strings.Join(args, ", "), ")")
 		return sb.String(), nil
@@ -880,7 +880,7 @@ func (g *GenericTranslator) Init(overrider db.Translator) {
 		m := token.GetMembers()
 		args, err := Translate(tx.Translate, dmlType, m...)
 		if err != nil {
-			return "", err
+			return "", faults.Wrap(err)
 		}
 		return strings.Join(args, " + "), nil
 	})
@@ -889,7 +889,7 @@ func (g *GenericTranslator) Init(overrider db.Translator) {
 		m := token.GetMembers()
 		args, err := Translate(tx.Translate, dmlType, m...)
 		if err != nil {
-			return "", err
+			return "", faults.Wrap(err)
 		}
 		return strings.Join(args, " - "), nil
 	})
@@ -898,7 +898,7 @@ func (g *GenericTranslator) Init(overrider db.Translator) {
 		m := token.GetMembers()
 		args, err := Translate(tx.Translate, dmlType, m...)
 		if err != nil {
-			return "", err
+			return "", faults.Wrap(err)
 		}
 		return strings.Join(args, " * "), nil
 	})
@@ -911,7 +911,7 @@ func (g *GenericTranslator) Init(overrider db.Translator) {
 		m := token.GetMembers()
 		args, err := Translate(tx.Translate, dmlType, m...)
 		if err != nil {
-			return "", err
+			return "", faults.Wrap(err)
 		}
 		sb := tk.NewStrBuffer("COUNT(", args[0], ")")
 		return sb.String(), nil
@@ -921,7 +921,7 @@ func (g *GenericTranslator) Init(overrider db.Translator) {
 		m := token.GetMembers()
 		args, err := Translate(tx.Translate, dmlType, m...)
 		if err != nil {
-			return "", err
+			return "", faults.Wrap(err)
 		}
 		sb := tk.NewStrBuffer("RTRIM(", args[0], ")")
 		return sb.String(), nil
@@ -937,7 +937,7 @@ func (g *GenericTranslator) Init(overrider db.Translator) {
 		m := token.GetMembers()
 		args, err := Translate(tx.Translate, dmlType, m...)
 		if err != nil {
-			return "", err
+			return "", faults.Wrap(err)
 		}
 		sb := tk.NewStrBuffer("COALESCE(", strings.Join(args, ", "), ")")
 		return sb.String(), nil
@@ -947,7 +947,7 @@ func (g *GenericTranslator) Init(overrider db.Translator) {
 		m := token.GetMembers()
 		args, err := Translate(tx.Translate, dmlType, m...)
 		if err != nil {
-			return "", err
+			return "", faults.Wrap(err)
 		}
 		sb := tk.NewStrBuffer("CASE ", strings.Join(args, " "), " END")
 		return sb.String(), nil
@@ -957,7 +957,7 @@ func (g *GenericTranslator) Init(overrider db.Translator) {
 		m := token.GetMembers()
 		args, err := Translate(tx.Translate, dmlType, m...)
 		if err != nil {
-			return "", err
+			return "", faults.Wrap(err)
 		}
 		sb := tk.NewStrBuffer("WHEN ", args[0], " THEN ", args[1])
 		return sb.String(), nil
@@ -967,7 +967,7 @@ func (g *GenericTranslator) Init(overrider db.Translator) {
 		m := token.GetMembers()
 		args, err := Translate(tx.Translate, dmlType, m...)
 		if err != nil {
-			return "", err
+			return "", faults.Wrap(err)
 		}
 		sb := tk.NewStrBuffer("ELSE ", args[0])
 		return sb.String(), nil
@@ -1236,7 +1236,7 @@ func (g *GenericTranslator) OrderBy(query *db.Query, order *db.Order) (string, e
 		var err error
 		str, err = g.Translate(db.QUERY, order.GetHolder())
 		if err != nil {
-			return "", err
+			return "", faults.Wrap(err)
 		}
 	} else {
 		str = order.GetAlias()

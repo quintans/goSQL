@@ -2,13 +2,12 @@ package dbx
 
 import (
 	"database/sql"
+
 	coll "github.com/quintans/toolkit/collections"
 )
 
 type IConnection interface {
 	Exec(query string, args ...interface{}) (sql.Result, error)
-	// The implementor of Prepare should cache the prepared statements
-	Prepare(query string) (*sql.Stmt, error)
 	Query(query string, args ...interface{}) (*sql.Rows, error)
 	QueryRow(query string, args ...interface{}) *sql.Row
 }

@@ -37,7 +37,7 @@ func main() {
 	}
 
 	// transaction manager
-	tm = db.NewDefaultTransactionManager(mydb, trx.NewMySQL5Translator())
+	tm = db.NewTransactionManager(mydb, trx.NewMySQL5Translator())
 
 	// get the databse context
 	store := tm.Store()

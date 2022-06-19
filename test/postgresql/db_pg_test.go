@@ -16,7 +16,7 @@ import (
 
 var logger = log.LoggerFor("github.com/quintans/goSQL/test")
 
-func StartContainer() (func(), ITransactionManager, *sql.DB, nat.Port, error) {
+func StartContainer() (func(), *TransactionManager, *sql.DB, nat.Port, error) {
 	expPort := "5432/tcp"
 	ctx, server, port, err := common.Container(
 		"postgres:9.6.8",
@@ -66,11 +66,16 @@ func BenchmarkLoadValues(b *testing.B) {
 	defer closer()
 
 	tester := common.Tester{DbName: common.Postgres, Tm: tm}
-	tester.RunBench("postgres", fmt.Sprintf("dbname=postgres user=postgres password=secret port=%s sslmode=disable", port.Port()), b)
+	tester.RunBench(
+		"postgres",
+		fmt.Sprintf("dbname=postgres user=postgres password=secret port=%s sslmode=disable", port.Port()),
+		"employee",
+		b,
+	)
 	theDB.Close()
 }
 
-func InitPostgreSQL(port string) (ITransactionManager, *sql.DB, error) {
+func InitPostgreSQL(port string) (*TransactionManager, *sql.DB, error) {
 	common.RAW_SQL = "SELECT name FROM book WHERE name LIKE $1"
 
 	translator := translators.NewPostgreSQLTranslator()

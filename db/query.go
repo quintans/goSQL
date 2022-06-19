@@ -3,7 +3,6 @@ package db
 import (
 	"database/sql"
 	"reflect"
-	"time"
 
 	"github.com/quintans/faults"
 	"github.com/quintans/goSQL/dbx"
@@ -779,7 +778,7 @@ func (q *Query) ListSimple(closure func(), instances ...interface{}) error {
 	return q.listClosure(func(rows *sql.Rows) error {
 		err := rows.Scan(instances...)
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 		closure()
 		return nil
@@ -820,7 +819,7 @@ func (q *Query) ListInto(closure interface{}) ([]interface{}, error) {
 	if ok {
 		coll, err := q.list(NewEntityFactoryTransformer(q, typ, caller))
 		if err != nil {
-			return nil, err
+			return nil, faults.Wrap(err)
 		}
 		return coll.Elements(), nil
 	} else {
@@ -838,13 +837,11 @@ func (q *Query) listIntoClosure(transformer interface{}) ([]interface{}, error) 
 	rsql := q.getCachedSql()
 	q.debugSQL(rsql.OriSql, 2)
 
-	now := time.Now()
 	params, err := rsql.BuildValues(q.DmlBase.parameters)
 	if err != nil {
-		return nil, err
+		return nil, faults.Wrap(err)
 	}
 	r, e := q.DmlBase.dba.QueryInto(rsql.Sql, transformer, params...)
-	q.debugTime(now, 2)
 	if e != nil {
 		return nil, e
 	}
@@ -861,17 +858,12 @@ func (q *Query) listClosure(transformer func(rows *sql.Rows) error) error {
 	rsql := q.getCachedSql()
 	q.debugSQL(rsql.OriSql, 2)
 
-	now := time.Now()
 	params, err := rsql.BuildValues(q.DmlBase.parameters)
 	if err != nil {
-		return err
+		return faults.Wrap(err)
 	}
-	e := q.DmlBase.dba.QueryClosure(rsql.Sql, transformer, params...)
-	q.debugTime(now, 2)
-	if e != nil {
-		return e
-	}
-	return nil
+	err = q.DmlBase.dba.QueryClosure(rsql.Sql, transformer, params...)
+	return faults.Wrap(err)
 }
 
 // Executes a query and transform the results according to the transformer
@@ -885,15 +877,13 @@ func (q *Query) list(rowMapper dbx.IRowTransformer) (coll.Collection, error) {
 	rsql := q.getCachedSql()
 	q.debugSQL(rsql.OriSql, 2)
 
-	now := time.Now()
 	params, err := rsql.BuildValues(q.DmlBase.parameters)
 	if err != nil {
-		return nil, err
+		return nil, faults.Wrap(err)
 	}
-	list, e := q.DmlBase.dba.QueryCollection(rsql.Sql, rowMapper, params...)
-	q.debugTime(now, 2)
-	if e != nil {
-		return nil, e
+	list, err := q.DmlBase.dba.QueryCollection(rsql.Sql, rowMapper, params...)
+	if err != nil {
+		return nil, faults.Wrap(err)
 	}
 	return list, nil
 }
@@ -921,42 +911,45 @@ func (q *Query) ListTreeOf(template tk.Hasher) (coll.Collection, error) {
 	return q.list(NewEntityTreeTransformer(q, true, template))
 }
 
-//Executes a query, putting the result in a slice, passed as an argument.
-// The slice element slice can be a struct or a primitive (ex: string).
+// List executes a query, putting the result in a slice, passed as an argument or
+// delegating the responsibility of building the result to a processor function.
 //
-//This method does not create a tree of related instances.
+// The argument must be a function func(<<*>struct>) or a slice like *[]<*>struct.
+//
+// example of function:
+//   books := []Book
+//   q := // query
+//   q.List(func(b *Book) {
+//     books = append(books, b)
+//   })
+//
+// This method does not create a tree of related instances.
 func (q *Query) List(target interface{}) error {
 	if q.err != nil {
 		return q.err
 	}
 
-	caller, typ, isStruct, ok := checkSlice(target)
-	if !ok {
-		return faults.Errorf("goSQL: Expected a slice of type *[]*struct. Got %s", typ.String())
+	caller, typ, isStruct := checkSlice(target)
+	if !isStruct {
+		var ok bool
+		caller, typ, ok = checkCollector(target)
+		if !ok {
+			return faults.Errorf("expected a slice of type *[]<*>struct or a function with the signature func(<<*>struct>). got %s", typ)
+		}
 	}
 
-	if isStruct {
-		_, err := q.list(NewEntityFactoryTransformer(q, typ, caller))
-		return err
-	} else {
-		holder := reflect.New(typ).Interface()
-		return q.listClosure(func(rows *sql.Rows) error {
-			if err := rows.Scan(holder); err != nil {
-				return err
-			}
-			caller(reflect.ValueOf(holder).Elem())
-			return nil
-		})
-	}
+	_, err := q.list(NewEntityFactoryTransformer(q, typ, caller))
+	return faults.Wrap(err)
+
 }
 
-func checkSlice(i interface{}) (func(val reflect.Value) reflect.Value, reflect.Type, bool, bool) {
+func checkSlice(i interface{}) (func(val reflect.Value) reflect.Value, reflect.Type, bool) {
 	arr := reflect.ValueOf(i)
 	// pointer to the slice
 	if arr.Kind() == reflect.Ptr {
 		arr = arr.Elem()
 	} else {
-		return nil, nil, false, false
+		return nil, nil, false
 	}
 
 	// slice element
@@ -964,7 +957,7 @@ func checkSlice(i interface{}) (func(val reflect.Value) reflect.Value, reflect.T
 	if arr.Kind() == reflect.Slice {
 		typ = arr.Type().Elem()
 	} else {
-		return nil, nil, false, false
+		return nil, nil, false
 	}
 
 	isStruct := typ.Kind() == reflect.Struct || typ.Kind() == reflect.Ptr && typ.Elem().Kind() == reflect.Struct
@@ -975,7 +968,7 @@ func checkSlice(i interface{}) (func(val reflect.Value) reflect.Value, reflect.T
 
 	// A non initialized array is the same as nil,
 	// so a slice is created so that it can be different from nil.
-	slice := reflect.MakeSlice(arr.Type(), 0, 0)
+	slice := reflect.MakeSlice(arr.Type(), 0, 20)
 	arr.Set(slice)
 	// slice := reflect.New(arr.Type()).Elem()
 	slicer := func(val reflect.Value) reflect.Value {
@@ -994,7 +987,7 @@ func checkSlice(i interface{}) (func(val reflect.Value) reflect.Value, reflect.T
 		return reflect.Value{}
 	}
 
-	return slicer, typ, isStruct, true
+	return slicer, typ, isStruct
 }
 
 func checkCollector(collector interface{}) (func(val reflect.Value) reflect.Value, reflect.Type, bool) {
@@ -1061,25 +1054,28 @@ func (q *Query) ListFlatTreeOf(template interface{}) (coll.Collection, error) {
 	return q.list(NewEntityTreeTransformer(q, false, template))
 }
 
-// Executes a query, putting the result in a slice, passed as an argument or
-// delegating the responsability of building the result to a processor function.
-// The argument must be a function with the signature func(<<*>struct>) or a slice like *[]<*>struct.
-// See also List.
+// ListFlatTree executes a query, putting the result in a slice, passed as an argument or
+// delegating the responsibility of building the result to a processor function.
+//
+// The argument must be a function func(<<*>struct>) or a slice like *[]<*>struct.
+//
+// See List for non tree query
 func (q *Query) ListFlatTree(target interface{}) error {
 	if q.err != nil {
 		return q.err
 	}
 
-	caller, typ, isStruct, ok := checkSlice(target)
-	if !ok || !isStruct {
+	caller, typ, isStruct := checkSlice(target)
+	if !isStruct {
+		var ok bool
 		caller, typ, ok = checkCollector(target)
 		if !ok {
-			return faults.Errorf("goSQL: Expected a slice of type *[]<*>struct or a function with the signature func(<<*>struct>). got %s", typ.String())
+			return faults.Errorf("goSQL: Expected a slice of type *[]<*>struct or a function with the signature func(<<*>struct>). got %s", typ)
 		}
 	}
 
 	_, err := q.list(NewEntityTreeFactoryTransformer(q, typ, caller))
-	return err
+	return faults.Wrap(err)
 }
 
 // the result of the query is put in the passed interface array.
@@ -1097,13 +1093,11 @@ func (q *Query) SelectInto(dest ...interface{}) (bool, error) {
 	rsql := q.getCachedSql()
 	q.debugSQL(rsql.OriSql, 1)
 
-	now := time.Now()
 	params, err := rsql.BuildValues(q.DmlBase.parameters)
 	if err != nil {
-		return false, err
+		return false, faults.Wrap(err)
 	}
 	found, e := q.dba.QueryRow(rsql.Sql, params, dest...)
-	q.debugTime(now, 1)
 	if e != nil {
 		return false, e
 	}
@@ -1127,7 +1121,7 @@ func (q *Query) selectTree(typ interface{}, reuse bool) (interface{}, error) {
 
 		list, err := q.list(NewEntityTreeTransformer(q, true, typ))
 		if err != nil {
-			return nil, err
+			return nil, faults.Wrap(err)
 		}
 
 		if list.Size() == 0 {
@@ -1149,7 +1143,7 @@ func (q *Query) SelectTo(instance interface{}) (bool, error) {
 
 	res, err := q.selectTransformer(NewEntityTransformer(q, instance))
 	if err != nil {
-		return false, err
+		return false, faults.Wrap(err)
 	}
 	if res != nil {
 		tk.Set(instance, res)
@@ -1205,7 +1199,7 @@ func (q *Query) SelectFlatTree(instance interface{}) (bool, error) {
 func (q *Query) selectTreeTo(instance interface{}, reuse bool) (bool, error) {
 	res, err := q.selectTree(instance, reuse)
 	if err != nil {
-		return false, err
+		return false, faults.Wrap(err)
 	}
 	if res != nil {
 		tk.Set(instance, res)
@@ -1225,7 +1219,7 @@ func (q *Query) selectTransformer(rowMapper dbx.IRowTransformer) (interface{}, e
 
 	list, err := q.list(rowMapper)
 	if err != nil {
-		return nil, err
+		return nil, faults.Wrap(err)
 	}
 
 	if list.Size() == 0 {

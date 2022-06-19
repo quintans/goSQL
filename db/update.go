@@ -4,7 +4,6 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"reflect"
-	"time"
 
 	"github.com/quintans/faults"
 	"github.com/quintans/goSQL/dbx"
@@ -77,7 +76,7 @@ func (u *Update) Submit(instance interface{}) (int64, error) {
 		var err error
 		mappings, err = u.GetDb().PopulateMapping("", typ)
 		if err != nil {
-			return 0, err
+			return 0, faults.Wrap(err)
 		}
 		criterias = make([]*Criteria, 0)
 		u.criteria = nil
@@ -166,11 +165,11 @@ func (u *Update) Submit(instance interface{}) (int64, error) {
 						case driver.Valuer:
 							value, err := T.Value()
 							if err != nil {
-								return 0, err
+								return 0, faults.Wrap(err)
 							}
 							value, err = bp.ConvertToDb(value)
 							if err != nil {
-								return 0, err
+								return 0, faults.Wrap(err)
 							}
 							if marked || acceptField(bp.Omit, value) {
 								u.Set(column, value)
@@ -180,7 +179,7 @@ func (u *Update) Submit(instance interface{}) (int64, error) {
 								var err error
 								v, err = bp.ConvertToDb(v)
 								if err != nil {
-									return 0, err
+									return 0, faults.Wrap(err)
 								}
 								u.Set(column, v)
 							}
@@ -199,13 +198,13 @@ func (u *Update) Submit(instance interface{}) (int64, error) {
 	if t, isT := instance.(PreUpdater); isT {
 		err := t.PreUpdate(u.GetDb())
 		if err != nil {
-			return 0, err
+			return 0, faults.Wrap(err)
 		}
 	}
 
 	affectedRows, err := u.Execute()
 	if err != nil {
-		return 0, err
+		return 0, faults.Wrap(err)
 	}
 
 	if verColumn != nil {
@@ -241,13 +240,11 @@ func (u *Update) Execute() (int64, error) {
 	rsql := u.getCachedSql()
 	u.debugSQL(rsql.OriSql, 1)
 
-	now := time.Now()
 	params, err := rsql.BuildValues(u.DmlBase.parameters)
 	if err != nil {
-		return 0, err
+		return 0, faults.Wrap(err)
 	}
 	affectedRows, e := u.DmlBase.dba.Update(rsql.Sql, params...)
-	u.debugTime(now, 1)
 	if e != nil {
 		return 0, e
 	}

@@ -1,6 +1,7 @@
 package translators
 
 import (
+	"github.com/quintans/faults"
 	"github.com/quintans/goSQL/db"
 	tk "github.com/quintans/toolkit"
 
@@ -80,7 +81,7 @@ func (p *PgUpdateBuilder) Column(update *db.Update) error {
 		token := entry.Value.(db.Tokener)
 		s, err := p.translator.Translate(db.UPDATE, token)
 		if err != nil {
-			return err
+			return faults.Wrap(err)
 		}
 		p.columnPart.AddAsOne(
 			p.translator.ColumnName(column),

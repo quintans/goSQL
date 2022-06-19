@@ -30,7 +30,7 @@ func (d *DmlCore) set(col *Column, value interface{}) (interface{}, error) {
 	// if the column was not yet defined, the sql changed
 	val, ok, err := d.defineParameter(col, token)
 	if err != nil {
-		return nil, err
+		return nil, faults.Wrap(err)
 	}
 	if ok {
 		d.rawSQL = nil
