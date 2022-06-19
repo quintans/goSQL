@@ -110,9 +110,9 @@ func (t *TransactionManager) walkTreeStruct(typ reflect.Type, attrs map[string]*
 			for _, s := range splits {
 				v := strings.TrimSpace(s)
 				switch v {
-				case sqlOmitionVal:
+				case sqlOmissionVal:
 					omit = true
-				case sqlEmbededVal:
+				case sqlEmbeddedVal:
 					embeded = true
 				default:
 					if strings.HasPrefix(v, converterTag) {

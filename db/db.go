@@ -17,9 +17,9 @@ var (
 )
 
 const (
-	sqlKey        = "sql"
-	sqlOmitionVal = "omit"
-	sqlEmbededVal = "embeded"
+	sqlKey         = "sql"
+	sqlOmissionVal = "omit"
+	sqlEmbeddedVal = "embedded"
 )
 
 // Interface that a struct must implement to inform what columns where changed

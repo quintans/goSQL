@@ -501,9 +501,9 @@ func (tt Tester) RunBench(driver string, dns string, table string, b *testing.B)
 		LastName  *string
 	}
 
-	err := tt.Tm.Transaction(func(DB db.IDb) error {
+	err := tt.Tm.Transaction(func(store db.IDb) error {
 		for i := 1; i <= maxRows; i++ {
-			err := DB.Create(&Employee{
+			err := store.Create(&Employee{
 				Id:        ext.Int(i),
 				FirstName: ext.String("Paulo"),
 				LastName:  ext.String("Pereira"),
@@ -832,7 +832,7 @@ func (tt Tester) RunInsertStructReturningKey(t *testing.T) {
 		}
 
 		pub = Publisher{}
-		pubPtr.Name = ext.String("Untited Editors")
+		pubPtr.Name = ext.String("United Editors")
 		err = store.Create(&pub)
 		if err != nil {
 			return faults.Wrap(err)
