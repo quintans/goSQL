@@ -47,7 +47,7 @@ type Query struct {
 
 func NewQuery(db IDb, table *Table) *Query {
 	this := new(Query)
-	this.DmlBase.Super(db, table)
+	this.DmlBase.init(db, table)
 	return this
 }
 
@@ -62,7 +62,7 @@ func NewQueryQuery(subquery *Query) *Query {
 
 func NewQueryQueryAs(subquery *Query, subQueryAlias string) *Query {
 	this := new(Query)
-	this.Super(subquery.db, nil)
+	this.init(subquery.db, nil)
 	this.subQuery = subquery
 	this.subQueryAlias = subQueryAlias
 	// copy the parameters of the subquery to the main query
@@ -841,7 +841,7 @@ func (q *Query) listIntoClosure(transformer interface{}) ([]interface{}, error) 
 	if err != nil {
 		return nil, faults.Wrap(err)
 	}
-	r, e := q.DmlBase.dba.QueryInto(rsql.Sql, transformer, params...)
+	r, e := q.DmlBase.dba.QueryIntoX(q.db.GetContext(), rsql.Sql, transformer, params...)
 	if e != nil {
 		return nil, e
 	}
@@ -862,7 +862,7 @@ func (q *Query) listClosure(transformer func(rows *sql.Rows) error) error {
 	if err != nil {
 		return faults.Wrap(err)
 	}
-	err = q.DmlBase.dba.QueryClosure(rsql.Sql, transformer, params...)
+	err = q.DmlBase.dba.QueryClosureX(q.db.GetContext(), rsql.Sql, transformer, params...)
 	return faults.Wrap(err)
 }
 
@@ -881,7 +881,7 @@ func (q *Query) list(rowMapper dbx.IRowTransformer) (coll.Collection, error) {
 	if err != nil {
 		return nil, faults.Wrap(err)
 	}
-	list, err := q.DmlBase.dba.QueryCollection(rsql.Sql, rowMapper, params...)
+	list, err := q.DmlBase.dba.QueryCollectionX(q.db.GetContext(), rsql.Sql, rowMapper, params...)
 	if err != nil {
 		return nil, faults.Wrap(err)
 	}
@@ -1097,7 +1097,7 @@ func (q *Query) SelectInto(dest ...interface{}) (bool, error) {
 	if err != nil {
 		return false, faults.Wrap(err)
 	}
-	found, e := q.dba.QueryRow(rsql.Sql, params, dest...)
+	found, e := q.dba.QueryRowX(q.db.GetContext(), rsql.Sql, params, dest...)
 	if e != nil {
 		return false, e
 	}

@@ -35,7 +35,7 @@ type Insert struct {
 
 func NewInsert(db IDb, table *Table) *Insert {
 	this := new(Insert)
-	this.Super(db, table)
+	this.init(db, table)
 	this.vals = coll.NewLinkedHashMap()
 	this.returnId = true
 
@@ -288,23 +288,23 @@ func (i *Insert) Execute() (int64, error) {
 		if err != nil {
 			return 0, faults.Wrap(err)
 		}
-		_, err = i.dba.Insert(sql, params...)
+		_, err = i.dba.InsertX(i.db.GetContext(), sql, params...)
 	case AUTOKEY_RETURNING:
 		sql, params, err = i.prepareSQL()
 		if err != nil {
 			return 0, faults.Wrap(err)
 		}
 		if i.HasKeyValue || singleKeyColumn == nil {
-			_, err = i.dba.Insert(sql, params...)
+			_, err = i.dba.InsertX(i.db.GetContext(), sql, params...)
 		} else {
-			lastId, err = i.dba.InsertReturning(sql, params...)
+			lastId, err = i.dba.InsertReturningX(i.db.GetContext(), sql, params...)
 		}
 	case AUTOKEY_AFTER:
 		sql, params, err = i.prepareSQL()
 		if err != nil {
 			return 0, faults.Wrap(err)
 		}
-		_, err = i.dba.Insert(sql, params...)
+		_, err = i.dba.InsertX(i.db.GetContext(), sql, params...)
 		if err != nil {
 			return 0, faults.Wrap(err)
 		}
@@ -337,7 +337,7 @@ func (i *Insert) getAutoNumber(column *Column) (int64, error) {
 	}
 	var id int64
 	i.debugSQL(sql, 2)
-	_, err := i.dba.QueryRow(sql, []interface{}{}, &id)
+	_, err := i.dba.QueryRowX(i.db.GetContext(), sql, []interface{}{}, &id)
 	if err != nil {
 		return 0, faults.Wrap(err)
 	}

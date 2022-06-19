@@ -87,12 +87,12 @@ type DmlBase struct {
 }
 
 func NewDmlBase(DB IDb, table *Table) *DmlBase {
-	this := new(DmlBase)
-	this.Super(DB, table)
-	return this
+	d := new(DmlBase)
+	d.init(DB, table)
+	return d
 }
 
-func (d *DmlBase) Super(DB IDb, table *Table) {
+func (d *DmlBase) init(DB IDb, table *Table) {
 	d.db = DB
 	d.table = table
 	d.alias(PREFIX + "0")

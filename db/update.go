@@ -24,7 +24,7 @@ type Update struct {
 
 func NewUpdate(db IDb, table *Table) *Update {
 	this := new(Update)
-	this.Super(db, table)
+	this.init(db, table)
 	this.vals = coll.NewLinkedHashMap()
 	return this
 }
@@ -244,7 +244,7 @@ func (u *Update) Execute() (int64, error) {
 	if err != nil {
 		return 0, faults.Wrap(err)
 	}
-	affectedRows, e := u.DmlBase.dba.Update(rsql.Sql, params...)
+	affectedRows, e := u.DmlBase.dba.UpdateX(u.db.GetContext(), rsql.Sql, params...)
 	if e != nil {
 		return 0, e
 	}

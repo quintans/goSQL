@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"reflect"
 
 	"github.com/quintans/faults"
@@ -64,6 +65,8 @@ type IDb interface {
 	PopulateMapping(prefix string, typ reflect.Type) (map[string]*EntityProperty, error)
 	GetTranslator() Translator
 	GetConnection() dbx.IConnection
+	WithContext(context.Context) IDb
+	GetContext() context.Context
 
 	Query(table *Table) *Query
 	Insert(table *Table) *Insert
@@ -86,8 +89,7 @@ type IDb interface {
 var _ IDb = &Db{}
 
 func NewDb(connection dbx.IConnection, translator Translator, cacher Mapper) *Db {
-	this := new(Db)
-	this.Overrider = this
+	this := &Db{}
 	this.Connection = connection
 	this.Translator = translator
 	this.mapper = cacher
@@ -95,12 +97,25 @@ func NewDb(connection dbx.IConnection, translator Translator, cacher Mapper) *Db
 }
 
 type Db struct {
-	Overrider  IDb
 	Connection dbx.IConnection
 	Translator Translator
 
 	attributes map[string]interface{}
 	mapper     Mapper
+
+	context context.Context
+}
+
+func (d *Db) WithContext(ctx context.Context) IDb {
+	d.context = ctx
+	return d
+}
+
+func (d *Db) GetContext() context.Context {
+	if d.context == nil {
+		d.context = context.Background()
+	}
+	return d.context
 }
 
 func (d *Db) GetTranslator() Translator {
@@ -173,7 +188,7 @@ func (d *Db) Create(instance interface{}) error {
 		return faults.Wrap(err)
 	}
 
-	dml := d.Overrider.Insert(table)
+	dml := d.Insert(table)
 
 	_, err = dml.Submit(instance)
 	return faults.Wrap(err)
@@ -205,7 +220,7 @@ func (d *Db) Retrieve(instance interface{}, keys ...interface{}) (bool, error) {
 		return false, faults.Wrap(err)
 	}
 
-	dml := d.Overrider.Query(table)
+	dml := d.Query(table)
 	if err := d.acceptColumn(table, t, func(c *Column) {
 		dml.Column(c)
 	}); err != nil {
@@ -296,7 +311,7 @@ func (d *Db) find(instance interface{}, example interface{}) (*Query, error) {
 		return nil, faults.Wrap(err)
 	}
 
-	query := d.Overrider.Query(table)
+	query := d.Query(table)
 	if err := d.acceptColumn(table, t, func(c *Column) {
 		query.Column(c)
 	}); err != nil {
@@ -337,7 +352,7 @@ func (d *Db) Modify(instance interface{}) (bool, error) {
 		return false, faults.Wrap(err)
 	}
 
-	dml := d.Overrider.Update(table)
+	dml := d.Update(table)
 
 	var key int64
 	key, err = dml.Submit(instance)
@@ -350,7 +365,7 @@ func (d *Db) Remove(instance interface{}) (bool, error) {
 		return false, faults.Wrap(err)
 	}
 
-	dml := d.Overrider.Delete(table)
+	dml := d.Delete(table)
 
 	var deleted int64
 	deleted, err = dml.Submit(instance)
@@ -364,7 +379,7 @@ func (d *Db) RemoveAll(instance interface{}) (int64, error) {
 		return 0, faults.Wrap(err)
 	}
 
-	dml := d.Overrider.Delete(table)
+	dml := d.Delete(table)
 	criterias, err := d.buildCriteria(table, instance)
 	if err != nil {
 		return 0, faults.Wrap(err)
@@ -413,10 +428,10 @@ func (d *Db) Save(instance interface{}) (bool, error) {
 	ver := v.Int()
 
 	if ver == 0 {
-		k, err := d.Overrider.Insert(table).Submit(instance)
+		k, err := d.Insert(table).Submit(instance)
 		return k != 0, faults.Wrap(err)
 	} else {
-		k, err := d.Overrider.Update(table).Submit(instance)
+		k, err := d.Update(table).Submit(instance)
 		return k != 0, faults.Wrap(err)
 	}
 }
